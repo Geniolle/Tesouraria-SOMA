@@ -125,13 +125,15 @@ class SheetsWriter:
     def write_transactions(
         self,
         transactions: list[Transaction],
+        opening_balance: Optional[str] = None,
         dedup_service: Optional[DeduplicationService] = None,
     ) -> dict:
         """
-        Write transactions to sheet.
+        Write transactions to sheet with progressive balance calculation.
 
         Args:
             transactions: List of transactions to write
+            opening_balance: Opening balance from MT940 (used as first saldo)
             dedup_service: Optional deduplication service
 
         Returns:
@@ -144,6 +146,18 @@ class SheetsWriter:
             written = 0
             skipped = 0
 
+            # Initialize balance from opening_balance (convert from string if needed)
+            if opening_balance:
+                try:
+                    if isinstance(opening_balance, str):
+                        current_balance = float(opening_balance.replace(",", "."))
+                    else:
+                        current_balance = float(opening_balance)
+                except (ValueError, AttributeError):
+                    current_balance = 0.0
+            else:
+                current_balance = 0.0
+
             for txn in transactions:
                 # Check for duplicates
                 if dedup_service and dedup_service.is_duplicate(txn):
@@ -151,8 +165,19 @@ class SheetsWriter:
                     skipped += 1
                     continue
 
-                # Build row
-                row = self._transaction_to_row(txn)
+                # Calculate progressive balance
+                valor_num = float(txn.valor)
+                current_balance += valor_num
+
+                # Generate sequential ID
+                sequencial = 1000001 + written
+
+                # Build row with calculated balance and ID
+                row = self._transaction_to_row(
+                    txn,
+                    saldo_contabilistico=current_balance,
+                    sequencial=sequencial,
+                )
                 rows_to_write.append(row)
                 written += 1
 
@@ -187,12 +212,16 @@ class SheetsWriter:
             logger.error(f"Failed to write transactions: {e}")
             raise
 
-    def _transaction_to_row(self, txn: Transaction) -> list:
+    def _transaction_to_row(
+        self, txn: Transaction, saldo_contabilistico: Optional[float] = None, sequencial: int = 0
+    ) -> list:
         """
-        Convert transaction to sheet row.
+        Convert transaction to sheet row with formatting.
 
         Args:
             txn: Transaction to convert
+            saldo_contabilistico: Calculated progressive balance
+            sequencial: Sequential number for ID_INTERNO generation
 
         Returns:
             List of values in column order
@@ -200,16 +229,29 @@ class SheetsWriter:
         # Create row with empty values for all columns
         row = [""] * len(self.headers)
 
+        # Format IMPORTÂNCIA with 0,00 format
+        valor_formatado = f"{float(txn.valor):.2f}".replace(".", ",")
+
+        # Format SALDO CONTABILÍSTICO if provided
+        saldo_formatado = ""
+        if saldo_contabilistico is not None:
+            saldo_formatado = f"{saldo_contabilistico:.2f}".replace(".", ",")
+
+        # Generate ID_INTERNO if not set
+        id_interno = txn.id_interno
+        if not id_interno and sequencial > 0:
+            id_interno = f"EXT{str(sequencial).zfill(10)}"
+
         # Map transaction fields to columns
         column_mapping = {
             "DATA MOV.": txn.data_mov,
             "DATA VALOR": txn.data_valor,
             "DESCRIÇÃO": txn.descricao,
-            "IMPORTÂNCIA": str(txn.valor),
+            "IMPORTÂNCIA": valor_formatado,
             "TIPO": txn.tipo,
             "TIMESTAMP": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
-            "SALDO CONTABILÍSTICO": txn.saldo_contabilistico or "",
-            "ID_INTERNO": txn.id_interno or "",
+            "SALDO CONTABILÍSTICO": saldo_formatado,
+            "ID_INTERNO": id_interno,
         }
 
         # Fill in values

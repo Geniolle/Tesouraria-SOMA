@@ -115,6 +115,7 @@ def main() -> None:
 
         result = sheets_writer.write_transactions(
             transactions=mt940_file.transactions,
+            opening_balance=str(mt940_file.header.saldo_abertura),
             dedup_service=dedup,
         )
 
