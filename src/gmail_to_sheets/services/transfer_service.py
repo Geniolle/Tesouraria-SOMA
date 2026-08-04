@@ -2,14 +2,16 @@
 Transfer Service
 
 Handles transferring transactions from T_EXTRATO to CONTAORDEM sheet.
+Uses batch operations for optimized performance.
 """
 
 import logging
 import unicodedata
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict, List, Tuple
 
 from src.gmail_to_sheets.clients.sheets_client import SheetsClient
+from src.gmail_to_sheets.services.batch_writer import BatchWriter
 from src.gmail_to_sheets.models.transaction import Transaction
 
 
