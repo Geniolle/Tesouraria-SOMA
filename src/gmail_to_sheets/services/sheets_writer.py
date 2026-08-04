@@ -74,13 +74,13 @@ class SheetsWriter:
         Load the last ID_INTERNO sequence number from sheet.
 
         Returns:
-            Last sequence number (or 1000000 if no IDs found)
+            Last sequence number (or 0 if no IDs found)
         """
         try:
             id_idx = self.column_indices.get("ID_INTERNO")
             if id_idx is None:
-                logger.debug("ID_INTERNO column not found, starting from 1000000")
-                return 1000000
+                logger.debug("ID_INTERNO column not found, starting from 0")
+                return 0
 
             # Get all data rows - use large range to capture all
             range_name = f"{self.sheet_name}!A2:Z99999"
@@ -91,17 +91,19 @@ class SheetsWriter:
 
             rows = result.get("values", [])
             if not rows:
-                logger.debug("No existing transactions, starting from 1000000")
-                return 1000000
+                logger.debug("No existing transactions, starting from 0")
+                return 0
 
             # Find highest sequence number by scanning all rows
-            max_sequence = 1000000
+            max_sequence = 0
             for row in rows:
                 if id_idx < len(row) and row[id_idx]:
                     id_interno = row[id_idx].strip()
                     if id_interno and id_interno.startswith("EXT"):
                         try:
-                            # Extract numeric part: EXT0001000016 -> 1000016
+                            # Extract numeric part from both formats:
+                            # EXT0000003365 -> 3365
+                            # EXT0001000016 -> 1000016
                             numeric_part = int(id_interno[3:])
                             max_sequence = max(max_sequence, numeric_part)
                         except (ValueError, IndexError):
@@ -112,8 +114,8 @@ class SheetsWriter:
             return max_sequence
 
         except Exception as e:
-            logger.warning(f"Error loading last sequence: {e}, starting from 1000000")
-            return 1000000
+            logger.warning(f"Error loading last sequence: {e}, starting from 0")
+            return 0
 
     def load_existing_dedup_keys(
         self, dedup_service: DeduplicationService
@@ -206,6 +208,8 @@ class SheetsWriter:
             else:
                 current_balance = 0.0
 
+            logger.info(f"Starting ID sequence from: {next_sequence}")
+
             for txn in transactions:
                 # Check for duplicates
                 if dedup_service and dedup_service.is_duplicate(txn):
@@ -287,6 +291,7 @@ class SheetsWriter:
             saldo_formatado = f"{saldo_contabilistico:.2f}".replace(".", ",")
 
         # Generate ID_INTERNO if not set
+        # Format: EXT0000NNNNN (e.g., EXT0000003366)
         id_interno = txn.id_interno
         if not id_interno and sequencial > 0:
             id_interno = f"EXT{str(sequencial).zfill(10)}"
