@@ -66,6 +66,8 @@ class AppSettings(BaseSettings):
     skip_if_duplicate: bool = Field(True, alias="SKIP_IF_DUPLICATE")
     archive_after_process: bool = Field(True, alias="ARCHIVE_AFTER_PROCESS")
     timezone: str = Field("Europe/Lisbon", alias="TIMEZONE")
+    enable_matching: bool = Field(False, alias="ENABLE_MATCHING")
+    enable_transfer: bool = Field(True, alias="ENABLE_TRANSFER")
 
     model_config = {
         "env_file": ".env",

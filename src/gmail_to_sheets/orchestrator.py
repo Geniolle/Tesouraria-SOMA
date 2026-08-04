@@ -20,6 +20,7 @@ from src.gmail_to_sheets.clients.sheets_client import SheetsClient
 from src.gmail_to_sheets.services.attachment_processor import AttachmentProcessor
 from src.gmail_to_sheets.services.sheets_writer import SheetsWriter
 from src.gmail_to_sheets.services.transfer_service import TransferService
+from src.gmail_to_sheets.services.matching_service import MatchingService
 from src.gmail_to_sheets.validators.deduplication import DeduplicationService
 from src.gmail_to_sheets.logging_config import setup_logging
 from src.gmail_to_sheets.exceptions.application import AuthenticationError
@@ -77,12 +78,20 @@ class Orchestrator:
             # Phase 7: Transfer to CONTAORDEM
             transfer_result = self._transfer_to_contaordem()
 
+            # Phase 8: Match with CONSTANTES (optional)
+            matching_result = None
+            if self.settings.enable_matching:
+                matching_result = self._match_with_constantes()
+
             logger.info("=" * 80)
             logger.info(f"Pipeline completed successfully!")
             logger.info(f"  - Transactions written: {result['written']}")
             logger.info(f"  - Duplicates skipped: {result['skipped']}")
             logger.info(f"  - Transferred to CONTAORDEM: {transfer_result['transferred']}")
             logger.info(f"  - Already existing: {transfer_result['already_exists']}")
+            if matching_result:
+                logger.info(f"  - Matched with CONSTANTES: {matching_result['matched']}")
+                logger.info(f"  - No match found: {matching_result['no_match']}")
             logger.info("=" * 80)
 
         except Exception as e:
@@ -203,4 +212,27 @@ class Orchestrator:
 
         except Exception as e:
             logger.error(f"Transfer failed: {e}")
+            raise
+
+    def _match_with_constantes(self) -> dict:
+        """Match CONTAORDEM records with CONSTANTES definitions."""
+        if not self.sheets_client:
+            raise RuntimeError("Sheets client not initialized")
+
+        try:
+            logger.info("[8/8] Matching with CONSTANTES (de-para)...")
+            matcher = MatchingService(
+                sheets_client=self.sheets_client,
+                spreadsheet_id=self.settings.sheets.spreadsheet_id,
+                source_sheet="CONTAORDEM",
+                reference_sheet="CONSTANTES",
+                timezone=self.settings.timezone,
+            )
+            result = matcher.process_matching()
+            logger.info(f"      Matched {result['matched']} record(s)")
+            logger.info(f"      No match: {result['no_match']}")
+            return result
+
+        except Exception as e:
+            logger.error(f"Matching failed: {e}")
             raise
