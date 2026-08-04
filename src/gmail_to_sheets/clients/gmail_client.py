@@ -103,16 +103,17 @@ class GmailClient:
 
             attachments = []
             for part in parts:
-                if part.get("filename") and "attachmentId" in part:
-                    filename = part.get("filename", "")
-                    if filename.lower().endswith(attachment_extension.lower()):
-                        attachments.append(
-                            {
-                                "filename": filename,
-                                "attachment_id": part["attachmentId"],
-                                "mime_type": part.get("mimeType", ""),
-                            }
-                        )
+                filename = part.get("filename", "").strip()
+                if filename and filename.lower().endswith(attachment_extension.lower()):
+                    attachment_id = part.get("attachmentId")
+                    attachments.append(
+                        {
+                            "filename": filename,
+                            "attachment_id": attachment_id,
+                            "mime_type": part.get("mimeType", ""),
+                            "part_id": part.get("partId"),
+                        }
+                    )
 
             logger.debug(
                 f"Found {len(attachments)} attachments in message {message_id}"
