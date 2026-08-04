@@ -8,6 +8,7 @@ Complete end-to-end flow:
 4. Download and parse attachments
 5. Load existing transactions (deduplication)
 6. Write to Google Sheets with formatting
+7. Transfer to CONTAORDEM sheet
 """
 
 import logging
@@ -18,6 +19,7 @@ from src.gmail_to_sheets.clients.gmail_client import GmailClient
 from src.gmail_to_sheets.clients.sheets_client import SheetsClient
 from src.gmail_to_sheets.services.attachment_processor import AttachmentProcessor
 from src.gmail_to_sheets.services.sheets_writer import SheetsWriter
+from src.gmail_to_sheets.services.transfer_service import TransferService
 from src.gmail_to_sheets.validators.deduplication import DeduplicationService
 from src.gmail_to_sheets.logging_config import setup_logging
 from src.gmail_to_sheets.exceptions.application import AuthenticationError
@@ -35,6 +37,7 @@ class Orchestrator:
         setup_logging(self.settings.log_file, self.settings.log_level)
         self.gmail_client: GmailClient | None = None
         self.sheets_writer: SheetsWriter | None = None
+        self.sheets_client: SheetsClient | None = None
 
     def run(self) -> None:
         """Execute the complete pipeline."""
@@ -68,13 +71,18 @@ class Orchestrator:
             dedup = DeduplicationService()
             self.sheets_writer.load_existing_dedup_keys(dedup)
 
-            # Phase 7: Write to Sheets
+            # Phase 6.5: Write to Sheets
             result = self._write_to_sheets(mt940_file, dedup)
+
+            # Phase 7: Transfer to CONTAORDEM
+            transfer_result = self._transfer_to_contaordem()
 
             logger.info("=" * 80)
             logger.info(f"Pipeline completed successfully!")
             logger.info(f"  - Transactions written: {result['written']}")
             logger.info(f"  - Duplicates skipped: {result['skipped']}")
+            logger.info(f"  - Transferred to CONTAORDEM: {transfer_result['transferred']}")
+            logger.info(f"  - Already existing: {transfer_result['already_exists']}")
             logger.info("=" * 80)
 
         except Exception as e:
@@ -100,11 +108,11 @@ class Orchestrator:
         """Authenticate with Google Sheets API."""
         try:
             logger.info("[3/7] Authenticating with Google Sheets...")
-            sheets_client = SheetsClient(
+            self.sheets_client = SheetsClient(
                 service_account_path=self.settings.sheets.service_account_path
             )
             self.sheets_writer = SheetsWriter(
-                sheets_client=sheets_client,
+                sheets_client=self.sheets_client,
                 spreadsheet_id=self.settings.sheets.spreadsheet_id,
                 sheet_name=self.settings.sheets.sheet_name,
             )
@@ -174,4 +182,25 @@ class Orchestrator:
 
         except Exception as e:
             logger.error(f"Write failed: {e}")
+            raise
+
+    def _transfer_to_contaordem(self) -> dict:
+        """Transfer pending transactions to CONTAORDEM sheet."""
+        if not self.sheets_client:
+            raise RuntimeError("Sheets client not initialized")
+
+        try:
+            logger.info("[7/7] Transferring to CONTAORDEM sheet...")
+            transfer = TransferService(
+                sheets_client=self.sheets_client,
+                spreadsheet_id=self.settings.sheets.spreadsheet_id,
+                source_sheet="T_EXTRATO",
+                target_sheet="CONTAORDEM",
+            )
+            result = transfer.transfer_pending()
+            logger.info(f"      Transferred {result['transferred']} transaction(s)")
+            return result
+
+        except Exception as e:
+            logger.error(f"Transfer failed: {e}")
             raise
