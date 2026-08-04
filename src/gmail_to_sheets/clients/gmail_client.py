@@ -1,0 +1,219 @@
+"""
+Gmail API client for message and attachment operations.
+
+Handles searching, retrieving, and processing Gmail messages.
+"""
+
+import base64
+import logging
+from typing import Any, Optional
+
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+
+
+logger = logging.getLogger(__name__)
+
+
+class GmailClient:
+    """Client for Gmail API operations."""
+
+    def __init__(self, credentials: Credentials) -> None:
+        """
+        Initialize Gmail client.
+
+        Args:
+            credentials: OAuth2 credentials for Gmail API
+        """
+        self.credentials = credentials
+        self.service = build("gmail", "v1", credentials=credentials)
+
+    def search_messages(self, query: str, max_results: int = 100) -> list[str]:
+        """
+        Search for messages matching query.
+
+        Args:
+            query: Gmail search query (e.g., 'from:sender@example.com has:attachment')
+            max_results: Maximum number of message IDs to return
+
+        Returns:
+            List of message IDs matching the query
+
+        Raises:
+            HttpError: If Gmail API call fails
+        """
+        try:
+            logger.debug(f"Searching Gmail with query: {query}")
+            results = self.service.users().messages().list(
+                userId="me", q=query, maxResults=max_results
+            ).execute()
+
+            messages = results.get("messages", [])
+            message_ids = [msg["id"] for msg in messages]
+            logger.info(f"Found {len(message_ids)} messages matching query")
+
+            return message_ids
+        except HttpError as error:
+            logger.error(f"Gmail API error during search: {error}")
+            raise
+
+    def get_message(self, message_id: str) -> dict[str, Any]:
+        """
+        Retrieve full message details.
+
+        Args:
+            message_id: The ID of the message to retrieve
+
+        Returns:
+            Message object with headers, body, attachments
+
+        Raises:
+            HttpError: If Gmail API call fails
+        """
+        try:
+            message = self.service.users().messages().get(
+                userId="me", id=message_id, format="full"
+            ).execute()
+            return message
+        except HttpError as error:
+            logger.error(f"Failed to retrieve message {message_id}: {error}")
+            raise
+
+    def get_attachments(
+        self, message_id: str, attachment_extension: str = ".txt"
+    ) -> list[dict[str, Any]]:
+        """
+        Get all attachments from a message.
+
+        Args:
+            message_id: The ID of the message
+            attachment_extension: Filter attachments by extension (e.g., '.txt')
+
+        Returns:
+            List of attachment objects with name and MIME type
+
+        Raises:
+            HttpError: If Gmail API call fails
+        """
+        try:
+            message = self.get_message(message_id)
+            payload = message.get("payload", {})
+            parts = payload.get("parts", [])
+
+            attachments = []
+            for part in parts:
+                if part.get("filename") and "attachmentId" in part:
+                    filename = part.get("filename", "")
+                    if filename.lower().endswith(attachment_extension.lower()):
+                        attachments.append(
+                            {
+                                "filename": filename,
+                                "attachment_id": part["attachmentId"],
+                                "mime_type": part.get("mimeType", ""),
+                            }
+                        )
+
+            logger.debug(
+                f"Found {len(attachments)} attachments in message {message_id}"
+            )
+            return attachments
+        except HttpError as error:
+            logger.error(f"Failed to get attachments from {message_id}: {error}")
+            raise
+
+    def download_attachment(self, message_id: str, attachment_id: str) -> bytes:
+        """
+        Download attachment data.
+
+        Args:
+            message_id: The ID of the message containing the attachment
+            attachment_id: The ID of the attachment
+
+        Returns:
+            Raw bytes of the attachment
+
+        Raises:
+            HttpError: If Gmail API call fails
+        """
+        try:
+            attachment = self.service.users().messages().attachments().get(
+                userId="me", messageId=message_id, id=attachment_id
+            ).execute()
+
+            data = attachment.get("data", "")
+            file_data = base64.urlsafe_b64decode(data)
+            logger.debug(f"Downloaded attachment {attachment_id}")
+
+            return file_data
+        except HttpError as error:
+            logger.error(
+                f"Failed to download attachment {attachment_id}: {error}"
+            )
+            raise
+
+    def add_label(self, message_id: str, label_name: str) -> None:
+        """
+        Add a label to a message.
+
+        Args:
+            message_id: The ID of the message
+            label_name: The label name (e.g., 'Serviços/Banco/Montepio24/MT940')
+
+        Raises:
+            HttpError: If Gmail API call fails
+        """
+        try:
+            labels_result = self.service.users().labels().list(userId="me").execute()
+            labels = labels_result.get("labels", [])
+
+            label_id: Optional[str] = None
+            for label in labels:
+                if label["name"] == label_name:
+                    label_id = label["id"]
+                    break
+
+            if not label_id:
+                logger.warning(f"Label '{label_name}' not found, creating it")
+                label_body = {
+                    "name": label_name,
+                    "labelListVisibility": "labelShow",
+                    "messageListVisibility": "show",
+                }
+                created_label = self.service.users().labels().create(
+                    userId="me", body=label_body
+                ).execute()
+                label_id = created_label["id"]
+
+            self.service.users().messages().modify(
+                userId="me",
+                id=message_id,
+                body={"addLabelIds": [label_id]},
+            ).execute()
+
+            logger.debug(f"Added label '{label_name}' to message {message_id}")
+        except HttpError as error:
+            logger.error(f"Failed to add label to message {message_id}: {error}")
+            raise
+
+    def archive_message(self, message_id: str) -> None:
+        """
+        Archive a message (remove from inbox).
+
+        Args:
+            message_id: The ID of the message
+
+        Raises:
+            HttpError: If Gmail API call fails
+        """
+        try:
+            self.service.users().messages().modify(
+                userId="me",
+                id=message_id,
+                body={"removeLabelIds": ["INBOX"]},
+            ).execute()
+
+            logger.debug(f"Archived message {message_id}")
+        except HttpError as error:
+            logger.error(f"Failed to archive message {message_id}: {error}")
+            raise
