@@ -1,66 +1,45 @@
-# Environment variables
-.env
-.env.local
-.env.*.local
-
-# Credentials and sensitive files
-credentials/
-*.json
-!.github/workflows/*.json
-
-# Python
+﻿# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
-*.so
-.Python
+
+# Environments
+.env
+.venv
 env/
 venv/
 ENV/
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-pip-wheel-metadata/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
 
 # IDE
 .vscode/
 .idea/
 *.swp
-*.swo
-*~
 .DS_Store
+.claude/
 
-# Logging
+# Credentials & Keys (SENSITIVE)
+credentials/
+*.key
+*.pem
+*.pub
+*.ppk
+oracle-key.*
+ssh/
+
+# Logs
 logs/
-
-# Data files
-data/
-*.csv
-*.xlsx
-# Keep requirements.txt
-!requirements.txt
-!requirements*.txt
+*.log
 
 # OS
-.DS_Store
 Thumbs.db
+desktop.ini
+
+# Python
+.pytest_cache/
+.coverage
+dist/
+build/
+
+# Temporary
+*.tmp
+*.bak
