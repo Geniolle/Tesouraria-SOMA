@@ -58,12 +58,13 @@ class GmailClient:
             logger.error(f"Gmail API error during search: {error}")
             raise
 
-    def get_message(self, message_id: str) -> dict[str, Any]:
+    def get_message(self, message_id: str, format_type: str = "full") -> dict[str, Any]:
         """
         Retrieve full message details.
 
         Args:
             message_id: The ID of the message to retrieve
+            format_type: "full", "minimal", or "raw"
 
         Returns:
             Message object with headers, body, attachments
@@ -73,7 +74,7 @@ class GmailClient:
         """
         try:
             message = self.service.users().messages().get(
-                userId="me", id=message_id, format="full"
+                userId="me", id=message_id, format=format_type
             ).execute()
             return message
         except HttpError as error:
