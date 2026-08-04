@@ -47,9 +47,12 @@ class Transaction(BaseModel):
         """
         Generate a unique key for deduplication.
 
-        Format: DATA_MOV|DESCRICAO|VALOR
+        Format: DATA_MOV|DESCRICAO|VALOR (with comma as decimal separator)
+        Uses same format as stored in sheet to ensure matching.
         """
-        return f"{self.data_mov}|{self.descricao}|{self.valor}"
+        # Format valor with comma as decimal separator to match sheet format
+        valor_fmt = f"{float(self.valor):.2f}".replace(".", ",")
+        return f"{self.data_mov}|{self.descricao}|{valor_fmt}"
 
 
 class MT940Header(BaseModel):

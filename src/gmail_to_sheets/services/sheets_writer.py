@@ -129,8 +129,8 @@ class SheetsWriter:
         try:
             logger.info("Loading existing transactions for deduplication...")
 
-            # Get all data rows (skip header)
-            range_name = f"{self.sheet_name}!A2:Z10000"
+            # Get all data rows (skip header) - use large range to capture all
+            range_name = f"{self.sheet_name}!A2:Z99999"
             result = self.sheets_client.service.spreadsheets().values().get(
                 spreadsheetId=self.spreadsheet_id,
                 range=range_name,
@@ -142,30 +142,33 @@ class SheetsWriter:
                 logger.info("No existing transactions found")
                 return
 
+            # Get column indices safely
+            data_mov_idx = self.column_indices.get("DATA MOV.")
+            desc_idx = self.column_indices.get("DESCRIÇÃO")
+            valor_idx = self.column_indices.get("IMPORTÂNCIA")
+
+            if data_mov_idx is None or desc_idx is None or valor_idx is None:
+                logger.error("Missing required columns for deduplication")
+                return
+
             existing_keys = set()
             for row in rows:
-                if len(row) < 3:
-                    continue
-
                 try:
                     # Build key from: DATA MOV | DESCRICAO | IMPORTANCIA
-                    data_mov_idx = self.column_indices.get("DATA MOV.", 0)
-                    desc_idx = self.column_indices.get("DESCRIÇÃO", 2)
-                    valor_idx = self.column_indices.get("IMPORTÂNCIA", 3)
-
                     if data_mov_idx < len(row) and desc_idx < len(row) and valor_idx < len(row):
-                        data_mov = row[data_mov_idx]
-                        descricao = row[desc_idx]
-                        valor = row[valor_idx]
+                        data_mov = str(row[data_mov_idx]).strip() if row[data_mov_idx] else ""
+                        descricao = str(row[desc_idx]).strip() if row[desc_idx] else ""
+                        valor = str(row[valor_idx]).strip() if row[valor_idx] else ""
 
-                        key = f"{data_mov}|{descricao}|{valor}"
-                        existing_keys.add(key)
+                        if data_mov and descricao and valor:
+                            key = f"{data_mov}|{descricao}|{valor}"
+                            existing_keys.add(key)
                 except Exception as e:
                     logger.debug(f"Error processing row: {e}")
                     continue
 
             dedup_service.add_existing(existing_keys)
-            logger.info(f"Loaded {len(existing_keys)} existing transactions")
+            logger.info(f"Loaded {len(existing_keys)} existing transactions from {len(rows)} rows")
 
         except Exception as e:
             logger.error(f"Failed to load existing transactions: {e}")
