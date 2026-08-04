@@ -18,6 +18,7 @@ class GmailSettings(BaseSettings):
     sender_email: str = Field(..., alias="GMAIL_SENDER_EMAIL")
     search_query: str = Field(..., alias="GMAIL_SEARCH_QUERY")
     label_name: str = Field(..., alias="GMAIL_LABEL_NAME")
+    backup_label_name: str = Field(..., alias="GMAIL_BACKUP_LABEL_NAME")
     credentials_path: Path = Field(..., alias="GMAIL_CREDENTIALS_PATH")
     client_secrets_path: Path = Field(..., alias="GMAIL_CLIENT_SECRETS_PATH")
 
@@ -68,6 +69,7 @@ class AppSettings(BaseSettings):
     timezone: str = Field("Europe/Lisbon", alias="TIMEZONE")
     enable_matching: bool = Field(False, alias="ENABLE_MATCHING")
     enable_transfer: bool = Field(True, alias="ENABLE_TRANSFER")
+    update_existing_rows: bool = Field(False, alias="UPDATE_EXISTING_ROWS")
 
     model_config = {
         "env_file": ".env",

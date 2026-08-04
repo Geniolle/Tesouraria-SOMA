@@ -21,6 +21,7 @@ from src.gmail_to_sheets.services.attachment_processor import AttachmentProcesso
 from src.gmail_to_sheets.services.sheets_writer import SheetsWriter
 from src.gmail_to_sheets.services.transfer_service import TransferService
 from src.gmail_to_sheets.services.transfer_matching_service import TransferMatchingService
+from src.gmail_to_sheets.services.smart_deduplication_service import SmartDeduplicationService
 from src.gmail_to_sheets.validators.deduplication import DeduplicationService
 from src.gmail_to_sheets.logging_config import setup_logging
 from src.gmail_to_sheets.exceptions.application import AuthenticationError
@@ -62,15 +63,21 @@ class Orchestrator:
                 logger.warning("No emails found matching criteria")
                 return
 
+            message_id = message_ids[0]
+
             # Phase 5: Download and parse
-            mt940_file = self._download_and_parse(message_ids[0])
+            mt940_file = self._download_and_parse(message_id)
             if not mt940_file or not mt940_file.transactions:
                 logger.warning("No transactions found in attachment")
                 return
 
-            # Phase 6: Load existing and deduplicate
-            dedup = DeduplicationService()
-            self.sheets_writer.load_existing_dedup_keys(dedup)
+            # Phase 6: Smart deduplication (by date + value)
+            dedup = SmartDeduplicationService(
+                sheets_client=self.sheets_client,
+                spreadsheet_id=self.settings.sheets.spreadsheet_id,
+                target_sheet="CONTAORDEM"
+            )
+            logger.info("      Using smart deduplication (by date + value)")
 
             # Phase 6.5: Write to Sheets
             result = self._write_to_sheets(mt940_file, dedup)
@@ -82,8 +89,12 @@ class Orchestrator:
             else:
                 transfer_result = self._transfer_to_contaordem()
 
+            # Phase 8: Archive email to backup folder
+            if self.settings.archive_after_process and transfer_result['transferred'] > 0:
+                self._archive_email(message_id)
+
             logger.info("=" * 80)
-            logger.info(f"Pipeline completed successfully!")
+            logger.info("Pipeline completed successfully!")
             logger.info(f"  - Transactions written: {result['written']}")
             logger.info(f"  - Duplicates skipped: {result['skipped']}")
             logger.info(f"  - Transferred to CONTAORDEM: {transfer_result['transferred']}")
@@ -235,3 +246,19 @@ class Orchestrator:
         except Exception as e:
             logger.error(f"Transfer+matching failed: {e}")
             raise
+
+    def _archive_email(self, message_id: str) -> None:
+        """Move email to backup folder after successful processing."""
+        if not self.gmail_client:
+            raise RuntimeError("Gmail client not initialized")
+
+        try:
+            logger.info("[8/8] Moving email to backup folder...")
+            self.gmail_client.add_label(
+                message_id=message_id,
+                label_name=self.settings.gmail.backup_label_name,
+            )
+            logger.info(f"      Email archived to '{self.settings.gmail.backup_label_name}'")
+        except Exception as e:
+            logger.warning(f"Failed to archive email: {e}")
+

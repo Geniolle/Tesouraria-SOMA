@@ -11,6 +11,7 @@ from typing import Optional
 from src.gmail_to_sheets.clients.sheets_client import SheetsClient
 from src.gmail_to_sheets.models.transaction import MT940File, Transaction
 from src.gmail_to_sheets.validators.deduplication import DeduplicationService
+from src.gmail_to_sheets.services.smart_deduplication_service import SmartDeduplicationService
 
 
 logger = logging.getLogger(__name__)
