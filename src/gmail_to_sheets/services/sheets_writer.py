@@ -1,0 +1,243 @@
+"""
+Sheets Writer Service
+
+Handles writing parsed transactions to Google Sheets.
+"""
+
+import logging
+from datetime import datetime
+from typing import Optional
+
+from src.gmail_to_sheets.clients.sheets_client import SheetsClient
+from src.gmail_to_sheets.models.transaction import MT940File, Transaction
+from src.gmail_to_sheets.validators.deduplication import DeduplicationService
+
+
+logger = logging.getLogger(__name__)
+
+
+class SheetsWriter:
+    """Service to write transactions to Google Sheets."""
+
+    def __init__(
+        self,
+        sheets_client: SheetsClient,
+        spreadsheet_id: str,
+        sheet_name: str,
+    ):
+        """
+        Initialize Sheets writer.
+
+        Args:
+            sheets_client: Authenticated Sheets client
+            spreadsheet_id: Target spreadsheet ID
+            sheet_name: Target sheet name
+        """
+        self.sheets_client = sheets_client
+        self.spreadsheet_id = spreadsheet_id
+        self.sheet_name = sheet_name
+        self.headers = self._load_headers()
+        self.column_indices = self._map_columns()
+
+    def _load_headers(self) -> list[str]:
+        """
+        Load headers from sheet.
+
+        Returns:
+            List of header names
+        """
+        try:
+            headers = self.sheets_client.get_headers(
+                self.spreadsheet_id, self.sheet_name
+            )
+            logger.info(f"Loaded {len(headers)} columns from {self.sheet_name}")
+            return headers
+        except Exception as e:
+            logger.error(f"Failed to load headers: {e}")
+            raise
+
+    def _map_columns(self) -> dict[str, int]:
+        """
+        Map column names to indices.
+
+        Returns:
+            Dictionary mapping column name to 0-indexed position
+        """
+        indices = {}
+        for idx, header in enumerate(self.headers):
+            indices[header.strip()] = idx
+        return indices
+
+    def load_existing_dedup_keys(
+        self, dedup_service: DeduplicationService
+    ) -> None:
+        """
+        Load existing transactions for deduplication.
+
+        Args:
+            dedup_service: Deduplication service to populate
+        """
+        try:
+            logger.info("Loading existing transactions for deduplication...")
+
+            # Get all data rows (skip header)
+            range_name = f"{self.sheet_name}!A2:Z10000"
+            result = self.sheets_client.service.spreadsheets().values().get(
+                spreadsheetId=self.spreadsheet_id,
+                range=range_name,
+            ).execute()
+
+            rows = result.get("values", [])
+
+            if not rows:
+                logger.info("No existing transactions found")
+                return
+
+            existing_keys = set()
+            for row in rows:
+                if len(row) < 3:
+                    continue
+
+                try:
+                    # Build key from: DATA MOV | DESCRICAO | IMPORTANCIA
+                    data_mov_idx = self.column_indices.get("DATA MOV.", 0)
+                    desc_idx = self.column_indices.get("DESCRIÇÃO", 2)
+                    valor_idx = self.column_indices.get("IMPORTÂNCIA", 3)
+
+                    if data_mov_idx < len(row) and desc_idx < len(row) and valor_idx < len(row):
+                        data_mov = row[data_mov_idx]
+                        descricao = row[desc_idx]
+                        valor = row[valor_idx]
+
+                        key = f"{data_mov}|{descricao}|{valor}"
+                        existing_keys.add(key)
+                except Exception as e:
+                    logger.debug(f"Error processing row: {e}")
+                    continue
+
+            dedup_service.add_existing(existing_keys)
+            logger.info(f"Loaded {len(existing_keys)} existing transactions")
+
+        except Exception as e:
+            logger.error(f"Failed to load existing transactions: {e}")
+            raise
+
+    def write_transactions(
+        self,
+        transactions: list[Transaction],
+        dedup_service: Optional[DeduplicationService] = None,
+    ) -> dict:
+        """
+        Write transactions to sheet.
+
+        Args:
+            transactions: List of transactions to write
+            dedup_service: Optional deduplication service
+
+        Returns:
+            Write statistics
+        """
+        try:
+            logger.info(f"Writing {len(transactions)} transactions...")
+
+            rows_to_write = []
+            written = 0
+            skipped = 0
+
+            for txn in transactions:
+                # Check for duplicates
+                if dedup_service and dedup_service.is_duplicate(txn):
+                    logger.debug(f"Skipping duplicate: {txn.dedup_key()}")
+                    skipped += 1
+                    continue
+
+                # Build row
+                row = self._transaction_to_row(txn)
+                rows_to_write.append(row)
+                written += 1
+
+                if dedup_service:
+                    dedup_service.register(txn)
+
+            if not rows_to_write:
+                logger.warning("No new transactions to write")
+                return {
+                    "written": 0,
+                    "skipped": skipped,
+                    "total": len(transactions),
+                }
+
+            # Append to sheet
+            result = self.sheets_client.append_rows(
+                self.spreadsheet_id,
+                self.sheet_name,
+                rows_to_write,
+            )
+
+            logger.info(f"Successfully wrote {written} transactions")
+
+            return {
+                "written": written,
+                "skipped": skipped,
+                "total": len(transactions),
+                "api_response": result,
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to write transactions: {e}")
+            raise
+
+    def _transaction_to_row(self, txn: Transaction) -> list:
+        """
+        Convert transaction to sheet row.
+
+        Args:
+            txn: Transaction to convert
+
+        Returns:
+            List of values in column order
+        """
+        # Create row with empty values for all columns
+        row = [""] * len(self.headers)
+
+        # Map transaction fields to columns
+        column_mapping = {
+            "DATA MOV.": txn.data_mov,
+            "DATA VALOR": txn.data_valor,
+            "DESCRIÇÃO": txn.descricao,
+            "IMPORTÂNCIA": str(txn.valor),
+            "TIPO": txn.tipo,
+            "TIMESTAMP": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+            "SALDO CONTABILÍSTICO": txn.saldo_contabilistico or "",
+            "ID_INTERNO": txn.id_interno or "",
+        }
+
+        # Fill in values
+        for col_name, value in column_mapping.items():
+            idx = self.column_indices.get(col_name)
+            if idx is not None:
+                row[idx] = value
+
+        return row
+
+    def write_closing_balance(self, row_number: int, balance: str) -> None:
+        """
+        Write closing balance to specific row.
+
+        Args:
+            row_number: Row number (1-indexed)
+            balance: Balance value
+        """
+        try:
+            saldo_idx = self.column_indices.get("SALDO CONTABILÍSTICO", 6)
+            if saldo_idx is not None:
+                self.sheets_client.update_cell(
+                    self.spreadsheet_id,
+                    self.sheet_name,
+                    row_number,
+                    saldo_idx + 1,  # Convert to 1-indexed
+                    balance,
+                )
+        except Exception as e:
+            logger.error(f"Failed to write closing balance: {e}")
+            raise
