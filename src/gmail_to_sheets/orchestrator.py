@@ -1,21 +1,26 @@
 """
 Orchestrator: Coordinates the Gmail-to-Sheets pipeline.
 
-Responsibilities:
-- Load configuration
-- Authenticate with Gmail and Google Sheets
-- Manage the flow from discovery to writing
-- Handle errors and logging
+Complete end-to-end flow:
+1. Load configuration
+2. Authenticate Gmail (OAuth) and Sheets (Service account)
+3. Search for MT940 emails
+4. Download and parse attachments
+5. Load existing transactions (deduplication)
+6. Write to Google Sheets with formatting
 """
 
 import logging
-from pathlib import Path
 
 from src.gmail_to_sheets.config.settings import load_settings
 from src.gmail_to_sheets.clients.gmail_auth import GmailAuthenticator
 from src.gmail_to_sheets.clients.gmail_client import GmailClient
+from src.gmail_to_sheets.clients.sheets_client import SheetsClient
+from src.gmail_to_sheets.services.attachment_processor import AttachmentProcessor
+from src.gmail_to_sheets.services.sheets_writer import SheetsWriter
+from src.gmail_to_sheets.validators.deduplication import DeduplicationService
 from src.gmail_to_sheets.logging_config import setup_logging
-from src.gmail_to_sheets.exceptions.application import ConfigurationError, AuthenticationError
+from src.gmail_to_sheets.exceptions.application import AuthenticationError
 
 
 logger = logging.getLogger(__name__)
@@ -29,24 +34,49 @@ class Orchestrator:
         self.settings = load_settings()
         setup_logging(self.settings.log_file, self.settings.log_level)
         self.gmail_client: GmailClient | None = None
+        self.sheets_writer: SheetsWriter | None = None
 
     def run(self) -> None:
         """Execute the complete pipeline."""
         try:
+            logger.info("=" * 80)
             logger.info("Starting gmail-to-sheets pipeline")
+            logger.info("=" * 80)
 
             # Phase 1: Load configuration
-            logger.info(f"Configuration loaded: account={self.settings.gmail.account_email}")
+            logger.info(f"[1/7] Configuration loaded: {self.settings.gmail.account_email}")
 
-            # Phase 2: Authenticate
+            # Phase 2: Authenticate Gmail
             self._authenticate_gmail()
 
-            # Phase 3: Search Gmail
-            self._search_messages()
+            # Phase 3: Authenticate Sheets
+            self._authenticate_sheets()
 
-            # Phase 4-7: Deferred to next phases
+            # Phase 4: Search Gmail
+            message_ids = self._search_messages()
+            if not message_ids:
+                logger.warning("No emails found matching criteria")
+                return
 
-            logger.info("Pipeline completed successfully")
+            # Phase 5: Download and parse
+            mt940_file = self._download_and_parse(message_ids[0])
+            if not mt940_file or not mt940_file.transactions:
+                logger.warning("No transactions found in attachment")
+                return
+
+            # Phase 6: Load existing and deduplicate
+            dedup = DeduplicationService()
+            self.sheets_writer.load_existing_dedup_keys(dedup)
+
+            # Phase 7: Write to Sheets
+            result = self._write_to_sheets(mt940_file, dedup)
+
+            logger.info("=" * 80)
+            logger.info(f"Pipeline completed successfully!")
+            logger.info(f"  - Transactions written: {result['written']}")
+            logger.info(f"  - Duplicates skipped: {result['skipped']}")
+            logger.info("=" * 80)
+
         except Exception as e:
             logger.error(f"Pipeline failed: {e}", exc_info=True)
             raise
@@ -54,30 +84,94 @@ class Orchestrator:
     def _authenticate_gmail(self) -> None:
         """Authenticate with Gmail API."""
         try:
-            logger.info("Authenticating with Gmail API...")
+            logger.info("[2/7] Authenticating with Gmail API...")
             authenticator = GmailAuthenticator(
                 client_secrets_path=self.settings.gmail.client_secrets_path,
                 credentials_path=self.settings.gmail.credentials_path,
             )
             credentials = authenticator.get_credentials()
             self.gmail_client = GmailClient(credentials)
-            logger.info("Gmail authentication successful")
+            logger.info("      Gmail authenticated")
         except Exception as e:
             logger.error(f"Gmail authentication failed: {e}")
             raise AuthenticationError(f"Failed to authenticate with Gmail: {e}") from e
 
-    def _search_messages(self) -> None:
+    def _authenticate_sheets(self) -> None:
+        """Authenticate with Google Sheets API."""
+        try:
+            logger.info("[3/7] Authenticating with Google Sheets...")
+            sheets_client = SheetsClient(
+                service_account_path=self.settings.sheets.service_account_path
+            )
+            self.sheets_writer = SheetsWriter(
+                sheets_client=sheets_client,
+                spreadsheet_id=self.settings.sheets.spreadsheet_id,
+                sheet_name=self.settings.sheets.sheet_name,
+            )
+            logger.info("      Sheets authenticated")
+        except Exception as e:
+            logger.error(f"Sheets authentication failed: {e}")
+            raise AuthenticationError(f"Failed to authenticate with Sheets: {e}") from e
+
+    def _search_messages(self) -> list[str]:
         """Search for messages matching criteria."""
         if not self.gmail_client:
             raise RuntimeError("Gmail client not initialized")
 
         try:
-            logger.info(f"Searching for messages: {self.settings.gmail.search_query}")
+            logger.info("[4/7] Searching Gmail for MT940 attachments...")
             message_ids = self.gmail_client.search_messages(
                 query=self.settings.gmail.search_query,
                 max_results=self.settings.batch_size,
             )
-            logger.info(f"Found {len(message_ids)} messages")
+            logger.info(f"      Found {len(message_ids)} email(s)")
+            return message_ids
         except Exception as e:
             logger.error(f"Message search failed: {e}")
+            raise
+
+    def _download_and_parse(self, message_id: str):
+        """Download and parse MT940 attachment."""
+        if not self.gmail_client:
+            raise RuntimeError("Gmail client not initialized")
+
+        try:
+            logger.info("[5/7] Downloading and parsing MT940...")
+            attachments = self.gmail_client.get_attachments(message_id)
+
+            if not attachments:
+                logger.warning("No .txt attachments found")
+                return None
+
+            processor = AttachmentProcessor(self.gmail_client)
+            mt940_file = processor.process_attachment(
+                message_id=message_id,
+                attachment_id=attachments[0].get("attachment_id"),
+                filename=attachments[0]["filename"],
+            )
+
+            logger.info(f"      Parsed {mt940_file.total_transactions} transactions")
+            return mt940_file
+
+        except Exception as e:
+            logger.error(f"Parse failed: {e}")
+            raise
+
+    def _write_to_sheets(self, mt940_file, dedup: DeduplicationService) -> dict:
+        """Write transactions to Google Sheets."""
+        if not self.sheets_writer:
+            raise RuntimeError("Sheets writer not initialized")
+
+        try:
+            logger.info("[6/7] Writing to Google Sheets...")
+            result = self.sheets_writer.write_transactions(
+                transactions=mt940_file.transactions,
+                opening_balance=str(mt940_file.header.saldo_abertura),
+                dedup_service=dedup,
+            )
+            logger.info(f"      Wrote {result['written']} transaction(s)")
+            return result
+
+        except Exception as e:
+            logger.error(f"Write failed: {e}")
             raise
