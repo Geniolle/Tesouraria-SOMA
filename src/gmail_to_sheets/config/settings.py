@@ -7,7 +7,8 @@ Uses Pydantic for type-safe configuration loading and validation.
 from pathlib import Path
 from typing import Optional
 
-from pydantic import BaseSettings, Field, validator
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings
 
 
 class GmailSettings(BaseSettings):
@@ -20,11 +21,14 @@ class GmailSettings(BaseSettings):
     credentials_path: Path = Field(..., alias="GMAIL_CREDENTIALS_PATH")
     client_secrets_path: Path = Field(..., alias="GMAIL_CLIENT_SECRETS_PATH")
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
+    model_config = {
+        "env_file": ".env",
+        "case_sensitive": False,
+        "extra": "ignore",
+    }
 
-    @validator("credentials_path", "client_secrets_path", pre=True)
+    @field_validator("credentials_path", "client_secrets_path", mode="before")
+    @classmethod
     def validate_paths(cls, v: str) -> Path:
         """Convert string paths to Path objects."""
         return Path(v)
@@ -37,11 +41,14 @@ class SheetsSettings(BaseSettings):
     sheet_name: str = Field(..., alias="SHEETS_SHEET_NAME")
     service_account_path: Path = Field(..., alias="SHEETS_SERVICE_ACCOUNT_PATH")
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
+    model_config = {
+        "env_file": ".env",
+        "case_sensitive": False,
+        "extra": "ignore",
+    }
 
-    @validator("service_account_path", pre=True)
+    @field_validator("service_account_path", mode="before")
+    @classmethod
     def validate_path(cls, v: str) -> Path:
         """Convert string path to Path object."""
         return Path(v)
@@ -60,11 +67,14 @@ class AppSettings(BaseSettings):
     archive_after_process: bool = Field(True, alias="ARCHIVE_AFTER_PROCESS")
     timezone: str = Field("Europe/Lisbon", alias="TIMEZONE")
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
+    model_config = {
+        "env_file": ".env",
+        "case_sensitive": False,
+        "extra": "ignore",
+    }
 
-    @validator("log_file", pre=True)
+    @field_validator("log_file", mode="before")
+    @classmethod
     def validate_log_file(cls, v: str) -> str:
         """Ensure log directory exists."""
         log_path = Path(v)

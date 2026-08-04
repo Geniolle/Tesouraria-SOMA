@@ -1,0 +1,13 @@
+# Core dependencies
+google-auth-oauthlib>=1.0.0
+google-auth-httplib2>=0.2.0
+google-api-python-client>=2.100.0
+python-dotenv>=1.0.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# Development
+pytest>=7.0
+pytest-cov>=4.0
+mypy>=1.0
+ruff>=0.1.0

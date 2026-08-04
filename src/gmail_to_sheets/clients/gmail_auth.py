@@ -84,8 +84,27 @@ class GmailAuthenticator:
             str(self.client_secrets_path), self.SCOPES
         )
 
-        credentials = flow.run_local_server(port=0)
-        logger.info("OAuth authorization successful")
+        # Try predefined ports in order; they must match Google Cloud Console settings
+        ports_to_try = [8080, 8081, 8090, 9090]
+        credentials = None
+
+        for port in ports_to_try:
+            try:
+                logger.info(f"Attempting OAuth on port {port}...")
+                credentials = flow.run_local_server(port=port, open_browser=True)
+                logger.info(f"OAuth authorization successful on port {port}")
+                break
+            except OSError as e:
+                logger.debug(f"Port {port} unavailable: {e}")
+                continue
+
+        if credentials is None:
+            raise RuntimeError(
+                "Could not start OAuth server on any of the configured ports. "
+                f"Tried: {ports_to_try}. Ensure these redirect URIs are added to "
+                "Google Cloud Console OAuth credentials."
+            )
+
         return credentials
 
     def _save_credentials(self, credentials: Credentials) -> None:

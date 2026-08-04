@@ -55,9 +55,11 @@ logs/
 
 # Data files
 data/
-*.txt
 *.csv
 *.xlsx
+# Keep requirements.txt
+!requirements.txt
+!requirements*.txt
 
 # OS
 .DS_Store
