@@ -20,7 +20,7 @@ from src.gmail_to_sheets.clients.sheets_client import SheetsClient
 from src.gmail_to_sheets.services.attachment_processor import AttachmentProcessor
 from src.gmail_to_sheets.services.sheets_writer import SheetsWriter
 from src.gmail_to_sheets.services.transfer_service import TransferService
-from src.gmail_to_sheets.services.matching_service import MatchingService
+from src.gmail_to_sheets.services.transfer_matching_service import TransferMatchingService
 from src.gmail_to_sheets.validators.deduplication import DeduplicationService
 from src.gmail_to_sheets.logging_config import setup_logging
 from src.gmail_to_sheets.exceptions.application import AuthenticationError
@@ -75,13 +75,12 @@ class Orchestrator:
             # Phase 6.5: Write to Sheets
             result = self._write_to_sheets(mt940_file, dedup)
 
-            # Phase 7: Transfer to CONTAORDEM
-            transfer_result = self._transfer_to_contaordem()
-
-            # Phase 8: Match with CONSTANTES (optional)
-            matching_result = None
+            # Phase 7: Transfer + Matching (Integrated Batch)
+            logger.info("[7/7] Transferring to CONTAORDEM with matching...")
             if self.settings.enable_matching:
-                matching_result = self._match_with_constantes()
+                transfer_result = self._transfer_with_matching()
+            else:
+                transfer_result = self._transfer_to_contaordem()
 
             logger.info("=" * 80)
             logger.info(f"Pipeline completed successfully!")
@@ -89,9 +88,9 @@ class Orchestrator:
             logger.info(f"  - Duplicates skipped: {result['skipped']}")
             logger.info(f"  - Transferred to CONTAORDEM: {transfer_result['transferred']}")
             logger.info(f"  - Already existing: {transfer_result['already_exists']}")
-            if matching_result:
-                logger.info(f"  - Matched with CONSTANTES: {matching_result['matched']}")
-                logger.info(f"  - No match found: {matching_result['no_match']}")
+            if self.settings.enable_matching:
+                logger.info(f"  - Matched with CONSTANTES: {transfer_result.get('matched', 0)}")
+                logger.info(f"  - No match found: {transfer_result.get('no_match', 0)}")
             logger.info("=" * 80)
 
         except Exception as e:
@@ -214,25 +213,25 @@ class Orchestrator:
             logger.error(f"Transfer failed: {e}")
             raise
 
-    def _match_with_constantes(self) -> dict:
-        """Match CONTAORDEM records with CONSTANTES definitions."""
+    def _transfer_with_matching(self) -> dict:
+        """Transfer to CONTAORDEM with integrated matching (batch optimized)."""
         if not self.sheets_client:
             raise RuntimeError("Sheets client not initialized")
 
         try:
-            logger.info("[8/8] Matching with CONSTANTES (de-para)...")
-            matcher = MatchingService(
+            logger.info("      Using integrated transfer+matching (batch optimized)...")
+            service = TransferMatchingService(
                 sheets_client=self.sheets_client,
                 spreadsheet_id=self.settings.sheets.spreadsheet_id,
-                source_sheet="CONTAORDEM",
+                source_sheet="T_EXTRATO",
+                target_sheet="CONTAORDEM",
                 reference_sheet="CONSTANTES",
-                timezone=self.settings.timezone,
             )
-            result = matcher.process_matching()
-            logger.info(f"      Matched {result['matched']} record(s)")
-            logger.info(f"      No match: {result['no_match']}")
+            result = service.process_with_matching()
+            logger.info(f"      Transferred: {result['transferred']}")
+            logger.info(f"      Matched: {result.get('matched', 0)}")
             return result
 
         except Exception as e:
-            logger.error(f"Matching failed: {e}")
+            logger.error(f"Transfer+matching failed: {e}")
             raise
