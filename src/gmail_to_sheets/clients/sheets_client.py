@@ -7,7 +7,7 @@ Handles authentication and operations with Google Sheets.
 import logging
 import json
 from pathlib import Path
-from typing import Any, Optional, list as ListType
+from typing import Any, Optional
 
 from google.auth.transport.requests import Request
 from google.oauth2.service_account import Credentials
@@ -122,7 +122,7 @@ class SheetsClient:
         self,
         spreadsheet_id: str,
         sheet_name: str,
-        rows: ListType[ListType[Any]],
+        rows: list[list[Any]],
         value_input_option: str = "USER_ENTERED",
     ) -> dict[str, Any]:
         """
