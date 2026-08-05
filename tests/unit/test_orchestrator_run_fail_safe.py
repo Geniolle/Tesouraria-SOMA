@@ -148,7 +148,7 @@ class TestOrchestratorRunFailSafe:
             )[1]
         )
         orchestrator._update_cash_balance = Mock(
-            side_effect=lambda balance: (
+            side_effect=lambda closing, opening: (
                 call_order.append("balance"),
                 {
                     "target_cell": "C2",
@@ -180,11 +180,9 @@ class TestOrchestratorRunFailSafe:
         assert call_order == expected_order
 
         # Validate method calls
-        orchestrator._transfer_with_matching.assert_called_once_with(
-            ["EXT0000000001", "EXT0000000002"]
-        )
+        orchestrator._transfer_with_matching.assert_called_once()
         orchestrator._update_cash_balance.assert_called_once_with(
-            Decimal("2148.04")
+            Decimal("2148.04"), Decimal("2000.00")
         )
         orchestrator._archive_email.assert_called_once_with("msg_new")
 

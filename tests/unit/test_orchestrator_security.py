@@ -97,30 +97,32 @@ class TestArchiveErrorPropagation:
     """Test that archive errors stop the pipeline."""
 
     def test_archive_error_propagates(self):
-        """Test that _archive_email error propagates."""
+        """Test that _archive_email label resolution error propagates."""
         orchestrator = Orchestrator.__new__(Orchestrator)
         orchestrator.settings = Mock()
         orchestrator.settings.gmail.backup_label_name = "Backup"
 
         mock_gmail = Mock()
-        mock_gmail.add_label.side_effect = Exception("Label API failed")
+        mock_gmail.get_or_create_label_id.side_effect = Exception("Label API failed")
         orchestrator.gmail_client = mock_gmail
 
         with pytest.raises(Exception, match="Label API failed"):
             orchestrator._archive_email("msg_123")
 
-    def test_archive_archive_error_propagates(self):
-        """Test that archive_message error propagates."""
+    def test_archive_modify_error_propagates(self):
+        """Test that modify error propagates."""
         orchestrator = Orchestrator.__new__(Orchestrator)
         orchestrator.settings = Mock()
         orchestrator.settings.gmail.backup_label_name = "Backup"
 
         mock_gmail = Mock()
-        mock_gmail.add_label.return_value = None
-        mock_gmail.archive_message.side_effect = Exception("Archive API failed")
+        mock_gmail.get_or_create_label_id.return_value = "label_id_123"
+        mock_service = Mock()
+        mock_service.users().messages().modify().execute.side_effect = Exception("Modify API failed")
+        mock_gmail.service = mock_service
         orchestrator.gmail_client = mock_gmail
 
-        with pytest.raises(Exception, match="Archive API failed"):
+        with pytest.raises(Exception, match="Modify API failed"):
             orchestrator._archive_email("msg_123")
 
 

@@ -335,31 +335,33 @@ class TestTransferMatchingServiceErrorPropagation:
 class TestOrchestratorArchiveFailSafe:
     """Test _archive_email propagates errors properly."""
 
-    def test_archive_email_add_label_error_propagates(self):
-        """Test that add_label error in _archive_email propagates."""
+    def test_archive_email_label_error_propagates(self):
+        """Test that get_or_create_label_id error in _archive_email propagates."""
         orchestrator = Orchestrator.__new__(Orchestrator)
         orchestrator.settings = Mock()
         orchestrator.settings.gmail.backup_label_name = "Backup"
 
         mock_gmail = Mock()
-        mock_gmail.add_label.side_effect = RuntimeError("Label API error")
+        mock_gmail.get_or_create_label_id.side_effect = RuntimeError("Label API error")
         orchestrator.gmail_client = mock_gmail
 
         with pytest.raises(RuntimeError, match="Label API error"):
             orchestrator._archive_email("msg_123")
 
-    def test_archive_email_archive_error_propagates(self):
-        """Test that archive_message error in _archive_email propagates."""
+    def test_archive_email_modify_error_propagates(self):
+        """Test that modify error in _archive_email propagates."""
         orchestrator = Orchestrator.__new__(Orchestrator)
         orchestrator.settings = Mock()
         orchestrator.settings.gmail.backup_label_name = "Backup"
 
         mock_gmail = Mock()
-        mock_gmail.add_label = Mock()  # Success
-        mock_gmail.archive_message.side_effect = RuntimeError("Archive API error")
+        mock_gmail.get_or_create_label_id.return_value = "label_id_123"
+        mock_service = Mock()
+        mock_service.users().messages().modify().execute.side_effect = RuntimeError("Modify API error")
+        mock_gmail.service = mock_service
         orchestrator.gmail_client = mock_gmail
 
-        with pytest.raises(RuntimeError, match="Archive API error"):
+        with pytest.raises(RuntimeError, match="Modify API error"):
             orchestrator._archive_email("msg_123")
 
 
@@ -639,10 +641,13 @@ class TestOrchestratorMethodIsolation:
         orchestrator.settings.gmail.backup_label_name = "Backup"
 
         mock_gmail = Mock()
-        mock_gmail.archive_message.side_effect = RuntimeError("Archive failed")
+        mock_gmail.get_or_create_label_id.return_value = "label_id_123"
+        mock_service = Mock()
+        mock_service.users().messages().modify().execute.side_effect = RuntimeError("Modify failed")
+        mock_gmail.service = mock_service
         orchestrator.gmail_client = mock_gmail
 
-        with pytest.raises(RuntimeError, match="Archive failed"):
+        with pytest.raises(RuntimeError, match="Modify failed"):
             orchestrator._archive_email("msg_1")
 
     def test_transfer_empty_ids_receives_empty_list(self):

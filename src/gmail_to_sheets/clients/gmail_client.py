@@ -6,7 +6,7 @@ Handles searching, retrieving, and processing Gmail messages.
 
 import base64
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
@@ -153,6 +153,83 @@ class GmailClient:
             )
             raise
 
+    def get_or_create_label_id(self, label_name: str) -> str:
+        """
+        Get label ID, with Unicode-safe lookup and creation fallback.
+
+        Handles label normalization (NFC), case-folding, and hierarchical paths.
+        Tolerates HTTP 409 Conflict during creation by retrying lookup.
+
+        Args:
+            label_name: The label name (e.g., 'Serviços/Banco/Montepio24/MT940')
+
+        Returns:
+            Label ID string
+
+        Raises:
+            HttpError: If label lookup/creation fails
+        """
+        import unicodedata
+
+        # Normalize label name for comparison
+        normalized_target = unicodedata.normalize("NFC", label_name.strip())
+
+        try:
+            labels_result = self.service.users().labels().list(userId="me").execute()
+            labels = labels_result.get("labels", [])
+
+            # Search for exact match with Unicode normalization
+            for label in labels:
+                label_name_normalized = unicodedata.normalize("NFC", label["name"].strip())
+                if label_name_normalized == normalized_target:
+                    logger.debug(f"Found existing label: {label['name']} -> {label['id']}")
+                    return label["id"]
+
+            # Not found, try to create it
+            logger.info(f"Label '{label_name}' not found, attempting to create")
+            label_body = {
+                "name": label_name,
+                "labelListVisibility": "labelShow",
+                "messageListVisibility": "show",
+            }
+
+            try:
+                created_label = self.service.users().labels().create(
+                    userId="me", body=label_body
+                ).execute()
+                label_id = created_label["id"]
+                logger.info(f"Created new label: {label_name} -> {label_id}")
+                return label_id
+
+            except HttpError as creation_error:
+                # HTTP 409 Conflict means label exists but wasn't found above
+                # This can happen with Unicode variations, so retry lookup
+                if creation_error.resp.status == 409:
+                    logger.info("Label creation got 409 (already exists), retrying lookup")
+                    labels_result = self.service.users().labels().list(userId="me").execute()
+                    labels = labels_result.get("labels", [])
+
+                    for label in labels:
+                        label_name_normalized = unicodedata.normalize("NFC", label["name"].strip())
+                        if label_name_normalized == normalized_target:
+                            logger.info(f"Found after 409: {label['name']} -> {label['id']}")
+                            return label["id"]
+
+                    # Still not found? Raise the original error
+                    logger.error(f"Label not found after 409 conflict: {label_name}")
+                    raise
+
+                # Other HTTP error
+                logger.error(f"Failed to create label '{label_name}': {creation_error}")
+                raise
+
+        except HttpError as error:
+            if error.resp.status == 409:
+                logger.info("Label creation/lookup got 409, treating as exists")
+                raise
+            logger.error(f"Failed to get or create label: {error}")
+            raise
+
     def add_label(self, message_id: str, label_name: str) -> None:
         """
         Add a label to a message.
@@ -165,26 +242,7 @@ class GmailClient:
             HttpError: If Gmail API call fails
         """
         try:
-            labels_result = self.service.users().labels().list(userId="me").execute()
-            labels = labels_result.get("labels", [])
-
-            label_id: Optional[str] = None
-            for label in labels:
-                if label["name"] == label_name:
-                    label_id = label["id"]
-                    break
-
-            if not label_id:
-                logger.warning(f"Label '{label_name}' not found, creating it")
-                label_body = {
-                    "name": label_name,
-                    "labelListVisibility": "labelShow",
-                    "messageListVisibility": "show",
-                }
-                created_label = self.service.users().labels().create(
-                    userId="me", body=label_body
-                ).execute()
-                label_id = created_label["id"]
+            label_id = self.get_or_create_label_id(label_name)
 
             self.service.users().messages().modify(
                 userId="me",
@@ -192,7 +250,7 @@ class GmailClient:
                 body={"addLabelIds": [label_id]},
             ).execute()
 
-            logger.debug(f"Added label '{label_name}' to message {message_id}")
+            logger.debug(f"Added label '{label_name}' (ID: {label_id}) to message {message_id}")
         except HttpError as error:
             logger.error(f"Failed to add label to message {message_id}: {error}")
             raise

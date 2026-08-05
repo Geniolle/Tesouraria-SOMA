@@ -9,10 +9,13 @@ import logging
 import re
 import unicodedata
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Optional
 
 from src.gmail_to_sheets.clients.sheets_client import SheetsClient
+from src.gmail_to_sheets.services.balance_protection_service import (
+    BalanceProtectionService,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -132,6 +135,58 @@ class CashBalanceService:
         except Exception as e:
             logger.error(f"Cash balance inspection failed: {e}", exc_info=True)
             raise CashBalanceError(f"Failed to inspect cash balance: {e}") from e
+
+    def should_update_balance(
+        self, closing_balance: Decimal, opening_balance: Decimal
+    ) -> BalanceProtectionService.BalanceDecision:
+        """
+        Check if it's safe to update the balance.
+
+        Args:
+            closing_balance: Closing balance from MT940 file
+            opening_balance: Opening balance from MT940 file
+
+        Returns:
+            BalanceDecision with should_update flag and reason
+        """
+        try:
+            # Read current balance
+            header_columns = self._load_header_columns()
+            account_column = self._find_account_column(header_columns)
+            target_row = self.header_row + self.row_offset
+
+            current_value = self.sheets_client.get_cell(
+                self.spreadsheet_id,
+                self.sheet_name,
+                target_row,
+                account_column.column_number,
+            )
+
+            if current_value is None:
+                current_balance = Decimal("0.00")
+            else:
+                try:
+                    if isinstance(current_value, str):
+                        current_balance = Decimal(current_value.strip().replace(",", "."))
+                    else:
+                        current_balance = Decimal(str(current_value))
+                except (ValueError, TypeError, InvalidOperation):
+                    current_balance = Decimal("0.00")
+
+            # Use BalanceProtectionService to decide
+            decision = BalanceProtectionService.decide_balance_update(
+                current_balance=current_balance,
+                file_opening=opening_balance,
+                file_closing=closing_balance,
+            )
+
+            logger.info(f"Balance decision: {decision.reason}")
+            return decision
+
+        except Exception as e:
+            logger.error(f"Failed to check balance safety: {e}")
+            # Fail safe: don't update if we can't verify
+            raise CashBalanceError(f"Failed to check balance safety: {e}") from e
 
     def update_balance(self, closing_balance: Decimal) -> dict:
         """

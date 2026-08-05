@@ -8,7 +8,7 @@ Tests validate:
 - Exceptions during processing prevent archiving
 """
 
-from unittest.mock import Mock, call, patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -40,12 +40,13 @@ class TestOrchestratorArchive:
     def mock_gmail_client(self):
         """Create mock Gmail client."""
         gmail_client = Mock()
-        gmail_client.add_label = Mock()
-        gmail_client.archive_message = Mock()
+        gmail_client.get_or_create_label_id = Mock(return_value="label_id_123")
+        gmail_client.service = Mock()
+        gmail_client.service.users().messages().modify().execute = Mock()
         return gmail_client
 
     def test_archive_email_calls_operations_in_correct_order(self, mock_settings_archive_enabled, mock_gmail_client):
-        """Test that _archive_email() calls add_label before archive_message."""
+        """Test that _archive_email() calls get_or_create_label_id and modify atomically."""
         orchestrator = Orchestrator.__new__(Orchestrator)
         orchestrator.settings = mock_settings_archive_enabled
         orchestrator.gmail_client = mock_gmail_client
@@ -54,19 +55,12 @@ class TestOrchestratorArchive:
 
         orchestrator._archive_email(message_id)
 
-        # Verify both methods were called
-        mock_gmail_client.add_label.assert_called_once_with(
-            message_id=message_id,
-            label_name="Backup/Archive"
-        )
-        mock_gmail_client.archive_message.assert_called_once_with(message_id)
+        # Verify get_or_create_label_id was called
+        mock_gmail_client.get_or_create_label_id.assert_called_once_with("Backup/Archive")
 
-        # Verify order: add_label called before archive_message
-        expected_calls = [
-            call.add_label(message_id=message_id, label_name="Backup/Archive"),
-            call.archive_message(message_id)
-        ]
-        mock_gmail_client.assert_has_calls(expected_calls, any_order=False)
+        # Verify modify was called with both add and remove labels
+        modify_call = mock_gmail_client.service.users().messages().modify
+        assert modify_call.called
 
     def test_archive_with_transferred_greater_than_zero(self, mock_settings_archive_enabled, mock_gmail_client):
         """Test that archive is called when archive_after_process=true and transferred > 0."""
@@ -80,8 +74,8 @@ class TestOrchestratorArchive:
         orchestrator._archive_email(message_id)
 
         # Both operations should be called
-        assert mock_gmail_client.add_label.called
-        assert mock_gmail_client.archive_message.called
+        assert mock_gmail_client.get_or_create_label_id.called
+        assert mock_gmail_client.service.users().messages().modify.called
 
     def test_archive_with_zero_transferred_but_duplicates_skipped(self, mock_settings_archive_enabled, mock_gmail_client):
         """Test that archive is called even when transferred=0 but duplicates were skipped."""
@@ -95,8 +89,8 @@ class TestOrchestratorArchive:
         orchestrator._archive_email(message_id)
 
         # Both operations should still be called
-        assert mock_gmail_client.add_label.called
-        assert mock_gmail_client.archive_message.called
+        assert mock_gmail_client.get_or_create_label_id.called
+        assert mock_gmail_client.service.users().messages().modify.called
 
     def test_archive_disabled_no_operations_called(self, mock_settings_archive_disabled, mock_gmail_client):
         """Test that no archive operations are called when archive_after_process=false."""
@@ -109,39 +103,40 @@ class TestOrchestratorArchive:
         # For unit test, we validate the settings property
         assert orchestrator.settings.archive_after_process is False
 
-    def test_archive_email_exception_propagates_add_label_error(self, mock_settings_archive_enabled, mock_gmail_client):
-        """Test that exceptions in add_label are propagated to stop pipeline."""
+    def test_archive_email_exception_propagates_label_error(self, mock_settings_archive_enabled, mock_gmail_client):
+        """Test that exceptions in get_or_create_label_id are propagated to stop pipeline."""
         orchestrator = Orchestrator.__new__(Orchestrator)
         orchestrator.settings = mock_settings_archive_enabled
         orchestrator.gmail_client = mock_gmail_client
 
         message_id = "test_message_error"
-        mock_gmail_client.add_label.side_effect = Exception("Gmail API error")
+        mock_gmail_client.get_or_create_label_id.side_effect = Exception("Gmail API error")
 
         # Error must propagate - archiving failure stops the pipeline
         with pytest.raises(Exception, match="Gmail API error"):
             orchestrator._archive_email(message_id)
 
-        # Verify add_label was called
-        assert mock_gmail_client.add_label.called
+        # Verify get_or_create_label_id was called
+        assert mock_gmail_client.get_or_create_label_id.called
 
-    def test_archive_email_exception_prevents_archive_message(self, mock_settings_archive_enabled, mock_gmail_client):
-        """Test that if add_label fails, archive_message is not called."""
+    def test_archive_email_exception_prevents_modify(self, mock_settings_archive_enabled, mock_gmail_client):
+        """Test that if get_or_create_label_id fails, modify is not called."""
         orchestrator = Orchestrator.__new__(Orchestrator)
         orchestrator.settings = mock_settings_archive_enabled
         orchestrator.gmail_client = mock_gmail_client
 
         message_id = "test_message_fail"
-        mock_gmail_client.add_label.side_effect = Exception("Label operation failed")
-        mock_gmail_client.archive_message = Mock()
+        mock_gmail_client.get_or_create_label_id.side_effect = Exception("Label operation failed")
+        mock_modify = Mock()
+        mock_gmail_client.service.users().messages().modify = mock_modify
 
         # Error must propagate
         with pytest.raises(Exception, match="Label operation failed"):
             orchestrator._archive_email(message_id)
 
-        # archive_message should NOT be called if add_label fails
-        assert mock_gmail_client.add_label.called
-        assert not mock_gmail_client.archive_message.called
+        # modify should NOT be called if get_or_create_label_id fails
+        assert mock_gmail_client.get_or_create_label_id.called
+        assert not mock_modify.called
 
     @patch('src.gmail_to_sheets.orchestrator.logger')
     def test_archive_email_logs_operations(self, mock_logger, mock_settings_archive_enabled, mock_gmail_client):

@@ -23,9 +23,11 @@ from src.gmail_to_sheets.services.attachment_processor import AttachmentProcesso
 from src.gmail_to_sheets.services.cash_balance_service import CashBalanceService
 from src.gmail_to_sheets.services.sheets_writer import SheetsWriter
 from src.gmail_to_sheets.services.smart_deduplication_service import SmartDeduplicationService
+from src.gmail_to_sheets.services.transaction_recovery_service import (
+    TransactionRecoveryService,
+)
 from src.gmail_to_sheets.services.transfer_matching_service import TransferMatchingService
 from src.gmail_to_sheets.services.transfer_service import TransferService
-from src.gmail_to_sheets.validators.deduplication import DeduplicationService
 
 logger = logging.getLogger(__name__)
 
@@ -76,28 +78,50 @@ class Orchestrator:
             self._validate_mt940_reconciliation(mt940_file)
 
             # Phase 6: Smart deduplication (by date + value)
+            # MUST check T_EXTRATO, not CONTAORDEM, since SheetsWriter writes to T_EXTRATO
             dedup = SmartDeduplicationService(
                 sheets_client=self.sheets_client,
                 spreadsheet_id=self.settings.sheets.spreadsheet_id,
-                target_sheet="CONTAORDEM"
+                target_sheet="T_EXTRATO"
             )
-            logger.info("      Using smart deduplication (by date + value)")
+            logger.info("      Using smart deduplication (checking T_EXTRATO)")
 
-            # Phase 6.5: Write to Sheets
+            # Phase 6.5: Recover existing transaction IDs (for partial execution recovery)
+            logger.info("[6.25/7] Attempting to recover existing transaction IDs...")
+            recovery = TransactionRecoveryService(
+                sheets_client=self.sheets_client,
+                spreadsheet_id=self.settings.sheets.spreadsheet_id,
+                source_sheet="T_EXTRATO",
+            )
+            recovered_ids = recovery.recover_batch(mt940_file)
+            if recovered_ids:
+                logger.info(f"      Recovered {len(recovered_ids)} existing IDs from T_EXTRATO")
+
+            # Phase 6.75: Write to Sheets
             result = self._write_to_sheets(mt940_file, dedup)
             written_ids = result.get("written_ids", [])
+
+            # Combine recovered IDs with newly written IDs for transfer
+            all_ids = recovered_ids + written_ids
+            logger.info(
+                f"      Total IDs for transfer: {len(all_ids)} "
+                f"(recovered: {len(recovered_ids)}, new: {len(written_ids)})"
+            )
 
             # Phase 7: Transfer + Matching (Integrated Batch)
             logger.info("[7/7] Transferring to CONTAORDEM with matching...")
             if self.settings.enable_matching:
-                transfer_result = self._transfer_with_matching(written_ids)
+                transfer_result = self._transfer_with_matching(all_ids)
             else:
-                transfer_result = self._transfer_to_contaordem(written_ids)
+                transfer_result = self._transfer_to_contaordem(all_ids)
 
-            # Phase 8: Update cash balance
+            # Phase 8: Update cash balance (with safety checks)
             cash_balance_result = None
             if self.settings.cash_balance.update_enabled:
-                cash_balance_result = self._update_cash_balance(mt940_file.footer.saldo_fecho)
+                cash_balance_result = self._update_cash_balance(
+                    mt940_file.footer.saldo_fecho,
+                    mt940_file.header.saldo_abertura,
+                )
 
             # Phase 9: Archive email to backup folder
             if self.settings.archive_after_process:
@@ -106,6 +130,7 @@ class Orchestrator:
             logger.info("=" * 80)
             logger.info("Pipeline completed successfully!")
             logger.info(f"  - Transactions written: {result['written']}")
+            logger.info(f"  - Recovered from existing: {len(recovered_ids)}")
             logger.info(f"  - Duplicates skipped: {result['skipped']}")
             logger.info(f"  - Transferred to CONTAORDEM: {transfer_result['transferred']}")
             logger.info(f"  - Already existing: {transfer_result['already_exists']}")
@@ -113,7 +138,11 @@ class Orchestrator:
                 logger.info(f"  - Matched with CONSTANTES: {transfer_result.get('matched', 0)}")
                 logger.info(f"  - No match found: {transfer_result.get('no_match', 0)}")
             if cash_balance_result:
-                logger.info(f"  - Cash balance updated in {cash_balance_result['target_cell']}")
+                if isinstance(cash_balance_result, dict):
+                    if cash_balance_result.get("skipped"):
+                        logger.info(f"  - Cash balance: {cash_balance_result['reason']}")
+                    elif "target_cell" in cash_balance_result:
+                        logger.info(f"  - Cash balance updated in {cash_balance_result['target_cell']}")
             logger.info("=" * 80)
 
         except Exception as e:
@@ -295,13 +324,13 @@ class Orchestrator:
             logger.error(f"Parse failed: {e}")
             raise
 
-    def _write_to_sheets(self, mt940_file, dedup: DeduplicationService) -> dict:
+    def _write_to_sheets(self, mt940_file, dedup) -> dict:
         """Write transactions to Google Sheets."""
         if not self.sheets_writer:
             raise RuntimeError("Sheets writer not initialized")
 
         try:
-            logger.info("[6/7] Writing to Google Sheets...")
+            logger.info("[6.75/7] Writing to Google Sheets...")
             result = self.sheets_writer.write_transactions(
                 transactions=mt940_file.transactions,
                 opening_balance=str(mt940_file.header.saldo_abertura),
@@ -358,13 +387,19 @@ class Orchestrator:
             logger.error(f"Transfer+matching failed: {e}")
             raise
 
-    def _update_cash_balance(self, closing_balance) -> dict:
-        """Update cash balance in GERENCIAR CAIXAS sheet."""
+    def _update_cash_balance(self, closing_balance, opening_balance) -> dict:
+        """
+        Update cash balance in GERENCIAR CAIXAS sheet with safety checks.
+
+        Prevents regressing the balance when processing historical MT940 files.
+        """
         if not self.sheets_client:
             raise RuntimeError("Sheets client not initialized")
 
         try:
-            logger.info("[8/8] Updating cash balance...")
+            from decimal import Decimal
+
+            logger.info("[8/8] Checking balance safety...")
             cash_service = CashBalanceService(
                 sheets_client=self.sheets_client,
                 spreadsheet_id=self.settings.sheets.spreadsheet_id,
@@ -374,6 +409,23 @@ class Orchestrator:
                 row_offset=self.settings.cash_balance.row_offset,
                 verify_after_write=self.settings.cash_balance.verify_after_write,
             )
+
+            # Check if safe to update
+            decision = cash_service.should_update_balance(
+                closing_balance=Decimal(str(closing_balance)),
+                opening_balance=Decimal(str(opening_balance)),
+            )
+
+            if not decision.should_update:
+                logger.info(f"      Balance update skipped: {decision.reason}")
+                if decision.is_historical:
+                    logger.info("      (This is a historical/backfill file - balance will not regress)")
+                return {
+                    "skipped": True,
+                    "reason": decision.reason,
+                    "is_historical": decision.is_historical,
+                }
+
             result = cash_service.update_balance(closing_balance)
             logger.info(f"      Cash balance updated to {result['written_value']}")
             return result
@@ -386,6 +438,7 @@ class Orchestrator:
         """
         Move email to backup folder after successful processing.
 
+        Combines label addition and INBOX removal in a single atomic operation.
         Errors during archiving must stop the pipeline - if we cannot
         reliably move the email to backup, we must not continue.
         """
@@ -394,15 +447,23 @@ class Orchestrator:
 
         try:
             logger.info("[9/9] Moving email to backup folder...")
-            self.gmail_client.add_label(
-                message_id=message_id,
-                label_name=self.settings.gmail.backup_label_name,
+            label_id = self.gmail_client.get_or_create_label_id(
+                self.settings.gmail.backup_label_name
             )
+            logger.info(f"      Resolved label ID: {label_id}")
+
+            # Atomic operation: add backup label and remove INBOX in one call
+            self.gmail_client.service.users().messages().modify(
+                userId="me",
+                id=message_id,
+                body={
+                    "addLabelIds": [label_id],
+                    "removeLabelIds": ["INBOX"],
+                },
+            ).execute()
+
             logger.info(f"      Added backup label '{self.settings.gmail.backup_label_name}'")
-
-            self.gmail_client.archive_message(message_id)
             logger.info("      Email removed from INBOX")
-
             logger.info("      Email archived successfully")
         except Exception as e:
             logger.error(f"Failed to archive email: {e}")
