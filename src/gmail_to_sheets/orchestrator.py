@@ -89,7 +89,7 @@ class Orchestrator:
                 transfer_result = self._transfer_to_contaordem()
 
             # Phase 8: Archive email to backup folder
-            if self.settings.archive_after_process and transfer_result['transferred'] > 0:
+            if self.settings.archive_after_process:
                 self._archive_email(message_id)
 
             logger.info("=" * 80)
@@ -257,7 +257,12 @@ class Orchestrator:
                 message_id=message_id,
                 label_name=self.settings.gmail.backup_label_name,
             )
-            logger.info(f"      Email archived to '{self.settings.gmail.backup_label_name}'")
+            logger.info(f"      Added backup label '{self.settings.gmail.backup_label_name}'")
+
+            self.gmail_client.archive_message(message_id)
+            logger.info(f"      Email removed from INBOX")
+
+            logger.info(f"      Email archived successfully")
         except Exception as e:
             logger.warning(f"Failed to archive email: {e}")
 
