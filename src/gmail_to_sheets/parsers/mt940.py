@@ -203,8 +203,8 @@ class MT940Parser:
             return None
 
     def _parse_footer(self, lines: list[str]) -> MT940Footer:
-        """Parse closing balance section."""
-        for line in lines:
+        """Parse closing balance section (final balance from end of file)."""
+        for line in reversed(lines):
             if line.startswith(":62F:") or line.startswith(":62M:"):
                 return self._parse_closing_balance(line)
 
