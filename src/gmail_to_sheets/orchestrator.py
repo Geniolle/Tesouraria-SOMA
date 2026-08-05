@@ -20,6 +20,7 @@ from src.gmail_to_sheets.config.settings import load_settings
 from src.gmail_to_sheets.exceptions.application import AuthenticationError
 from src.gmail_to_sheets.logging_config import setup_logging
 from src.gmail_to_sheets.services.attachment_processor import AttachmentProcessor
+from src.gmail_to_sheets.services.cash_balance_service import CashBalanceService
 from src.gmail_to_sheets.services.sheets_writer import SheetsWriter
 from src.gmail_to_sheets.services.smart_deduplication_service import SmartDeduplicationService
 from src.gmail_to_sheets.services.transfer_matching_service import TransferMatchingService
@@ -89,7 +90,12 @@ class Orchestrator:
             else:
                 transfer_result = self._transfer_to_contaordem(written_ids)
 
-            # Phase 8: Archive email to backup folder
+            # Phase 8: Update cash balance
+            cash_balance_result = None
+            if self.settings.cash_balance.update_enabled:
+                cash_balance_result = self._update_cash_balance(mt940_file.footer.saldo_fecho)
+
+            # Phase 9: Archive email to backup folder
             if self.settings.archive_after_process:
                 self._archive_email(message_id)
 
@@ -102,6 +108,8 @@ class Orchestrator:
             if self.settings.enable_matching:
                 logger.info(f"  - Matched with CONSTANTES: {transfer_result.get('matched', 0)}")
                 logger.info(f"  - No match found: {transfer_result.get('no_match', 0)}")
+            if cash_balance_result:
+                logger.info(f"  - Cash balance updated in {cash_balance_result['target_cell']}")
             logger.info("=" * 80)
 
         except Exception as e:
@@ -245,6 +253,29 @@ class Orchestrator:
 
         except Exception as e:
             logger.error(f"Transfer+matching failed: {e}")
+            raise
+
+    def _update_cash_balance(self, closing_balance) -> dict:
+        """Update cash balance in GERENCIAR CAIXAS sheet."""
+        if not self.sheets_client:
+            raise RuntimeError("Sheets client not initialized")
+
+        try:
+            logger.info("[8/8] Updating cash balance...")
+            cash_service = CashBalanceService(
+                sheets_client=self.sheets_client,
+                spreadsheet_id=self.settings.sheets.spreadsheet_id,
+                sheet_name=self.settings.cash_balance.sheet_name,
+                account_label=self.settings.cash_balance.account_label,
+                row_offset=self.settings.cash_balance.row_offset,
+                verify_after_write=self.settings.cash_balance.verify_after_write,
+            )
+            result = cash_service.update_balance(closing_balance)
+            logger.info(f"      Cash balance updated to {result['written_value']}")
+            return result
+
+        except Exception as e:
+            logger.error(f"Cash balance update failed: {e}")
             raise
 
     def _archive_email(self, message_id: str) -> None:

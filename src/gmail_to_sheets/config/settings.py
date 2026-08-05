@@ -10,6 +10,31 @@ from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings
 
 
+class CashBalanceSettings(BaseSettings):
+    """Cash balance update configuration."""
+
+    update_enabled: bool = Field(True, alias="CASH_BALANCE_UPDATE_ENABLED")
+    sheet_name: str = Field("GERENCIAR CAIXAS", alias="CASH_BALANCE_SHEET_NAME")
+    account_label: str = Field("CAIXA ECONÔMICA MONTEPIO GERAL - CC", alias="CASH_BALANCE_ACCOUNT_LABEL")
+    row_offset: int = Field(1, alias="CASH_BALANCE_ROW_OFFSET")
+    verify_after_write: bool = Field(True, alias="CASH_BALANCE_VERIFY_AFTER_WRITE")
+
+    model_config = {
+        "env_file": ".env",
+        "case_sensitive": False,
+        "extra": "ignore",
+    }
+
+    @field_validator("row_offset", mode="before")
+    @classmethod
+    def validate_row_offset(cls, v):
+        """Validate row offset is positive integer."""
+        offset = int(v)
+        if offset <= 0:
+            raise ValueError("CASH_BALANCE_ROW_OFFSET must be a positive integer")
+        return offset
+
+
 class GmailSettings(BaseSettings):
     """Gmail-specific configuration."""
 
@@ -59,6 +84,7 @@ class AppSettings(BaseSettings):
 
     gmail: GmailSettings
     sheets: SheetsSettings
+    cash_balance: CashBalanceSettings
     attachment_extension: str = Field(".txt", alias="ATTACHMENT_EXTENSION")
     batch_size: int = Field(100, alias="BATCH_SIZE")
     log_level: str = Field("INFO", alias="LOG_LEVEL")
@@ -90,7 +116,12 @@ def load_settings() -> AppSettings:
     try:
         gmail_settings = GmailSettings()
         sheets_settings = SheetsSettings()
-        app_settings = AppSettings(gmail=gmail_settings, sheets=sheets_settings)
+        cash_balance_settings = CashBalanceSettings()
+        app_settings = AppSettings(
+            gmail=gmail_settings,
+            sheets=sheets_settings,
+            cash_balance=cash_balance_settings
+        )
         return app_settings
     except Exception as e:
         raise RuntimeError(
