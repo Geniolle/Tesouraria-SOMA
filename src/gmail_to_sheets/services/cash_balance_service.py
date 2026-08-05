@@ -1,12 +1,13 @@
-"""
+﻿"""
 Cash Balance Service
 
 Updates the final cash balance in GERENCIAR CAIXAS sheet.
-Locates the account label dynamically and writes the balance to the cell below.
+Discovers target column dynamically from the sheet header.
 """
 
 import logging
 import unicodedata
+from dataclasses import dataclass
 from decimal import Decimal
 from typing import Optional
 
@@ -21,8 +22,19 @@ class CashBalanceError(Exception):
     pass
 
 
+@dataclass(frozen=True)
+class HeaderColumn:
+    """Represents a header column in the sheet."""
+
+    index: int
+    column_number: int
+    column_letter: str
+    original_name: str
+    normalized_name: str
+
+
 class CashBalanceService:
-    """Service to update cash balance in GERENCIAR CAIXAS sheet."""
+    """Service to update cash balance in sheet by discovering column from header."""
 
     def __init__(
         self,
@@ -30,6 +42,7 @@ class CashBalanceService:
         spreadsheet_id: str,
         sheet_name: str,
         account_label: str,
+        header_row: int = 1,
         row_offset: int = 1,
         verify_after_write: bool = True,
     ):
@@ -40,16 +53,84 @@ class CashBalanceService:
             sheets_client: Authenticated Sheets client
             spreadsheet_id: Target spreadsheet ID
             sheet_name: Sheet name (e.g., "GERENCIAR CAIXAS")
-            account_label: Text to search for (e.g., "CAIXA ECONÔMICA MONTEPIO GERAL - CC")
-            row_offset: Rows to offset from label cell (e.g., 1 = cell below)
+            account_label: Header text to search for (e.g., "CAIXA ECONÔMICA MONTEPIO GERAL - CC")
+            header_row: Row number containing headers (1-indexed, default 1)
+            row_offset: Rows below header to write balance (default 1)
             verify_after_write: Whether to verify value after writing
         """
         self.sheets_client = sheets_client
         self.spreadsheet_id = spreadsheet_id
         self.sheet_name = sheet_name
         self.account_label = account_label
+        self.header_row = header_row
         self.row_offset = row_offset
         self.verify_after_write = verify_after_write
+
+    def inspect_target(self) -> dict:
+        """
+        Inspect target column without writing (read-only).
+
+        Returns:
+            Dict with header info, column details, and target cell info
+
+        Raises:
+            CashBalanceError: If header reading or column location fails
+        """
+        try:
+            logger.info(f"Inspecting cash balance target in {self.sheet_name}...")
+
+            # Load header columns
+            header_columns = self._load_header_columns()
+
+            logger.debug(f"Loaded {len(header_columns)} header columns")
+
+            # Find account column
+            account_column = self._find_account_column(header_columns)
+
+            logger.info(
+                f"Found account column: {account_column.column_letter} (index {account_column.index})"
+            )
+
+            # Calculate target cell
+            target_row = self.header_row + self.row_offset
+
+            label_cell = self._row_col_to_a1(self.header_row, account_column.column_number)
+            target_cell = self._row_col_to_a1(target_row, account_column.column_number)
+
+            logger.info(f"Label cell: {label_cell}, Target cell: {target_cell}")
+
+            # Read previous value
+            previous_value = self.sheets_client.get_cell(
+                self.spreadsheet_id,
+                self.sheet_name,
+                target_row,
+                account_column.column_number,
+            )
+            if previous_value is not None:
+                previous_value = str(previous_value).strip()
+
+            logger.info(f"Previous value in {target_cell}: {previous_value or '(empty)'}")
+
+            return {
+                "header_row": self.header_row,
+                "header_name": account_column.original_name,
+                "header_normalized": account_column.normalized_name,
+                "header_index": account_column.index,
+                "column_number": account_column.column_number,
+                "column_letter": account_column.column_letter,
+                "label_cell": label_cell,
+                "target_cell": target_cell,
+                "previous_value": previous_value,
+                "written_value": None,
+                "verified_value": None,
+                "verified": False,
+            }
+
+        except CashBalanceError:
+            raise
+        except Exception as e:
+            logger.error(f"Cash balance inspection failed: {e}", exc_info=True)
+            raise CashBalanceError(f"Failed to inspect cash balance: {e}") from e
 
     def update_balance(self, closing_balance: Decimal) -> dict:
         """
@@ -62,43 +143,42 @@ class CashBalanceService:
             Result dictionary with update information
 
         Raises:
-            CashBalanceError: If label not found, multiple found, or write fails
+            CashBalanceError: If column not found, multiple found, or write fails
         """
         try:
             logger.info(f"Updating cash balance in {self.sheet_name}...")
 
-            # Get actual sheet dimensions
-            range_name = self._get_dynamic_range()
-            logger.debug(f"Using dynamic range: {range_name}")
+            # Load header columns
+            header_columns = self._load_header_columns()
 
-            result = self.sheets_client.service.spreadsheets().values().get(
-                spreadsheetId=self.spreadsheet_id,
-                range=range_name,
-            ).execute()
+            logger.debug(f"Loaded {len(header_columns)} header columns")
 
-            rows = result.get("values", [])
-            if not rows:
-                raise CashBalanceError(f"Sheet {self.sheet_name} appears to be empty")
+            # Find account column
+            account_column = self._find_account_column(header_columns)
 
-            logger.debug(f"Loaded {len(rows)} rows from {self.sheet_name}")
-
-            # Find the account label cell
-            label_row, label_col = self._find_label_cell(rows)
-
-            logger.info(f"Found label at row {label_row + 1}, column {label_col + 1}")
+            logger.info(
+                f"Found account column: {account_column.column_letter} (index {account_column.index})"
+            )
 
             # Calculate target cell
-            target_row = label_row + self.row_offset
-            target_col = label_col
+            target_row = self.header_row + self.row_offset
 
-            logger.info(f"Target cell for update: row {target_row + 1}, column {target_col + 1}")
+            label_cell = self._row_col_to_a1(self.header_row, account_column.column_number)
+            target_cell = self._row_col_to_a1(target_row, account_column.column_number)
 
-            # Get cell reference (A1 notation)
-            label_cell = self._row_col_to_a1(label_row, label_col)
-            target_cell = self._row_col_to_a1(target_row, target_col)
+            logger.info(f"Label cell: {label_cell}, Target cell: {target_cell}")
 
             # Read previous value
-            previous_value = self._get_cell_value(rows, target_row, target_col)
+            previous_value = self.sheets_client.get_cell(
+                self.spreadsheet_id,
+                self.sheet_name,
+                target_row,
+                account_column.column_number,
+            )
+            if previous_value is not None:
+                previous_value = str(previous_value).strip()
+
+            logger.info(f"Previous value in {target_cell}: {previous_value or '(empty)'}")
 
             # Quantize balance to 0.01 EUR (Decimal precision)
             quantized_balance = closing_balance.quantize(Decimal("0.01"))
@@ -114,10 +194,10 @@ class CashBalanceService:
             self.sheets_client.update_cell(
                 self.spreadsheet_id,
                 self.sheet_name,
-                target_row + 1,  # Convert to 1-indexed
-                target_col + 1,  # Convert to 1-indexed
-                value=api_numeric_value,  # float for JSON serialization
-                value_input_option="RAW",  # RAW: value is stored as-is
+                target_row,
+                account_column.column_number,
+                value=api_numeric_value,
+                value_input_option="RAW",
             )
 
             # Verify if requested
@@ -127,7 +207,7 @@ class CashBalanceService:
             if self.verify_after_write:
                 logger.info(f"Verifying value in {target_cell}...")
                 verified_value = self._verify_write(
-                    target_row, target_col, closing_balance
+                    target_row, account_column.column_number, closing_balance
                 )
                 verified = verified_value is not None
                 if verified:
@@ -140,12 +220,17 @@ class CashBalanceService:
             logger.info("Cash balance update completed successfully")
 
             return {
-                "sheet_name": self.sheet_name,
+                "header_row": self.header_row,
+                "header_name": account_column.original_name,
+                "header_normalized": account_column.normalized_name,
+                "header_index": account_column.index,
+                "column_number": account_column.column_number,
+                "column_letter": account_column.column_letter,
                 "label_cell": label_cell,
                 "target_cell": target_cell,
                 "previous_value": previous_value,
                 "written_value": balance_formatted,
-                "verified_value": verified_value if verified else None,
+                "verified_value": str(verified_value) if verified_value else None,
                 "verified": verified,
             }
 
@@ -155,108 +240,135 @@ class CashBalanceService:
             logger.error(f"Cash balance update failed: {e}", exc_info=True)
             raise CashBalanceError(f"Failed to update cash balance: {e}") from e
 
-    def _find_label_cell(self, rows: list[list]) -> tuple[int, int]:
+    def _load_header_columns(self) -> list[HeaderColumn]:
         """
-        Find the cell containing the account label.
-
-        Args:
-            rows: Sheet data
+        Load and parse header row.
 
         Returns:
-            Tuple of (row_index, col_index)
+            List of HeaderColumn objects for all filled cells in header row
 
         Raises:
-            CashBalanceError: If not found or multiple occurrences
-        """
-        normalized_label = self._normalize_text(self.account_label)
-        found_cells = []
-
-        for row_idx, row in enumerate(rows):
-            for col_idx, cell in enumerate(row):
-                if cell and self._normalize_text(str(cell)) == normalized_label:
-                    found_cells.append((row_idx, col_idx))
-                    logger.debug(f"Found label at row {row_idx + 1}, col {col_idx + 1}")
-
-        if len(found_cells) == 0:
-            raise CashBalanceError(
-                f"Label '{self.account_label}' not found in {self.sheet_name}"
-            )
-
-        if len(found_cells) > 1:
-            raise CashBalanceError(
-                f"Multiple occurrences ({len(found_cells)}) of '{self.account_label}' found in {self.sheet_name}"
-            )
-
-        return found_cells[0]
-
-    def _get_dynamic_range(self) -> str:
-        """
-        Get dynamic range based on actual sheet dimensions.
-
-        Returns:
-            Range string (e.g., "'GERENCIAR CAIXAS'!A1:Z1000")
+            CashBalanceError: If header row cannot be read
         """
         try:
-            # Get spreadsheet metadata to find actual dimensions
-            spreadsheet = self.sheets_client.service.spreadsheets().get(
-                spreadsheetId=self.spreadsheet_id,
-            ).execute()
+            logger.info(f"Loading header row {self.header_row} from {self.sheet_name}...")
 
-            sheets = spreadsheet.get("sheets", [])
-            target_sheet = None
+            # Read the header row
+            header_values = self.sheets_client.get_row(
+                self.spreadsheet_id,
+                self.sheet_name,
+                self.header_row,
+            )
 
-            for sheet in sheets:
-                if sheet["properties"]["title"] == self.sheet_name:
-                    target_sheet = sheet
-                    break
+            logger.info(f"Read {len(header_values)} cells from header row")
 
-            if not target_sheet:
-                raise CashBalanceError(f"Sheet '{self.sheet_name}' not found in spreadsheet")
+            if not header_values:
+                raise CashBalanceError(f"Header row {self.header_row} is empty in {self.sheet_name}")
 
-            # Get actual grid dimensions
-            row_count = target_sheet["properties"]["gridProperties"]["rowCount"]
-            col_count = target_sheet["properties"]["gridProperties"]["columnCount"]
+            # Build header columns (preserve indices of filled cells)
+            header_columns = []
 
-            # Convert column count to letter (1=A, 26=Z, 27=AA, etc.)
-            col_letter = self._number_to_column(col_count)
+            for index, cell_value in enumerate(header_values):
+                if cell_value:  # Skip empty cells
+                    cell_value_str = str(cell_value).strip()
+                    if cell_value_str:  # Skip whitespace-only cells
+                        column_number = index + 1  # Convert 0-based index to 1-based column number
+                        column_letter = self.sheets_client._number_to_column(column_number)
+                        normalized = self._normalize_text(cell_value_str)
 
-            # Escape sheet name with single quotes if it contains special chars
-            escaped_sheet = f"'{self.sheet_name}'"
+                        header_col = HeaderColumn(
+                            index=index,
+                            column_number=column_number,
+                            column_letter=column_letter,
+                            original_name=cell_value_str,
+                            normalized_name=normalized,
+                        )
 
-            range_name = f"{escaped_sheet}!A1:{col_letter}{row_count}"
-            logger.debug(f"Dynamic range: {range_name} (rows: {row_count}, cols: {col_count})")
+                        header_columns.append(header_col)
 
-            return range_name
+                        logger.debug(
+                            f"  Column {column_letter} (index {index}, number {column_number}): {cell_value_str}"
+                        )
 
+            logger.info(f"Loaded {len(header_columns)} filled header columns")
+
+            return header_columns
+
+        except CashBalanceError:
+            raise
         except Exception as e:
-            logger.warning(f"Failed to get dynamic range: {e}, falling back to A:ZZ")
-            return f"'{self.sheet_name}'!A:ZZ"
+            logger.error(f"Failed to load header row: {e}", exc_info=True)
+            raise CashBalanceError(f"Failed to load header row {self.header_row}: {e}") from e
 
-    def _verify_write(self, row_idx: int, col_idx: int, expected: Decimal) -> Optional[Decimal]:
+    def _find_account_column(
+        self,
+        header_columns: list[HeaderColumn],
+    ) -> HeaderColumn:
+        """
+        Find the column matching the account label.
+
+        Args:
+            header_columns: List of header columns to search
+
+        Returns:
+            HeaderColumn matching the account label
+
+        Raises:
+            CashBalanceError: If not found or multiple matches
+        """
+        normalized_label = self._normalize_text(self.account_label)
+        found_columns = []
+
+        for header_col in header_columns:
+            if header_col.normalized_name == normalized_label:
+                found_columns.append(header_col)
+                logger.debug(
+                    f"Matched account label at column {header_col.column_letter} (index {header_col.index})"
+                )
+
+        if len(found_columns) == 0:
+            # Log available columns for debugging (without full values to avoid credential leaks)
+            available_names = [f"{col.column_letter}:{col.original_name}" for col in header_columns[:5]]
+            logger.error(f"Account label '{self.account_label}' not found in header row")
+            logger.error(f"Available columns (sample): {', '.join(available_names)}")
+            raise CashBalanceError(
+                f"Account label '{self.account_label}' not found in {self.sheet_name} header row {self.header_row}"
+            )
+
+        if len(found_columns) > 1:
+            column_refs = [f"{col.column_letter}" for col in found_columns]
+            logger.error(f"Multiple account matches found at columns: {', '.join(column_refs)}")
+            raise CashBalanceError(
+                f"Multiple occurrences ({len(found_columns)}) of account label found in header row"
+            )
+
+        return found_columns[0]
+
+    def _verify_write(self, row_idx: int, col_num: int, expected: Decimal) -> Optional[Decimal]:
         """
         Verify the written value by reading it back.
 
         Args:
-            row_idx: Row index (0-based)
-            col_idx: Column index (0-based)
+            row_idx: Row number (1-indexed)
+            col_num: Column number (1-indexed)
             expected: Expected value
 
         Returns:
             Verified Decimal value, or None if verification fails
         """
         try:
-            # Re-read the sheet using dynamic range
-            range_name = self._get_dynamic_range()
-            result = self.sheets_client.service.spreadsheets().values().get(
-                spreadsheetId=self.spreadsheet_id,
-                range=range_name,
-            ).execute()
+            logger.info(f"Verifying value at row {row_idx}, column {col_num}...")
 
-            rows = result.get("values", [])
-            cell_value = self._get_cell_value(rows, row_idx, col_idx)
+            # Read the cell value
+            cell_value = self.sheets_client.get_cell(
+                self.spreadsheet_id,
+                self.sheet_name,
+                row_idx,
+                col_num,
+            )
 
             if not cell_value:
-                logger.warning(f"Cell at row {row_idx + 1}, col {col_idx + 1} is empty after write")
+                logger.warning(f"Cell at row {row_idx}, column {col_num} is empty after write")
                 return None
 
             # Parse the value (handle both comma and dot as decimal separator)
@@ -283,23 +395,6 @@ class CashBalanceService:
             logger.error(f"Verification read failed: {e}", exc_info=True)
             return None
 
-    def _get_cell_value(self, rows: list[list], row_idx: int, col_idx: int) -> Optional[str]:
-        """
-        Get cell value from rows.
-
-        Args:
-            rows: Sheet data
-            row_idx: Row index (0-based)
-            col_idx: Column index (0-based)
-
-        Returns:
-            Cell value or None if out of bounds
-        """
-        if row_idx < len(rows) and col_idx < len(rows[row_idx]):
-            val = rows[row_idx][col_idx]
-            return str(val).strip() if val else None
-        return None
-
     @staticmethod
     def _normalize_text(text: str) -> str:
         """
@@ -310,6 +405,7 @@ class CashBalanceService:
         - Unicode normalization
         - Extra spaces
         - Accents
+        - Space around hyphens
 
         Args:
             text: Text to normalize
@@ -329,38 +425,27 @@ class CashBalanceService:
         # Remove combining marks (accents)
         text_no_accents = "".join(c for c in normalized if unicodedata.category(c) != "Mn")
 
+        # Normalize spaces around hyphens
+        text_no_accents = text_no_accents.replace(" - ", " - ").replace("  ", " ")
+
         return text_no_accents
 
     @staticmethod
-    def _number_to_column(col_num: int) -> str:
+    def _row_col_to_a1(row_num: int, col_num: int) -> str:
         """
-        Convert column number to letter (1=A, 26=Z, 27=AA, etc.).
+        Convert row/column numbers to A1 notation.
 
         Args:
-            col_num: Column number (1-based)
+            row_num: Row number (1-indexed)
+            col_num: Column number (1-indexed)
 
         Returns:
-            Column letter(s) (e.g., "A", "Z", "AA", "ZZ")
+            Cell reference (e.g., "A1", "C2")
         """
         col_letter = ""
-        while col_num > 0:
-            col_num -= 1
-            col_letter = chr(ord("A") + (col_num % 26)) + col_letter
-            col_num //= 26
-        return col_letter
-
-    @staticmethod
-    def _row_col_to_a1(row_idx: int, col_idx: int) -> str:
-        """
-        Convert row/col indices to A1 notation.
-
-        Args:
-            row_idx: Row index (0-based)
-            col_idx: Column index (0-based)
-
-        Returns:
-            Cell reference (e.g., "A1", "D5")
-        """
-        col_letter = CashBalanceService._number_to_column(col_idx + 1)
-        row_num = row_idx + 1
+        n = col_num
+        while n > 0:
+            n -= 1
+            col_letter = chr(ord("A") + (n % 26)) + col_letter
+            n //= 26
         return f"{col_letter}{row_num}"

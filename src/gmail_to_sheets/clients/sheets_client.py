@@ -115,6 +115,79 @@ class SheetsClient:
             logger.error(f"Failed to get headers: {e}")
             raise
 
+    def get_row(
+        self,
+        spreadsheet_id: str,
+        sheet_name: str,
+        row: int,
+    ) -> list[Any]:
+        """
+        Get a single row from sheet.
+
+        Args:
+            spreadsheet_id: Spreadsheet ID
+            sheet_name: Sheet name
+            row: Row number (1-indexed)
+
+        Returns:
+            List of values in the row
+
+        Raises:
+            HttpError: If API call fails
+        """
+        try:
+            range_name = f"{sheet_name}!{row}:{row}"
+            result = self.service.spreadsheets().values().get(
+                spreadsheetId=spreadsheet_id,
+                range=range_name,
+            ).execute()
+
+            values = result.get("values", [])
+            if values:
+                return values[0]
+            return []
+        except HttpError as e:
+            logger.error(f"Failed to get row {row}: {e}")
+            raise
+
+    def get_cell(
+        self,
+        spreadsheet_id: str,
+        sheet_name: str,
+        row: int,
+        column: int,
+    ) -> Any:
+        """
+        Get a single cell value from sheet.
+
+        Args:
+            spreadsheet_id: Spreadsheet ID
+            sheet_name: Sheet name
+            row: Row number (1-indexed)
+            column: Column number (1-indexed)
+
+        Returns:
+            Cell value, or None if empty
+
+        Raises:
+            HttpError: If API call fails
+        """
+        try:
+            col_letter = self._number_to_column(column)
+            range_name = f"{sheet_name}!{col_letter}{row}"
+            result = self.service.spreadsheets().values().get(
+                spreadsheetId=spreadsheet_id,
+                range=range_name,
+            ).execute()
+
+            values = result.get("values", [])
+            if values and values[0]:
+                return values[0][0]
+            return None
+        except HttpError as e:
+            logger.error(f"Failed to get cell {row},{column}: {e}")
+            raise
+
     def append_rows(
         self,
         spreadsheet_id: str,

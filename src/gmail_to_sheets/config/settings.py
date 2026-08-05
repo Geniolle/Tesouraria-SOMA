@@ -16,6 +16,7 @@ class CashBalanceSettings(BaseSettings):
     update_enabled: bool = Field(True, alias="CASH_BALANCE_UPDATE_ENABLED")
     sheet_name: str = Field("GERENCIAR CAIXAS", alias="CASH_BALANCE_SHEET_NAME")
     account_label: str = Field("CAIXA ECONÔMICA MONTEPIO GERAL - CC", alias="CASH_BALANCE_ACCOUNT_LABEL")
+    header_row: int = Field(1, alias="CASH_BALANCE_HEADER_ROW")
     row_offset: int = Field(1, alias="CASH_BALANCE_ROW_OFFSET")
     verify_after_write: bool = Field(True, alias="CASH_BALANCE_VERIFY_AFTER_WRITE")
 
@@ -24,6 +25,15 @@ class CashBalanceSettings(BaseSettings):
         "case_sensitive": False,
         "extra": "ignore",
     }
+
+    @field_validator("header_row", mode="before")
+    @classmethod
+    def validate_header_row(cls, v):
+        """Validate header row is positive integer."""
+        row = int(v)
+        if row <= 0:
+            raise ValueError("CASH_BALANCE_HEADER_ROW must be a positive integer")
+        return row
 
     @field_validator("row_offset", mode="before")
     @classmethod

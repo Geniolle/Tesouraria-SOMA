@@ -1,28 +1,26 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 Controlled validation script for cash balance update.
 
 Modes:
-- Default (READ_ONLY): Load email, parse MT940, locate marker, show data
+- Default (READ_ONLY): Load email, parse MT940, inspect target cell, show data
 - --execute: Also write the cash balance value
 
 This script does NOT execute the full orchestrator pipeline.
 """
 
 import argparse
+import logging
 import sys
 from decimal import Decimal
-from pathlib import Path
 
-from src.gmail_to_sheets.clients.gmail_client import GmailClient
 from src.gmail_to_sheets.clients.gmail_auth import GmailAuthenticator
+from src.gmail_to_sheets.clients.gmail_client import GmailClient
 from src.gmail_to_sheets.clients.sheets_client import SheetsClient
 from src.gmail_to_sheets.config.settings import load_settings
+from src.gmail_to_sheets.logging_config import setup_logging
 from src.gmail_to_sheets.services.attachment_processor import AttachmentProcessor
 from src.gmail_to_sheets.services.cash_balance_service import CashBalanceService
-from src.gmail_to_sheets.logging_config import setup_logging
-
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +53,7 @@ def main():
         print(f"  - Gmail account: {settings.gmail.account_email}")
         print(f"  - Spreadsheet: {settings.sheets.spreadsheet_id}")
         print(f"  - Cash balance sheet: {settings.cash_balance.sheet_name}")
+        print(f"  - Header row: {settings.cash_balance.header_row}")
 
         # Phase 2: Authenticate Gmail
         print("\n[2/8] Authenticating with Gmail...")
@@ -139,39 +138,29 @@ def main():
         )
         print("[OK] Sheets authenticated")
 
-        # Phase 7: Locate cash balance cell
-        print("\n[7/8] Locating cash balance cell...")
+        # Phase 7: Inspect target cell (read-only using public API)
+        print("\n[7/8] Inspecting target cash balance cell...")
         cash_service = CashBalanceService(
             sheets_client=sheets_client,
             spreadsheet_id=settings.sheets.spreadsheet_id,
             sheet_name=settings.cash_balance.sheet_name,
             account_label=settings.cash_balance.account_label,
+            header_row=settings.cash_balance.header_row,
             row_offset=settings.cash_balance.row_offset,
             verify_after_write=True,
         )
 
-        # Get dynamic range based on actual sheet dimensions
-        range_name = cash_service._get_dynamic_range()
-        print(f"  Using dynamic range: {range_name}")
+        # Inspect target (public, read-only method)
+        inspection = cash_service.inspect_target()
 
-        result = sheets_client.service.spreadsheets().values().get(
-            spreadsheetId=settings.sheets.spreadsheet_id,
-            range=range_name,
-        ).execute()
-
-        rows = result.get("values", [])
-        label_row, label_col = cash_service._find_label_cell(rows)
-        label_cell = cash_service._row_col_to_a1(label_row, label_col)
-        target_cell = cash_service._row_col_to_a1(
-            label_row + settings.cash_balance.row_offset, label_col
-        )
-        previous_value = cash_service._get_cell_value(
-            rows, label_row + settings.cash_balance.row_offset, label_col
-        )
-
-        print(f"[OK] Label found at: {label_cell}")
-        print(f"[OK] Target cell: {target_cell}")
-        print(f"[OK] Previous value: {previous_value or '(empty)'}")
+        print(f"[OK] Header discovered: {inspection['header_name']}")
+        print(f"  - Header row: {inspection['header_row']}")
+        print(f"  - Header index (0-based): {inspection['header_index']}")
+        print(f"  - Column number (1-based): {inspection['column_number']}")
+        print(f"  - Column letter: {inspection['column_letter']}")
+        print(f"  - Label cell: {inspection['label_cell']}")
+        print(f"  - Target cell: {inspection['target_cell']}")
+        print(f"  - Previous value: {inspection['previous_value'] or '(empty)'}")
 
         # Phase 8: Display results
         print("\n" + "=" * 80)
@@ -182,18 +171,24 @@ def main():
         print(f"SELECTED_FILE={attachments[0]['filename']}")
         print(f"SELECTED_INTERNAL_DATE={internal_date_ms}")
         print(f"INBOX_MATCHES={len(message_ids)}")
+        print(f"HEADER_ROW={inspection['header_row']}")
+        print(f"ACCOUNT_HEADER_NAME={inspection['header_name']}")
+        print(f"ACCOUNT_HEADER_NORMALIZED={inspection['header_normalized']}")
+        print(f"ACCOUNT_HEADER_INDEX={inspection['header_index']}")
+        print(f"ACCOUNT_COLUMN_NUMBER={inspection['column_number']}")
+        print(f"ACCOUNT_COLUMN_LETTER={inspection['column_letter']}")
         print(f"OPENING_BALANCE={opening}")
         print(f"TRANSACTION_TOTAL={transaction_sum}")
         print(f"CALCULATED_BALANCE={calculated}")
         print(f"CLOSING_BALANCE={closing}")
         print(f"DIFFERENCE={difference}")
-        print(f"SHEET_RANGE={range_name}")
-        print(f"LABEL_CELL={label_cell}")
-        print(f"TARGET_CELL={target_cell}")
-        print(f"PREVIOUS_VALUE={previous_value or '(empty)'}")
+        print(f"LABEL_CELL={inspection['label_cell']}")
+        print(f"TARGET_CELL={inspection['target_cell']}")
+        print(f"PREVIOUS_VALUE={inspection['previous_value'] or '(empty)'}")
 
         # Proceed with write if requested
         if args.execute:
+            target_cell = inspection['target_cell']
             print(f"\nType 'YES' to write balance to {target_cell}: ", end="", flush=True)
             confirmation = input().strip().upper()
 

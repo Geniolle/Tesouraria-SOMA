@@ -312,6 +312,7 @@ class Orchestrator:
                 spreadsheet_id=self.settings.sheets.spreadsheet_id,
                 sheet_name=self.settings.cash_balance.sheet_name,
                 account_label=self.settings.cash_balance.account_label,
+                header_row=self.settings.cash_balance.header_row,
                 row_offset=self.settings.cash_balance.row_offset,
                 verify_after_write=self.settings.cash_balance.verify_after_write,
             )
