@@ -10,8 +10,8 @@ Tests cover:
 
 import pytest
 
-from src.gmail_to_sheets.parsers.mt940 import MT940Parser
 from src.gmail_to_sheets.parsers.exceptions import MT940ParseError
+from src.gmail_to_sheets.parsers.mt940 import MT940Parser
 
 
 class TestMT940ParserBasic:

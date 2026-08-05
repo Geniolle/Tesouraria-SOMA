@@ -37,9 +37,32 @@ desktop.ini
 # Python
 .pytest_cache/
 .coverage
+.mypy_cache/
+.ruff_cache/
 dist/
 build/
+*.egg-info/
+.eggs/
 
 # Temporary
 *.tmp
 *.bak
+*.swp~
+*~
+
+# Docker (local builds)
+__pycache__/
+*.pyc
+
+# Large files
+*.zip
+*.tar.gz
+*.tar
+
+# Data files (generated on runtime)
+data/
+!data/.gitkeep
+
+# Logs
+logs/
+!logs/.gitkeep

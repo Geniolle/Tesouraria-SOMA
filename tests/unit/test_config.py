@@ -4,8 +4,6 @@ Unit tests for configuration management.
 
 from pathlib import Path
 
-import pytest
-
 from src.gmail_to_sheets.config.settings import GmailSettings, SheetsSettings
 
 
