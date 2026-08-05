@@ -629,11 +629,11 @@ class TestBatchWriterFailSafeDirect:
             )
 
 
-class TestOrchestratorMethodOrder:
-    """Test Orchestrator methods execute in correct order."""
+class TestOrchestratorMethodIsolation:
+    """Test individual Orchestrator methods in isolation."""
 
     def test_orchestrator_archive_fails_propagates(self):
-        """Test that archive error propagates and pipeline doesn't succeed."""
+        """Test that _archive_email propagates error."""
         orchestrator = Orchestrator.__new__(Orchestrator)
         orchestrator.settings = Mock()
         orchestrator.settings.gmail.backup_label_name = "Backup"
@@ -646,7 +646,7 @@ class TestOrchestratorMethodOrder:
             orchestrator._archive_email("msg_1")
 
     def test_transfer_empty_ids_receives_empty_list(self):
-        """TEST F: Transfer receives empty list when written_ids is empty."""
+        """Test that TransferService handles empty ID list."""
         from src.gmail_to_sheets.services.transfer_service import TransferService
 
         mock_sheets = Mock()
@@ -662,8 +662,6 @@ class TestOrchestratorMethodOrder:
         ))
 
         transfer = TransferService(mock_sheets, "test", "T_EXTRATO", "CONTAORDEM")
-
-        # Passing empty list should return zero statistics
         result = transfer.transfer_pending(source_ids=[])
 
         assert result["transferred"] == 0
