@@ -51,7 +51,7 @@ def main():
         settings = load_settings()
         setup_logging(settings.log_file, "INFO")
 
-        print(f"✓ Configuration loaded")
+        print("[OK] Configuration loaded")
         print(f"  - Gmail account: {settings.gmail.account_email}")
         print(f"  - Spreadsheet: {settings.sheets.spreadsheet_id}")
         print(f"  - Cash balance sheet: {settings.cash_balance.sheet_name}")
@@ -64,7 +64,7 @@ def main():
         )
         credentials = authenticator.get_credentials()
         gmail_client = GmailClient(credentials)
-        print("✓ Gmail authenticated")
+        print("[OK] Gmail authenticated")
 
         # Phase 3: Search for latest MT940 email (by internalDate)
         print("\n[3/8] Searching for latest MT940 email...")
@@ -74,10 +74,10 @@ def main():
         )
 
         if not message_ids:
-            print("✗ No emails found matching criteria")
+            print("[FAIL] No emails found matching criteria")
             return False
 
-        print(f"✓ Found {len(message_ids)} email(s) matching criteria")
+        print(f"[OK] Found {len(message_ids)} email(s) matching criteria")
 
         # Select the most recent by internalDate
         messages = [gmail_client.get_message(mid) for mid in message_ids]
@@ -88,7 +88,7 @@ def main():
         message_id = latest_message["id"]
         internal_date_ms = int(latest_message.get("internalDate", 0))
 
-        print(f"✓ Selected latest email: {message_id}")
+        print(f"[OK] Selected latest email: {message_id}")
         print(f"  - internalDate: {internal_date_ms}")
         print(f"  - Total emails in inbox: {len(message_ids)}")
 
@@ -97,7 +97,7 @@ def main():
         attachments = gmail_client.get_attachments(message_id)
 
         if not attachments:
-            print("✗ No attachments found")
+            print("[FAIL] No attachments found")
             return False
 
         processor = AttachmentProcessor(gmail_client)
@@ -107,7 +107,7 @@ def main():
             filename=attachments[0]["filename"],
         )
 
-        print(f"✓ Parsed {mt940_file.total_transactions} transactions")
+        print(f"[OK] Parsed {mt940_file.total_transactions} transactions")
 
         # Phase 5: Validate reconciliation
         print("\n[5/8] Validating accounting reconciliation...")
@@ -127,17 +127,17 @@ def main():
         print(f"  Difference: {difference}")
 
         if abs(difference) > Decimal("0.01"):
-            print("✗ Reconciliation failed - difference exceeds tolerance")
+            print("[FAIL] Reconciliation failed - difference exceeds tolerance")
             return False
 
-        print("✓ Reconciliation successful")
+        print("[OK] Reconciliation successful")
 
         # Phase 6: Authenticate Sheets
         print("\n[6/8] Authenticating with Google Sheets...")
         sheets_client = SheetsClient(
             service_account_path=settings.sheets.service_account_path
         )
-        print("✓ Sheets authenticated")
+        print("[OK] Sheets authenticated")
 
         # Phase 7: Locate cash balance cell
         print("\n[7/8] Locating cash balance cell...")
@@ -169,9 +169,9 @@ def main():
             rows, label_row + settings.cash_balance.row_offset, label_col
         )
 
-        print(f"✓ Label found at: {label_cell}")
-        print(f"✓ Target cell: {target_cell}")
-        print(f"✓ Previous value: {previous_value or '(empty)'}")
+        print(f"[OK] Label found at: {label_cell}")
+        print(f"[OK] Target cell: {target_cell}")
+        print(f"[OK] Previous value: {previous_value or '(empty)'}")
 
         # Phase 8: Display results
         print("\n" + "=" * 80)
@@ -198,14 +198,14 @@ def main():
             confirmation = input().strip().upper()
 
             if confirmation != "YES":
-                print("✗ Write cancelled")
+                print("[FAIL] Write cancelled")
                 return False
 
             # Perform write
             print("\n[8/8] Writing cash balance...")
             cash_result = cash_service.update_balance(closing)
 
-            print(f"✓ Write completed")
+            print(f"[OK] Write completed")
             print(f"  Written value: {cash_result['written_value']}")
             print(f"  Verified value: {cash_result['verified_value']}")
             print(f"  Verification: {cash_result['verified']}")
@@ -224,11 +224,11 @@ def main():
         print(f"T_EXTRATO_MODIFIED=false")
         print(f"CONTAORDEM_MODIFIED=false")
 
-        print("\n✓ Validation completed successfully")
+        print("\n[OK] Validation completed successfully")
         return True
 
     except Exception as e:
-        print(f"\n✗ Validation failed: {e}", file=sys.stderr)
+        print(f"\n[FAIL] Validation failed: {e}", file=sys.stderr)
         import traceback
         traceback.print_exc()
         return False
