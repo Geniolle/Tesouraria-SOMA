@@ -2,10 +2,7 @@
 Tests for sheet escaping, normalization, and file format features.
 """
 
-from decimal import Decimal
 from unittest.mock import Mock
-
-import pytest
 
 from src.gmail_to_sheets.clients.sheets_client import SheetsClient
 from src.gmail_to_sheets.services.cash_balance_service import CashBalanceService
