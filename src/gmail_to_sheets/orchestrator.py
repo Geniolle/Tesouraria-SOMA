@@ -80,13 +80,14 @@ class Orchestrator:
 
             # Phase 6.5: Write to Sheets
             result = self._write_to_sheets(mt940_file, dedup)
+            written_ids = result.get("written_ids", [])
 
             # Phase 7: Transfer + Matching (Integrated Batch)
             logger.info("[7/7] Transferring to CONTAORDEM with matching...")
             if self.settings.enable_matching:
-                transfer_result = self._transfer_with_matching()
+                transfer_result = self._transfer_with_matching(written_ids)
             else:
-                transfer_result = self._transfer_to_contaordem()
+                transfer_result = self._transfer_to_contaordem(written_ids)
 
             # Phase 8: Archive email to backup folder
             if self.settings.archive_after_process:
@@ -202,7 +203,7 @@ class Orchestrator:
             logger.error(f"Write failed: {e}")
             raise
 
-    def _transfer_to_contaordem(self) -> dict:
+    def _transfer_to_contaordem(self, source_ids: list[str] | None = None) -> dict:
         """Transfer pending transactions to CONTAORDEM sheet."""
         if not self.sheets_client:
             raise RuntimeError("Sheets client not initialized")
@@ -215,7 +216,7 @@ class Orchestrator:
                 source_sheet="T_EXTRATO",
                 target_sheet="CONTAORDEM",
             )
-            result = transfer.transfer_pending()
+            result = transfer.transfer_pending(source_ids=source_ids)
             logger.info(f"      Transferred {result['transferred']} transaction(s)")
             return result
 
@@ -223,7 +224,7 @@ class Orchestrator:
             logger.error(f"Transfer failed: {e}")
             raise
 
-    def _transfer_with_matching(self) -> dict:
+    def _transfer_with_matching(self, source_ids: list[str] | None = None) -> dict:
         """Transfer to CONTAORDEM with integrated matching (batch optimized)."""
         if not self.sheets_client:
             raise RuntimeError("Sheets client not initialized")
@@ -237,7 +238,7 @@ class Orchestrator:
                 target_sheet="CONTAORDEM",
                 reference_sheet="CONSTANTES",
             )
-            result = service.process_with_matching()
+            result = service.process_with_matching(source_ids=source_ids)
             logger.info(f"      Transferred: {result['transferred']}")
             logger.info(f"      Matched: {result.get('matched', 0)}")
             return result

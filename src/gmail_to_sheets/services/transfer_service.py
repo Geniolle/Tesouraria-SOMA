@@ -106,14 +106,33 @@ class TransferService:
             logger.error(f"Failed to load existing IDs: {e}")
             raise
 
-    def transfer_pending(self) -> dict:
+    def transfer_pending(self, source_ids: list[str] | set[str] | None = None) -> dict:
         """
         Transfer pending transactions with batch optimization.
+
+        Args:
+            source_ids: List/set of ID_INTERNO values to transfer. If empty or None,
+                       returns zero statistics without processing.
 
         Returns:
             Transfer statistics
         """
         try:
+            # If no source IDs provided, return zero statistics
+            if not source_ids:
+                logger.info("No source IDs provided for transfer, skipping")
+                return {
+                    "transferred": 0,
+                    "already_exists": 0,
+                    "empty_id": 0,
+                    "with_status": 0,
+                    "total_processed": 0,
+                }
+
+            # Normalize to set for faster lookups
+            source_ids_set = set(self._normalize_text(id_) for id_ in source_ids)
+            logger.info(f"Transfer limited to {len(source_ids_set)} source IDs")
+
             logger.info(f"Starting batch transfer from {self.source_sheet} to {self.target_sheet}")
 
             # Load source data
@@ -128,7 +147,7 @@ class TransferService:
 
             # Phase 1: Prepare all data in memory
             logger.info("Phase 1: Preparing data...")
-            prepared_data = self._prepare_all_data(source_rows)
+            prepared_data = self._prepare_all_data(source_rows, source_ids_set)
 
             target_rows = prepared_data["target_rows"]
             status_updates = prepared_data["status_updates"]
@@ -163,9 +182,13 @@ class TransferService:
             logger.error(f"Transfer failed: {e}")
             raise
 
-    def _prepare_all_data(self, source_rows: list[list]) -> dict:
+    def _prepare_all_data(self, source_rows: list[list], source_ids_set: set[str] | None = None) -> dict:
         """
         Prepare all data for batch writing.
+
+        Args:
+            source_rows: Rows from source sheet
+            source_ids_set: Set of normalized IDs to process. If None, process all rows.
 
         Returns:
             Dictionary with target_rows, status_updates, and statistics
@@ -182,6 +205,16 @@ class TransferService:
 
         for idx, source_row in enumerate(source_rows):
             row_number = idx + 2  # +1 for header, +1 for 1-indexed
+
+            # Get ID_INTERNO
+            id_interno = self._get_cell_value(source_row, "ID_INTERNO", self.source_indices)
+            id_normalized = self._normalize_text(id_interno)
+
+            # If source_ids_set is provided, only process rows with IDs in the set
+            if source_ids_set is not None and id_normalized not in source_ids_set:
+                logger.debug(f"Row {row_number}: ID {id_interno} not in source_ids, skipping")
+                continue
+
             stats["total_processed"] += 1
 
             # Check if has status
@@ -192,10 +225,6 @@ class TransferService:
                     logger.debug(f"Row {row_number}: Has STATUS, skipping")
                     stats["with_status"] += 1
                     continue
-
-            # Get ID_INTERNO
-            id_interno = self._get_cell_value(source_row, "ID_INTERNO", self.source_indices)
-            id_normalized = self._normalize_text(id_interno)
 
             # Validate ID
             if not id_interno:

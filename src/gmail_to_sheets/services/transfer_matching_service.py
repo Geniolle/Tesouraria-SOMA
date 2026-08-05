@@ -203,14 +203,36 @@ class TransferMatchingService:
             logger.error(f"Failed to load existing IDs: {e}")
             raise
 
-    def process_with_matching(self) -> dict:
+    def process_with_matching(self, source_ids: list[str] | set[str] | None = None) -> dict:
         """
         Execute integrated transfer + matching process.
+
+        Args:
+            source_ids: List/set of ID_INTERNO values to process. If empty or None,
+                       returns zero statistics without processing.
 
         Returns:
             Statistics dictionary
         """
         try:
+            # If no source IDs provided, return zero statistics
+            if not source_ids:
+                logger.info("No source IDs provided for processing, skipping")
+                return {
+                    "transferred": 0,
+                    "already_exists": 0,
+                    "updated": 0,
+                    "empty_id": 0,
+                    "with_status": 0,
+                    "matched": 0,
+                    "no_match": 0,
+                    "total_processed": 0,
+                }
+
+            # Normalize to set for faster lookups
+            source_ids_set = set(self._normalize_text(id_) for id_ in source_ids)
+            logger.info(f"Processing limited to {len(source_ids_set)} source IDs")
+
             logger.info("Starting integrated transfer+matching (batch optimized)...")
 
             # Load source data
@@ -225,7 +247,7 @@ class TransferMatchingService:
 
             # Phase 1: Prepare all data with matching
             logger.info("Phase 1: Preparing and matching data...")
-            prepared = self._prepare_with_matching(source_rows)
+            prepared = self._prepare_with_matching(source_rows, source_ids_set)
 
             target_rows = prepared["target_rows"]
             status_updates = prepared["status_updates"]
@@ -276,10 +298,14 @@ class TransferMatchingService:
             logger.error(f"Process failed: {e}")
             raise
 
-    def _prepare_with_matching(self, source_rows: list[list]) -> dict:
+    def _prepare_with_matching(self, source_rows: list[list], source_ids_set: set[str] | None = None) -> dict:
         """
         Prepare all rows with matching in a single pass.
         Handles both new inserts and updates to existing rows.
+
+        Args:
+            source_rows: Rows from source sheet
+            source_ids_set: Set of normalized IDs to process. If None, process all rows.
 
         Returns:
             Dictionary with target_rows, status_updates, and stats
@@ -300,11 +326,17 @@ class TransferMatchingService:
 
         for idx, source_row in enumerate(source_rows):
             row_number = idx + 2
-            stats["total_processed"] += 1
 
             # Get ID
             id_interno = self._get_cell_value(source_row, "ID_INTERNO", self.source_indices)
             id_normalized = self._normalize_text(id_interno)
+
+            # If source_ids_set is provided, only process rows with IDs in the set
+            if source_ids_set is not None and id_normalized not in source_ids_set:
+                logger.debug(f"Row {row_number}: ID {id_interno} not in source_ids, skipping")
+                continue
+
+            stats["total_processed"] += 1
 
             if not id_interno:
                 status_updates[row_number] = "Erro: ID vazio"

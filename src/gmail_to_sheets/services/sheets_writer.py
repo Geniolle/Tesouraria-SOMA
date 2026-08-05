@@ -188,12 +188,13 @@ class SheetsWriter:
             dedup_service: Optional deduplication service
 
         Returns:
-            Write statistics
+            Write statistics including written_ids list
         """
         try:
             logger.info(f"Writing {len(transactions)} transactions...")
 
             rows_to_write = []
+            written_ids = []
             written = 0
             skipped = 0
             next_sequence = self.last_sequence + 1
@@ -227,6 +228,9 @@ class SheetsWriter:
                 sequencial = next_sequence
                 next_sequence += 1
 
+                # Generate ID_INTERNO in the same format used later
+                id_interno = f"EXT{str(sequencial).zfill(10)}"
+
                 # Build row with calculated balance and ID
                 row = self._transaction_to_row(
                     txn,
@@ -234,6 +238,7 @@ class SheetsWriter:
                     sequencial=sequencial,
                 )
                 rows_to_write.append(row)
+                written_ids.append(id_interno)
                 written += 1
 
                 if dedup_service:
@@ -245,6 +250,7 @@ class SheetsWriter:
                     "written": 0,
                     "skipped": skipped,
                     "total": len(transactions),
+                    "written_ids": [],
                 }
 
             # Append to sheet
@@ -254,12 +260,13 @@ class SheetsWriter:
                 rows_to_write,
             )
 
-            logger.info(f"Successfully wrote {written} transactions")
+            logger.info(f"Successfully wrote {written} transactions with IDs: {written_ids}")
 
             return {
                 "written": written,
                 "skipped": skipped,
                 "total": len(transactions),
+                "written_ids": written_ids,
                 "api_response": result,
             }
 
