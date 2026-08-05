@@ -1,4 +1,4 @@
-﻿"""
+"""
 Cash Balance Service
 
 Updates the final cash balance in GERENCIAR CAIXAS sheet.
@@ -6,6 +6,7 @@ Discovers target column dynamically from the sheet header.
 """
 
 import logging
+import re
 import unicodedata
 from dataclasses import dataclass
 from decimal import Decimal
@@ -405,7 +406,7 @@ class CashBalanceService:
         - Unicode normalization
         - Extra spaces
         - Accents
-        - Space around hyphens
+        - Space around hyphens (any variation)
 
         Args:
             text: Text to normalize
@@ -419,14 +420,17 @@ class CashBalanceService:
         # Remove extra spaces and case-fold
         text = " ".join(text.split()).casefold()
 
+        # Normalize all hyphen variations: "-" with any surrounding spaces to " - "
+        text = re.sub(r"\s*-\s*", " - ", text)
+
         # Unicode normalization (NFD to decompose accents)
         normalized = unicodedata.normalize("NFD", text)
 
         # Remove combining marks (accents)
         text_no_accents = "".join(c for c in normalized if unicodedata.category(c) != "Mn")
 
-        # Normalize spaces around hyphens
-        text_no_accents = text_no_accents.replace(" - ", " - ").replace("  ", " ")
+        # Normalize multiple spaces to single
+        text_no_accents = re.sub(r"\s+", " ", text_no_accents)
 
         return text_no_accents
 

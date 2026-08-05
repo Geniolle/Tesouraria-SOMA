@@ -75,7 +75,6 @@ class TestOrchestratorArchive:
         orchestrator.gmail_client = mock_gmail_client
 
         message_id = "test_message_456"
-        transfer_result = {"transferred": 5, "already_exists": 0}
 
         # Check that method exists and can be called
         orchestrator._archive_email(message_id)
@@ -104,8 +103,6 @@ class TestOrchestratorArchive:
         orchestrator = Orchestrator.__new__(Orchestrator)
         orchestrator.settings = mock_settings_archive_disabled
         orchestrator.gmail_client = mock_gmail_client
-
-        message_id = "test_message_999"
 
         # When archive_after_process is false, _archive_email should not be called by run()
         # This is tested at the orchestrator.run() level in integration tests

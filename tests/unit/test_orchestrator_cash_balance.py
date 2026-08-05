@@ -38,9 +38,7 @@ class TestOrchestratorCashBalanceIntegration:
         orchestrator.settings = mock_settings
         orchestrator.sheets_client = Mock()
 
-        closing_balance = Decimal("2148.04")
-
-        # Verify method signature accepts closing_balance
+        # Verify method signature exists
         assert hasattr(orchestrator, "_update_cash_balance")
 
     def test_calls_update_before_archive(self):
@@ -130,7 +128,6 @@ class TestOrchestratorReconciliation:
     def test_validates_mt940_reconciliation(self):
         """Test that orchestrator validates MT940 reconciliation."""
         # The orchestrator must validate before writing anywhere
-        from decimal import Decimal
         from unittest.mock import Mock
 
         from src.gmail_to_sheets.orchestrator import Orchestrator
@@ -156,7 +153,6 @@ class TestOrchestratorReconciliation:
 
     def test_reconciliation_failure_raises_error(self):
         """Test that reconciliation failure raises error."""
-        from decimal import Decimal
         from unittest.mock import Mock
 
         from src.gmail_to_sheets.orchestrator import Orchestrator
@@ -180,7 +176,6 @@ class TestOrchestratorReconciliation:
 
     def test_passes_decimal_precision(self):
         """Test that Decimal precision is maintained throughout."""
-        from decimal import Decimal
 
         # Verify Decimal operations maintain precision
         opening = Decimal("2080.52")

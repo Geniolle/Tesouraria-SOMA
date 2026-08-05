@@ -419,7 +419,7 @@ class TestInspectTarget:
             verify_after_write=False,
         )
 
-        result = service.inspect_target()
+        service.inspect_target()
 
         # Verify get_row called once for header
         assert mock_sheets_client.get_row.call_count == 1

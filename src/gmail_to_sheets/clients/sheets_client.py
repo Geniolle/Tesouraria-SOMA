@@ -31,6 +31,22 @@ class SheetsClient:
         self.credentials = self._load_credentials()
         self.service = build("sheets", "v4", credentials=self.credentials)
 
+    @staticmethod
+    def _quote_sheet_name(sheet_name: str) -> str:
+        """
+        Quote and escape sheet name for use in A1 ranges.
+
+        Handles sheet names with spaces and apostrophes.
+
+        Args:
+            sheet_name: Original sheet name
+
+        Returns:
+            Properly escaped sheet name (e.g., 'Sheet Name', 'Caixa d''Água')
+        """
+        escaped = sheet_name.replace("'", "''")
+        return f"'{escaped}'"
+
     def _load_credentials(self) -> Credentials:
         """
         Load service account credentials.
@@ -101,7 +117,8 @@ class SheetsClient:
             HttpError: If API call fails
         """
         try:
-            range_name = f"{sheet_name}!1:1"
+            quoted_sheet = self._quote_sheet_name(sheet_name)
+            range_name = f"{quoted_sheet}!1:1"
             result = self.service.spreadsheets().values().get(
                 spreadsheetId=spreadsheet_id,
                 range=range_name,
@@ -136,7 +153,8 @@ class SheetsClient:
             HttpError: If API call fails
         """
         try:
-            range_name = f"{sheet_name}!{row}:{row}"
+            quoted_sheet = self._quote_sheet_name(sheet_name)
+            range_name = f"{quoted_sheet}!{row}:{row}"
             result = self.service.spreadsheets().values().get(
                 spreadsheetId=spreadsheet_id,
                 range=range_name,
@@ -173,8 +191,9 @@ class SheetsClient:
             HttpError: If API call fails
         """
         try:
+            quoted_sheet = self._quote_sheet_name(sheet_name)
             col_letter = self._number_to_column(column)
-            range_name = f"{sheet_name}!{col_letter}{row}"
+            range_name = f"{quoted_sheet}!{col_letter}{row}"
             result = self.service.spreadsheets().values().get(
                 spreadsheetId=spreadsheet_id,
                 range=range_name,
@@ -283,9 +302,9 @@ class SheetsClient:
             API response
         """
         try:
-            # Convert column number to letter (1=A, 2=B, etc)
+            quoted_sheet = self._quote_sheet_name(sheet_name)
             col_letter = self._number_to_column(column)
-            range_name = f"{sheet_name}!{col_letter}{row}"
+            range_name = f"{quoted_sheet}!{col_letter}{row}"
 
             body = {
                 "values": [[value]]

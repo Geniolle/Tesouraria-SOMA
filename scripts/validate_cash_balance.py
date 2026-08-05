@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 Controlled validation script for cash balance update.
 
@@ -166,7 +166,7 @@ def main():
         print("\n" + "=" * 80)
         print("VALIDATION READY")
         print("=" * 80)
-        print(f"\nREAL_VALIDATION=READY")
+        print("\nREAL_VALIDATION=READY")
         print(f"MODE={mode}")
         print(f"SELECTED_FILE={attachments[0]['filename']}")
         print(f"SELECTED_INTERNAL_DATE={internal_date_ms}")
@@ -200,7 +200,7 @@ def main():
             print("\n[8/8] Writing cash balance...")
             cash_result = cash_service.update_balance(closing)
 
-            print(f"[OK] Write completed")
+            print("[OK] Write completed")
             print(f"  Written value: {cash_result['written_value']}")
             print(f"  Verified value: {cash_result['verified_value']}")
             print(f"  Verification: {cash_result['verified']}")
@@ -210,14 +210,14 @@ def main():
             print(f"VERIFIED_VALUE={cash_result['verified_value']}")
             print(f"BALANCE_UPDATE_VERIFIED={cash_result['verified']}")
         else:
-            print(f"\nWRITTEN_VALUE=N/A (read-only mode)")
-            print(f"VERIFIED_VALUE=N/A (read-only mode)")
-            print(f"BALANCE_UPDATE_VERIFIED=N/A (read-only mode)")
+            print("\nWRITTEN_VALUE=N/A (read-only mode)")
+            print("VERIFIED_VALUE=N/A (read-only mode)")
+            print("BALANCE_UPDATE_VERIFIED=N/A (read-only mode)")
 
         # Confirm no modifications
-        print(f"GMAIL_MODIFIED=false")
-        print(f"T_EXTRATO_MODIFIED=false")
-        print(f"CONTAORDEM_MODIFIED=false")
+        print("GMAIL_MODIFIED=false")
+        print("T_EXTRATO_MODIFIED=false")
+        print("CONTAORDEM_MODIFIED=false")
 
         print("\n[OK] Validation completed successfully")
         return True
