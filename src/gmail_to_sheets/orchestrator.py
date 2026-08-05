@@ -63,7 +63,8 @@ class Orchestrator:
                 logger.warning("No emails found matching criteria")
                 return
 
-            message_id = message_ids[0]
+            # Select the most recent message by internalDate (not by search order)
+            message_id = self._select_latest_message(message_ids)
 
             # Phase 5: Download and parse
             mt940_file = self._download_and_parse(message_id)
@@ -166,6 +167,63 @@ class Orchestrator:
             return message_ids
         except Exception as e:
             logger.error(f"Message search failed: {e}")
+            raise
+
+    def _select_latest_message(self, message_ids: list[str]) -> str:
+        """
+        Select the most recent message by internalDate.
+
+        Does not rely on search result ordering (which is not guaranteed).
+        Fetches metadata for each message and selects the one with the
+        highest internalDate timestamp.
+
+        Args:
+            message_ids: List of Gmail message IDs
+
+        Returns:
+            The message ID with the latest internalDate
+
+        Raises:
+            ValueError: If no valid message found
+        """
+        if not self.gmail_client:
+            raise RuntimeError("Gmail client not initialized")
+
+        if not message_ids:
+            raise ValueError("No messages to select from")
+
+        try:
+            logger.info(f"      Selecting latest from {len(message_ids)} message(s)...")
+
+            # Fetch metadata for all messages
+            messages = []
+            for msg_id in message_ids:
+                try:
+                    msg = self.gmail_client.get_message(msg_id)
+                    internal_date = msg.get("internalDate")
+                    if internal_date:
+                        messages.append((msg_id, int(internal_date)))
+                    else:
+                        logger.warning(f"Message {msg_id} has no internalDate")
+                except Exception as e:
+                    logger.warning(f"Failed to get metadata for {msg_id}: {e}")
+
+            if not messages:
+                raise ValueError(
+                    f"No messages with valid internalDate found (checked {len(message_ids)})"
+                )
+
+            # Select message with highest internalDate
+            selected_id, selected_date = max(messages, key=lambda x: x[1])
+
+            logger.info(f"      Selected message: {selected_id}")
+            logger.info(f"      internalDate: {selected_date}")
+            logger.info(f"      Total messages with valid dates: {len(messages)}")
+
+            return selected_id
+
+        except Exception as e:
+            logger.error(f"Failed to select latest message: {e}")
             raise
 
     def _validate_mt940_reconciliation(self, mt940_file) -> dict:
@@ -325,12 +383,17 @@ class Orchestrator:
             raise
 
     def _archive_email(self, message_id: str) -> None:
-        """Move email to backup folder after successful processing."""
+        """
+        Move email to backup folder after successful processing.
+
+        Errors during archiving must stop the pipeline - if we cannot
+        reliably move the email to backup, we must not continue.
+        """
         if not self.gmail_client:
             raise RuntimeError("Gmail client not initialized")
 
         try:
-            logger.info("[8/8] Moving email to backup folder...")
+            logger.info("[9/9] Moving email to backup folder...")
             self.gmail_client.add_label(
                 message_id=message_id,
                 label_name=self.settings.gmail.backup_label_name,
@@ -342,5 +405,6 @@ class Orchestrator:
 
             logger.info("      Email archived successfully")
         except Exception as e:
-            logger.warning(f"Failed to archive email: {e}")
+            logger.error(f"Failed to archive email: {e}")
+            raise
 

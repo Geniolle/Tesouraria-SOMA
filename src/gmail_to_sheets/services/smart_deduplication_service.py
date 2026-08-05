@@ -118,6 +118,37 @@ class SmartDeduplicationService:
             logger.debug(f"Duplicate found: {data_mov} | {valor_norm} | {descricao_norm}")
         return is_dup
 
+    def register(self, transaction: Any) -> None:
+        """
+        Register a transaction in the deduplication cache.
+
+        Used during batch writes to prevent duplicate detection of
+        transactions written in the same batch, using the same
+        normalization as is_duplicate().
+
+        Args:
+            transaction: Transaction object with data_mov, valor, descricao attributes
+        """
+        # Extract fields using exact same normalization as is_duplicate()
+        data_mov = str(transaction.data_mov).strip()
+        valor = str(transaction.valor).strip()
+        descricao = str(transaction.descricao).strip()
+
+        # Normalize for comparison (match is_duplicate logic exactly)
+        valor_norm = self._normalize_amount(valor)
+        descricao_norm = self._normalize_text(descricao)
+        key = (valor_norm, descricao_norm)
+
+        # Ensure cache for this date exists
+        if data_mov not in self.cache_by_date:
+            self.cache_by_date[data_mov] = {}
+
+        # Add to cache with a virtual row number (future writes won't overwrite)
+        # Use a negative row number to indicate it's from current batch
+        self.cache_by_date[data_mov][key] = -1
+
+        logger.debug(f"Registered in cache: {data_mov} | {valor_norm} | {descricao_norm}")
+
     def _normalize_amount(self, amount_str: str) -> str:
         """Normalize amount for comparison (remove spaces, standardize decimal)."""
         # Remove spaces

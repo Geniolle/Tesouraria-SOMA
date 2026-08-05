@@ -109,8 +109,8 @@ class TestOrchestratorArchive:
         # For unit test, we validate the settings property
         assert orchestrator.settings.archive_after_process is False
 
-    def test_archive_email_exception_handling(self, mock_settings_archive_enabled, mock_gmail_client):
-        """Test that exceptions in archiving are handled gracefully."""
+    def test_archive_email_exception_propagates_add_label_error(self, mock_settings_archive_enabled, mock_gmail_client):
+        """Test that exceptions in add_label are propagated to stop pipeline."""
         orchestrator = Orchestrator.__new__(Orchestrator)
         orchestrator.settings = mock_settings_archive_enabled
         orchestrator.gmail_client = mock_gmail_client
@@ -118,10 +118,11 @@ class TestOrchestratorArchive:
         message_id = "test_message_error"
         mock_gmail_client.add_label.side_effect = Exception("Gmail API error")
 
-        # Should not raise, but log warning
-        orchestrator._archive_email(message_id)
+        # Error must propagate - archiving failure stops the pipeline
+        with pytest.raises(Exception, match="Gmail API error"):
+            orchestrator._archive_email(message_id)
 
-        # Verify add_label was called (where the error occurred)
+        # Verify add_label was called
         assert mock_gmail_client.add_label.called
 
     def test_archive_email_exception_prevents_archive_message(self, mock_settings_archive_enabled, mock_gmail_client):
@@ -134,12 +135,12 @@ class TestOrchestratorArchive:
         mock_gmail_client.add_label.side_effect = Exception("Label operation failed")
         mock_gmail_client.archive_message = Mock()
 
-        orchestrator._archive_email(message_id)
+        # Error must propagate
+        with pytest.raises(Exception, match="Label operation failed"):
+            orchestrator._archive_email(message_id)
 
-        # archive_message should not be called if add_label fails
-        # The exception should be caught and handled
+        # archive_message should NOT be called if add_label fails
         assert mock_gmail_client.add_label.called
-        # archive_message is NOT called because exception occurs in add_label
         assert not mock_gmail_client.archive_message.called
 
     @patch('src.gmail_to_sheets.orchestrator.logger')
