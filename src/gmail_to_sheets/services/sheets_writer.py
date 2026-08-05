@@ -191,6 +191,8 @@ class SheetsWriter:
             Write statistics including written_ids list
         """
         try:
+            from decimal import Decimal
+
             logger.info(f"Writing {len(transactions)} transactions...")
 
             rows_to_write = []
@@ -203,26 +205,31 @@ class SheetsWriter:
             if opening_balance:
                 try:
                     if isinstance(opening_balance, str):
-                        current_balance = float(opening_balance.replace(",", "."))
+                        current_balance = Decimal(opening_balance.replace(",", "."))
                     else:
-                        current_balance = float(opening_balance)
-                except (ValueError, AttributeError):
-                    current_balance = 0.0
+                        current_balance = Decimal(str(opening_balance))
+                except (ValueError, AttributeError, TypeError, Exception):
+                    raise ValueError(f"Invalid opening_balance: {opening_balance}")
             else:
-                current_balance = 0.0
+                raise ValueError("opening_balance is required")
 
+            logger.info(f"Starting balance: {current_balance}")
             logger.info(f"Starting ID sequence from: {next_sequence}")
 
             for txn in transactions:
-                # Check for duplicates
+                # Update balance BEFORE checking duplicates
+                try:
+                    valor_decimal = Decimal(str(txn.valor).replace(",", "."))
+                except (ValueError, TypeError):
+                    raise ValueError(f"Invalid transaction value: {txn.valor}")
+
+                current_balance += valor_decimal
+
+                # Check for duplicates AFTER balance update
                 if dedup_service and dedup_service.is_duplicate(txn):
                     logger.debug(f"Skipping duplicate: {txn.dedup_key()}")
                     skipped += 1
                     continue
-
-                # Calculate progressive balance
-                valor_num = float(txn.valor)
-                current_balance += valor_num
 
                 # Generate sequential ID using last known sequence
                 sequencial = next_sequence
@@ -275,29 +282,42 @@ class SheetsWriter:
             raise
 
     def _transaction_to_row(
-        self, txn: Transaction, saldo_contabilistico: Optional[float] = None, sequencial: int = 0
+        self, txn: Transaction, saldo_contabilistico = None, sequencial: int = 0
     ) -> list:
         """
         Convert transaction to sheet row with formatting.
 
         Args:
             txn: Transaction to convert
-            saldo_contabilistico: Calculated progressive balance
+            saldo_contabilistico: Calculated progressive balance (Decimal or float)
             sequencial: Sequential number for ID_INTERNO generation
 
         Returns:
             List of values in column order
         """
+        from decimal import Decimal
+
         # Create row with empty values for all columns
         row = [""] * len(self.headers)
 
         # Format IMPORTÂNCIA with 0,00 format
-        valor_formatado = f"{float(txn.valor):.2f}".replace(".", ",")
+        try:
+            valor_decimal = Decimal(str(txn.valor).replace(",", "."))
+            valor_formatado = format(valor_decimal, ".2f").replace(".", ",")
+        except (ValueError, TypeError):
+            valor_formatado = "0,00"
 
         # Format SALDO CONTABILÍSTICO if provided
         saldo_formatado = ""
         if saldo_contabilistico is not None:
-            saldo_formatado = f"{saldo_contabilistico:.2f}".replace(".", ",")
+            try:
+                if isinstance(saldo_contabilistico, Decimal):
+                    saldo_formatado = format(saldo_contabilistico, ".2f").replace(".", ",")
+                else:
+                    saldo_decimal = Decimal(str(saldo_contabilistico))
+                    saldo_formatado = format(saldo_decimal, ".2f").replace(".", ",")
+            except (ValueError, TypeError):
+                saldo_formatado = "0,00"
 
         # Generate ID_INTERNO if not set
         # Format: EXT0000NNNNN (e.g., EXT0000003366)

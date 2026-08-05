@@ -173,6 +173,15 @@ class TestTransferServiceSourceIsolation:
     @patch('src.gmail_to_sheets.services.transfer_service.BatchWriter')
     def test_transfer_only_selected_ids(self, mock_batch_writer, mock_sheets_client):
         """Test that transfer_pending processes only selected IDs."""
+        # Configure mock batch writer to return proper dict
+        mock_instance = Mock()
+        mock_instance.batch_write_with_updates.return_value = {
+            "target_rows_written": 1,
+            "status_updates_applied": 1,
+            "errors": []
+        }
+        mock_batch_writer.return_value = mock_instance
+
         transfer = TransferService(
             sheets_client=mock_sheets_client,
             spreadsheet_id="test_sheet_id",
@@ -248,6 +257,15 @@ class TestTransferMatchingServiceSourceIsolation:
     @patch('src.gmail_to_sheets.services.transfer_matching_service.BatchWriter')
     def test_matching_only_selected_ids(self, mock_batch_writer, mock_sheets_client):
         """Test that process_with_matching processes only selected IDs."""
+        # Configure mock batch writer to return proper dict
+        mock_instance = Mock()
+        mock_instance.batch_write_with_updates.return_value = {
+            "target_rows_written": 1,
+            "status_updates_applied": 1,
+            "errors": []
+        }
+        mock_batch_writer.return_value = mock_instance
+
         service = TransferMatchingService(
             sheets_client=mock_sheets_client,
             spreadsheet_id="test_sheet_id",

@@ -264,18 +264,24 @@ class TransferMatchingService:
                 logger.info("Phase 2: Batch writing all data...")
                 batch_writer = BatchWriter(self.sheets_client, self.spreadsheet_id)
 
-                try:
-                    batch_result = batch_writer.batch_write_with_updates(
-                        source_sheet=self.source_sheet,
-                        source_data=[],
-                        target_sheet=self.target_sheet,
-                        target_data=target_rows,
-                        status_updates=status_updates
+                batch_result = batch_writer.batch_write_with_updates(
+                    source_sheet=self.source_sheet,
+                    source_data=[],
+                    target_sheet=self.target_sheet,
+                    target_data=target_rows,
+                    status_updates=status_updates
+                )
+                logger.info(f"Batch result: {batch_result}")
+
+                # Validate batch write succeeded
+                if batch_result["target_rows_written"] != len(target_rows):
+                    raise RuntimeError(
+                        f"Incomplete write: expected {len(target_rows)} rows, got {batch_result['target_rows_written']}"
                     )
-                    logger.info(f"Batch result: {batch_result}")
-                except Exception as e:
-                    logger.error(f"Batch write failed: {e}")
-                    stats["write_errors"] = str(e)
+                if batch_result["status_updates_applied"] != len(status_updates or {}):
+                    raise RuntimeError(
+                        f"Incomplete status updates: expected {len(status_updates or {})}, got {batch_result['status_updates_applied']}"
+                    )
 
             # Phase 3: Update existing rows with matching data
             if update_rows:

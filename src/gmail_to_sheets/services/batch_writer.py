@@ -99,6 +99,11 @@ class BatchWriter:
                     logger.error(f"Failed to update status: {e}")
                     stats["errors"].append(f"Status update failed: {e}")
 
+            # Validate all operations completed successfully
+            if stats["errors"]:
+                error_msg = "; ".join(stats["errors"])
+                raise RuntimeError(f"Batch write failed with {len(stats['errors'])} error(s): {error_msg}")
+
             return stats
 
         except Exception as e:

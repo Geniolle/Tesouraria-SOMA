@@ -100,4 +100,11 @@ class BatchUpdater:
                 stats["errors"] += 1
 
         logger.info(f"Batch update complete: {stats['updated']} cells updated, {stats['errors']} errors")
+
+        # Fail if any errors occurred
+        if stats["errors"] > 0:
+            raise RuntimeError(
+                f"Batch update failed: {stats['errors']} error(s) out of {stats['total']} rows"
+            )
+
         return stats
