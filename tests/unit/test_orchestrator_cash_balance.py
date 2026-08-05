@@ -9,9 +9,10 @@ Tests validate:
 - Service is not called when disabled
 """
 
-import pytest
-from unittest.mock import Mock, MagicMock, patch
 from decimal import Decimal
+from unittest.mock import Mock
+
+import pytest
 
 from src.gmail_to_sheets.orchestrator import Orchestrator
 
@@ -129,9 +130,10 @@ class TestOrchestratorReconciliation:
     def test_validates_mt940_reconciliation(self):
         """Test that orchestrator validates MT940 reconciliation."""
         # The orchestrator must validate before writing anywhere
-        from src.gmail_to_sheets.orchestrator import Orchestrator
         from decimal import Decimal
         from unittest.mock import Mock
+
+        from src.gmail_to_sheets.orchestrator import Orchestrator
 
         orchestrator = Orchestrator.__new__(Orchestrator)
 
@@ -154,9 +156,10 @@ class TestOrchestratorReconciliation:
 
     def test_reconciliation_failure_raises_error(self):
         """Test that reconciliation failure raises error."""
-        from src.gmail_to_sheets.orchestrator import Orchestrator
         from decimal import Decimal
         from unittest.mock import Mock
+
+        from src.gmail_to_sheets.orchestrator import Orchestrator
 
         orchestrator = Orchestrator.__new__(Orchestrator)
 

@@ -67,9 +67,10 @@ class CashBalanceService:
         try:
             logger.info(f"Updating cash balance in {self.sheet_name}...")
 
-            # Load the sheet data dynamically using entire sheet
-            # Use !A:ZZ to ensure we search the entire used area
-            range_name = f"'{self.sheet_name}'!A:ZZ"
+            # Get actual sheet dimensions
+            range_name = self._get_dynamic_range()
+            logger.debug(f"Using dynamic range: {range_name}")
+
             result = self.sheets_client.service.spreadsheets().values().get(
                 spreadsheetId=self.spreadsheet_id,
                 range=range_name,
@@ -105,6 +106,9 @@ class CashBalanceService:
             # Format for display (two decimal places, comma separator)
             balance_formatted = str(quantized_balance).replace(".", ",")
 
+            # Convert Decimal to float only at API boundary (JSON serialization)
+            api_numeric_value = float(quantized_balance)
+
             # Write the balance as numeric value (RAW, not USER_ENTERED)
             logger.info(f"Writing balance {balance_formatted} ({quantized_balance}) to {target_cell}")
             self.sheets_client.update_cell(
@@ -112,7 +116,7 @@ class CashBalanceService:
                 self.sheet_name,
                 target_row + 1,  # Convert to 1-indexed
                 target_col + 1,  # Convert to 1-indexed
-                quantized_balance,  # Send as Decimal/number, not string
+                value=api_numeric_value,  # float for JSON serialization
                 value_input_option="RAW",  # RAW: value is stored as-is
             )
 
@@ -133,7 +137,7 @@ class CashBalanceService:
                         f"Verification failed: wrote {balance_formatted} but read different value"
                     )
 
-            logger.info(f"Cash balance update completed successfully")
+            logger.info("Cash balance update completed successfully")
 
             return {
                 "sheet_name": self.sheet_name,
@@ -185,6 +189,49 @@ class CashBalanceService:
 
         return found_cells[0]
 
+    def _get_dynamic_range(self) -> str:
+        """
+        Get dynamic range based on actual sheet dimensions.
+
+        Returns:
+            Range string (e.g., "'GERENCIAR CAIXAS'!A1:Z1000")
+        """
+        try:
+            # Get spreadsheet metadata to find actual dimensions
+            spreadsheet = self.sheets_client.service.spreadsheets().get(
+                spreadsheetId=self.spreadsheet_id,
+            ).execute()
+
+            sheets = spreadsheet.get("sheets", [])
+            target_sheet = None
+
+            for sheet in sheets:
+                if sheet["properties"]["title"] == self.sheet_name:
+                    target_sheet = sheet
+                    break
+
+            if not target_sheet:
+                raise CashBalanceError(f"Sheet '{self.sheet_name}' not found in spreadsheet")
+
+            # Get actual grid dimensions
+            row_count = target_sheet["properties"]["gridProperties"]["rowCount"]
+            col_count = target_sheet["properties"]["gridProperties"]["columnCount"]
+
+            # Convert column count to letter (1=A, 26=Z, 27=AA, etc.)
+            col_letter = self._number_to_column(col_count)
+
+            # Escape sheet name with single quotes if it contains special chars
+            escaped_sheet = f"'{self.sheet_name}'"
+
+            range_name = f"{escaped_sheet}!A1:{col_letter}{row_count}"
+            logger.debug(f"Dynamic range: {range_name} (rows: {row_count}, cols: {col_count})")
+
+            return range_name
+
+        except Exception as e:
+            logger.warning(f"Failed to get dynamic range: {e}, falling back to A:ZZ")
+            return f"'{self.sheet_name}'!A:ZZ"
+
     def _verify_write(self, row_idx: int, col_idx: int, expected: Decimal) -> Optional[Decimal]:
         """
         Verify the written value by reading it back.
@@ -199,7 +246,7 @@ class CashBalanceService:
         """
         try:
             # Re-read the sheet using dynamic range
-            range_name = f"'{self.sheet_name}'!A:ZZ"
+            range_name = self._get_dynamic_range()
             result = self.sheets_client.service.spreadsheets().values().get(
                 spreadsheetId=self.spreadsheet_id,
                 range=range_name,
@@ -285,6 +332,24 @@ class CashBalanceService:
         return text_no_accents
 
     @staticmethod
+    def _number_to_column(col_num: int) -> str:
+        """
+        Convert column number to letter (1=A, 26=Z, 27=AA, etc.).
+
+        Args:
+            col_num: Column number (1-based)
+
+        Returns:
+            Column letter(s) (e.g., "A", "Z", "AA", "ZZ")
+        """
+        col_letter = ""
+        while col_num > 0:
+            col_num -= 1
+            col_letter = chr(ord("A") + (col_num % 26)) + col_letter
+            col_num //= 26
+        return col_letter
+
+    @staticmethod
     def _row_col_to_a1(row_idx: int, col_idx: int) -> str:
         """
         Convert row/col indices to A1 notation.
@@ -296,15 +361,6 @@ class CashBalanceService:
         Returns:
             Cell reference (e.g., "A1", "D5")
         """
-        # Column number to letters
-        col_letter = ""
-        col_num = col_idx + 1
-        while col_num > 0:
-            col_num -= 1
-            col_letter = chr(ord("A") + (col_num % 26)) + col_letter
-            col_num //= 26
-
-        # Row number
+        col_letter = CashBalanceService._number_to_column(col_idx + 1)
         row_num = row_idx + 1
-
         return f"{col_letter}{row_num}"

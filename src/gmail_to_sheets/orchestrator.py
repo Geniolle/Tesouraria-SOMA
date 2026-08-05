@@ -337,9 +337,9 @@ class Orchestrator:
             logger.info(f"      Added backup label '{self.settings.gmail.backup_label_name}'")
 
             self.gmail_client.archive_message(message_id)
-            logger.info(f"      Email removed from INBOX")
+            logger.info("      Email removed from INBOX")
 
-            logger.info(f"      Email archived successfully")
+            logger.info("      Email archived successfully")
         except Exception as e:
             logger.warning(f"Failed to archive email: {e}")
 

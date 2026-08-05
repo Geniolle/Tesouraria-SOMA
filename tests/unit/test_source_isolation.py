@@ -9,14 +9,15 @@ Validates that:
 - Historical rows remain untouched during execution
 """
 
-import pytest
-from unittest.mock import Mock, MagicMock, patch
 from decimal import Decimal
+from unittest.mock import Mock, patch
 
-from src.gmail_to_sheets.services.sheets_writer import SheetsWriter
-from src.gmail_to_sheets.services.transfer_service import TransferService
-from src.gmail_to_sheets.services.transfer_matching_service import TransferMatchingService
+import pytest
+
 from src.gmail_to_sheets.models.transaction import Transaction
+from src.gmail_to_sheets.services.sheets_writer import SheetsWriter
+from src.gmail_to_sheets.services.transfer_matching_service import TransferMatchingService
+from src.gmail_to_sheets.services.transfer_service import TransferService
 
 
 class TestSheetsWriterWrittenIds:

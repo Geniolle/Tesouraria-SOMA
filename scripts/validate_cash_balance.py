@@ -66,19 +66,31 @@ def main():
         gmail_client = GmailClient(credentials)
         print("✓ Gmail authenticated")
 
-        # Phase 3: Search for latest MT940 email
+        # Phase 3: Search for latest MT940 email (by internalDate)
         print("\n[3/8] Searching for latest MT940 email...")
         message_ids = gmail_client.search_messages(
             query=settings.gmail.search_query,
-            max_results=1,
+            max_results=settings.batch_size,
         )
 
         if not message_ids:
             print("✗ No emails found matching criteria")
             return False
 
-        message_id = message_ids[0]
-        print(f"✓ Found email: {message_id}")
+        print(f"✓ Found {len(message_ids)} email(s) matching criteria")
+
+        # Select the most recent by internalDate
+        messages = [gmail_client.get_message(mid) for mid in message_ids]
+        latest_message = max(
+            messages,
+            key=lambda msg: int(msg.get("internalDate", 0)),
+        )
+        message_id = latest_message["id"]
+        internal_date_ms = int(latest_message.get("internalDate", 0))
+
+        print(f"✓ Selected latest email: {message_id}")
+        print(f"  - internalDate: {internal_date_ms}")
+        print(f"  - Total emails in inbox: {len(message_ids)}")
 
         # Phase 4: Download and parse attachment
         print("\n[4/8] Downloading and parsing MT940...")
@@ -138,8 +150,10 @@ def main():
             verify_after_write=True,
         )
 
-        # Read to find label
-        range_name = f"'{settings.cash_balance.sheet_name}'!A:ZZ"
+        # Get dynamic range based on actual sheet dimensions
+        range_name = cash_service._get_dynamic_range()
+        print(f"  Using dynamic range: {range_name}")
+
         result = sheets_client.service.spreadsheets().values().get(
             spreadsheetId=settings.sheets.spreadsheet_id,
             range=range_name,
@@ -166,11 +180,14 @@ def main():
         print(f"\nREAL_VALIDATION=READY")
         print(f"MODE={mode}")
         print(f"SELECTED_FILE={attachments[0]['filename']}")
+        print(f"SELECTED_INTERNAL_DATE={internal_date_ms}")
+        print(f"INBOX_MATCHES={len(message_ids)}")
         print(f"OPENING_BALANCE={opening}")
         print(f"TRANSACTION_TOTAL={transaction_sum}")
         print(f"CALCULATED_BALANCE={calculated}")
         print(f"CLOSING_BALANCE={closing}")
         print(f"DIFFERENCE={difference}")
+        print(f"SHEET_RANGE={range_name}")
         print(f"LABEL_CELL={label_cell}")
         print(f"TARGET_CELL={target_cell}")
         print(f"PREVIOUS_VALUE={previous_value or '(empty)'}")

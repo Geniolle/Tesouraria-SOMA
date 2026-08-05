@@ -8,8 +8,9 @@ Tests cover:
 - Empty/malformed files
 """
 
-import pytest
 from decimal import Decimal
+
+import pytest
 
 from src.gmail_to_sheets.parsers.exceptions import MT940ParseError
 from src.gmail_to_sheets.parsers.mt940 import MT940Parser

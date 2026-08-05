@@ -9,13 +9,14 @@ Tests validate:
 - Text normalization
 """
 
-import pytest
-from unittest.mock import Mock, MagicMock, patch
 from decimal import Decimal
+from unittest.mock import Mock
+
+import pytest
 
 from src.gmail_to_sheets.services.cash_balance_service import (
-    CashBalanceService,
     CashBalanceError,
+    CashBalanceService,
 )
 
 
@@ -417,10 +418,10 @@ class TestCashBalanceServiceNumericValue:
         # Check that value_input_option is RAW
         assert call_args.kwargs.get("value_input_option") == "RAW"
 
-        # Check that the value is a Decimal, not a string
+        # Check that the value is float (for JSON serialization), not Decimal or string
         value_arg = call_args.args[4] if len(call_args.args) > 4 else call_args.kwargs.get("value")
-        assert isinstance(value_arg, Decimal)
-        assert value_arg == Decimal("2148.04")
+        assert isinstance(value_arg, float)
+        assert value_arg == 2148.04
 
     def test_quantizes_to_two_decimals(self, mock_sheets_client):
         """Test that balance is quantized to 0.01."""
@@ -440,5 +441,6 @@ class TestCashBalanceServiceNumericValue:
         call_args = mock_sheets_client.update_cell.call_args
         value_arg = call_args.args[4] if len(call_args.args) > 4 else call_args.kwargs.get("value")
 
-        # Should be rounded to 0.01
-        assert value_arg == Decimal("2148.05")
+        # Should be rounded to 0.01 and converted to float for API
+        assert value_arg == 2148.05
+        assert isinstance(value_arg, float)

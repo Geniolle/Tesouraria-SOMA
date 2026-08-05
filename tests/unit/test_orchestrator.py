@@ -8,8 +8,9 @@ Tests validate:
 - Exceptions during processing prevent archiving
 """
 
+from unittest.mock import Mock, call, patch
+
 import pytest
-from unittest.mock import Mock, MagicMock, patch, call
 
 from src.gmail_to_sheets.orchestrator import Orchestrator
 
