@@ -12,7 +12,6 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-
 logger = logging.getLogger(__name__)
 
 

@@ -8,12 +8,11 @@ Prepares complete CONTAORDEM rows with CONSTANTES data in one batch operation.
 import logging
 import unicodedata
 from datetime import datetime
-from typing import Optional, Dict, List, Tuple
+from typing import Any, Optional
 
 from src.gmail_to_sheets.clients.sheets_client import SheetsClient
-from src.gmail_to_sheets.services.batch_writer import BatchWriter
 from src.gmail_to_sheets.services.batch_updater import BatchUpdater
-
+from src.gmail_to_sheets.services.batch_writer import BatchWriter
 
 logger = logging.getLogger(__name__)
 
@@ -62,10 +61,10 @@ class TransferMatchingService:
         self.existing_ids = self._load_existing_ids()
 
         # Cache sheet IDs to avoid extra API calls
-        self._sheet_ids_cache = {}
+        self._sheet_ids_cache: dict[str, int] = {}
 
         # Sequential state for DESCRIÇÃO SOMA (by date + base description)
-        self._seq_state = {}
+        self._seq_state: dict[str, dict[str, Any]] = {}
         self._init_sequential_state()
 
     def _load_headers(self, sheet_name: str) -> list[str]:
@@ -470,7 +469,7 @@ class TransferMatchingService:
 
         return f"{desc_soma_base} N{next_num:03d}"
 
-    def _enrich_with_match(self, target_row: list, match: dict, source_row: list = None) -> list:
+    def _enrich_with_match(self, target_row: list[Any], match: dict[str, Any], source_row: list[Any] | None = None) -> list[Any]:
         """Add matching data to target row."""
         # Mandatory fields (always copy)
         if match.get("plano_conta"):
@@ -557,7 +556,7 @@ class TransferMatchingService:
 
             if requests:
                 body = {"requests": requests}
-                response = self.sheets_client.service.spreadsheets().batchUpdate(
+                self.sheets_client.service.spreadsheets().batchUpdate(
                     spreadsheetId=self.spreadsheet_id,
                     body=body
                 ).execute()

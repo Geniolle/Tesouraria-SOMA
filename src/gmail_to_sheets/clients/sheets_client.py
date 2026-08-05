@@ -5,15 +5,12 @@ Handles authentication and operations with Google Sheets.
 """
 
 import logging
-import json
 from pathlib import Path
 from typing import Any, Optional
 
-from google.auth.transport.requests import Request
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-
 
 logger = logging.getLogger(__name__)
 

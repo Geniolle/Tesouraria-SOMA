@@ -10,7 +10,6 @@ from typing import Set
 from src.gmail_to_sheets.models.transaction import Transaction
 from src.gmail_to_sheets.parsers.exceptions import DeduplicationError
 
-
 logger = logging.getLogger(__name__)
 
 

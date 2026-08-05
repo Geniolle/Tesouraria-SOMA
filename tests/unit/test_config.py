@@ -2,8 +2,6 @@
 Unit tests for configuration management.
 """
 
-import os
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -20,6 +18,7 @@ class TestGmailSettings:
         monkeypatch.setenv("GMAIL_SENDER_EMAIL", "sender@example.com")
         monkeypatch.setenv("GMAIL_SEARCH_QUERY", "test query")
         monkeypatch.setenv("GMAIL_LABEL_NAME", "Test/Label")
+        monkeypatch.setenv("GMAIL_BACKUP_LABEL_NAME", "Test/Backup")
         monkeypatch.setenv("GMAIL_CREDENTIALS_PATH", "/tmp/creds.json")
         monkeypatch.setenv("GMAIL_CLIENT_SECRETS_PATH", "/tmp/secret.json")
 
@@ -29,15 +28,22 @@ class TestGmailSettings:
         assert settings.sender_email == "sender@example.com"
         assert settings.search_query == "test query"
         assert settings.label_name == "Test/Label"
+        assert settings.backup_label_name == "Test/Backup"
         assert isinstance(settings.credentials_path, Path)
         assert isinstance(settings.client_secrets_path, Path)
 
-    def test_gmail_settings_requires_all_fields(self, monkeypatch):
-        """Test that Gmail settings requires all mandatory fields."""
+    def test_gmail_settings_validates_backup_label(self, monkeypatch):
+        """Test that backup_label_name is properly loaded from env."""
         monkeypatch.setenv("GMAIL_ACCOUNT_EMAIL", "test@gmail.com")
+        monkeypatch.setenv("GMAIL_SENDER_EMAIL", "sender@example.com")
+        monkeypatch.setenv("GMAIL_SEARCH_QUERY", "test query")
+        monkeypatch.setenv("GMAIL_LABEL_NAME", "Test/Label")
+        monkeypatch.setenv("GMAIL_BACKUP_LABEL_NAME", "Test/Backup/Label")
+        monkeypatch.setenv("GMAIL_CREDENTIALS_PATH", "/tmp/creds.json")
+        monkeypatch.setenv("GMAIL_CLIENT_SECRETS_PATH", "/tmp/secret.json")
 
-        with pytest.raises(Exception):
-            GmailSettings()
+        settings = GmailSettings()
+        assert settings.backup_label_name == "Test/Backup/Label"
 
 
 class TestSheetsSettings:

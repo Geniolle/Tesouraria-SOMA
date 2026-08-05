@@ -4,7 +4,6 @@ Gmail OAuth 2.0 authentication and service initialization.
 Handles the OAuth flow, token storage, and Gmail service creation.
 """
 
-import json
 import logging
 from pathlib import Path
 from typing import Optional
@@ -12,7 +11,6 @@ from typing import Optional
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
-
 
 logger = logging.getLogger(__name__)
 

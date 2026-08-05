@@ -6,10 +6,9 @@ Prepares data in memory before writing in a single batch request.
 """
 
 import logging
-from typing import Optional, List, Dict, Any
+from typing import Any
 
 from src.gmail_to_sheets.clients.sheets_client import SheetsClient
-
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +33,8 @@ class BatchWriter:
         source_data: list[list],
         target_sheet: str,
         target_data: list[list],
-        status_updates: Dict[int, str] = None,
-    ) -> dict:
+        status_updates: dict[int, str] | None = None,
+    ) -> dict[str, Any]:
         """
         Write data to both source and target sheets in optimized batches.
 
@@ -106,7 +105,7 @@ class BatchWriter:
             logger.error(f"Batch write failed: {e}")
             raise
 
-    def _batch_update_status(self, sheet_name: str, status_updates: Dict[int, str]) -> None:
+    def _batch_update_status(self, sheet_name: str, status_updates: dict[int, str]) -> None:
         """
         Batch update STATUS column.
 

@@ -4,15 +4,14 @@ Attachment Processor
 Handles downloading and processing MT940 attachments from Gmail.
 """
 
-import logging
 import base64
+import logging
 from typing import Optional
 
 from src.gmail_to_sheets.clients.gmail_client import GmailClient
-from src.gmail_to_sheets.parsers.mt940 import MT940Parser
 from src.gmail_to_sheets.models.transaction import MT940File
 from src.gmail_to_sheets.parsers.exceptions import MT940ParseError
-
+from src.gmail_to_sheets.parsers.mt940 import MT940Parser
 
 logger = logging.getLogger(__name__)
 

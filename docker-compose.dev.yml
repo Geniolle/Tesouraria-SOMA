@@ -1,0 +1,73 @@
+# Development Docker Compose - Extends production setup with dev tools
+
+version: '3.8'
+
+services:
+  gmail-to-sheets-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        INSTALL_DEV: "true"
+
+    container_name: gmail-to-sheets-dev
+
+    # Override entrypoint for development
+    entrypoint: /bin/bash
+    stdin_open: true
+    tty: true
+
+    # Extended environment for development
+    environment:
+      - LOG_LEVEL=DEBUG
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+      - TIMEZONE=Europe/Lisbon
+      - GMAIL_ACCOUNT_EMAIL=${GMAIL_ACCOUNT_EMAIL}
+      - GMAIL_SENDER_EMAIL=${GMAIL_SENDER_EMAIL}
+      - GMAIL_SEARCH_QUERY=${GMAIL_SEARCH_QUERY}
+      - GMAIL_LABEL_NAME=${GMAIL_LABEL_NAME}
+      - GMAIL_BACKUP_LABEL_NAME=${GMAIL_BACKUP_LABEL_NAME}
+      - SHEETS_SPREADSHEET_ID=${SHEETS_SPREADSHEET_ID}
+      - SHEETS_SHEET_NAME=${SHEETS_SHEET_NAME}
+
+    # Additional volumes for development
+    volumes:
+      - .:/app
+      - /app/__pycache__
+      - /app/.pytest_cache
+      - /app/.mypy_cache
+      - /app/.ruff_cache
+
+    # Restart policy (no restart in dev)
+    restart: no
+
+    # Remove resource limits in dev
+    deploy:
+      resources: {}
+
+    # Extended logging for debugging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "10"
+
+    # Commands for development
+    command: |
+      bash -c "
+        echo 'Gmail-to-Sheets Development Environment'
+        echo 'Available commands:'
+        echo '  python -m src.gmail_to_sheets       # Run application'
+        echo '  pytest                              # Run tests'
+        echo '  pytest --cov=src                    # Run with coverage'
+        echo '  ruff check src/ --fix               # Fix linting'
+        echo '  mypy src/                           # Type checking'
+        echo '  bash                                # Interactive shell'
+        /bin/bash
+      "
+
+networks:
+  default:
+    name: gmail-to-sheets-dev-network
+    driver: bridge

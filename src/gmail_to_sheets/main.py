@@ -2,12 +2,11 @@
 Entry point for the gmail-to-sheets application.
 """
 
-import sys
 import logging
+import sys
 
-from src.gmail_to_sheets.orchestrator import Orchestrator
 from src.gmail_to_sheets.exceptions.application import GmailToSheetsException
-
+from src.gmail_to_sheets.orchestrator import Orchestrator
 
 logger = logging.getLogger(__name__)
 

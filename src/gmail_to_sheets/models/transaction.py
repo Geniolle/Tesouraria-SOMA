@@ -4,7 +4,6 @@ Transaction data model for MT940 processing.
 Represents a single bank transaction extracted from MT940 format.
 """
 
-from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 

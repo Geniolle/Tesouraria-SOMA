@@ -8,10 +8,9 @@ Implements "de-para" logic: fills DOC.SOMA, DESCRIÇÃO SOMA, and additional fie
 import logging
 import unicodedata
 from datetime import datetime
-from typing import Optional, Dict, List, Tuple
+from typing import Any, Optional
 
 from src.gmail_to_sheets.clients.sheets_client import SheetsClient
-
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +120,7 @@ class MatchingService:
             }
 
             # Build sequential state for daily numbering
-            seq_state = {}
+            seq_state: dict[str, dict[str, Any]] = {}
 
             # First pass: load existing sequences
             self._build_sequential_state(source_data, seq_state)
@@ -205,7 +204,6 @@ class MatchingService:
                 return
 
             num_rows = len(data)
-            num_cols = max((len(row) for row in data), default=0)
 
             range_name = f"{sheet_name}!A2:Z99999"
             self.sheets_client.service.spreadsheets().values().update(
@@ -400,7 +398,6 @@ class MatchingService:
         timestamp_idx = self._get_index("TIMESTAMP", self.ref_indices)
 
         for update in updates:
-            row_number = update["row_number"]
             source_row = update["source_data"]
             match = update["match"]
             ref_row_idx = update["ref_row_idx"]
@@ -560,7 +557,6 @@ class MatchingService:
     @staticmethod
     def _get_timestamp() -> str:
         """Get current timestamp."""
-        from datetime import datetime
         return datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 
     @staticmethod

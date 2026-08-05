@@ -10,19 +10,18 @@ from decimal import Decimal
 from typing import Optional
 
 from src.gmail_to_sheets.models.transaction import (
-    Transaction,
-    MT940Header,
-    MT940Footer,
     MT940File,
+    MT940Footer,
+    MT940Header,
+    Transaction,
 )
 from src.gmail_to_sheets.parsers.exceptions import (
-    MT940ParseError,
+    MT940InvalidAmount,
+    MT940InvalidDate,
     MT940InvalidFormat,
     MT940MissingSection,
-    MT940InvalidDate,
-    MT940InvalidAmount,
+    MT940ParseError,
 )
-
 
 logger = logging.getLogger(__name__)
 

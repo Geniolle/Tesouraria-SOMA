@@ -13,19 +13,18 @@ Complete end-to-end flow:
 
 import logging
 
-from src.gmail_to_sheets.config.settings import load_settings
 from src.gmail_to_sheets.clients.gmail_auth import GmailAuthenticator
 from src.gmail_to_sheets.clients.gmail_client import GmailClient
 from src.gmail_to_sheets.clients.sheets_client import SheetsClient
+from src.gmail_to_sheets.config.settings import load_settings
+from src.gmail_to_sheets.exceptions.application import AuthenticationError
+from src.gmail_to_sheets.logging_config import setup_logging
 from src.gmail_to_sheets.services.attachment_processor import AttachmentProcessor
 from src.gmail_to_sheets.services.sheets_writer import SheetsWriter
-from src.gmail_to_sheets.services.transfer_service import TransferService
-from src.gmail_to_sheets.services.transfer_matching_service import TransferMatchingService
 from src.gmail_to_sheets.services.smart_deduplication_service import SmartDeduplicationService
+from src.gmail_to_sheets.services.transfer_matching_service import TransferMatchingService
+from src.gmail_to_sheets.services.transfer_service import TransferService
 from src.gmail_to_sheets.validators.deduplication import DeduplicationService
-from src.gmail_to_sheets.logging_config import setup_logging
-from src.gmail_to_sheets.exceptions.application import AuthenticationError
-
 
 logger = logging.getLogger(__name__)
 

@@ -6,8 +6,7 @@ Much more efficient than checking against all 3869 existing IDs.
 """
 
 import logging
-from typing import set as SetType
-from datetime import datetime
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -15,14 +14,14 @@ logger = logging.getLogger(__name__)
 class SmartDeduplicationService:
     """Deduplication using date-based filtering and value validation."""
 
-    def __init__(self, sheets_client, spreadsheet_id: str, target_sheet: str = "CONTAORDEM"):
+    def __init__(self, sheets_client: Any, spreadsheet_id: str, target_sheet: str = "CONTAORDEM"):
         """Initialize with Sheets client."""
         self.sheets_client = sheets_client
         self.spreadsheet_id = spreadsheet_id
         self.target_sheet = target_sheet
-        self.cache_by_date = {}  # {date: {(valor, descricao): row_number}}
+        self.cache_by_date: dict[str, dict[tuple[str, str], int]] = {}
 
-    def load_existing_by_date(self, date_str: str) -> dict:
+    def load_existing_by_date(self, date_str: str) -> dict[tuple[str, str], int]:
         """
         Load existing records from target sheet for a specific date only.
 
@@ -89,7 +88,7 @@ class SmartDeduplicationService:
             self.cache_by_date[date_str] = {}
             return {}
 
-    def is_duplicate(self, transaction) -> bool:
+    def is_duplicate(self, transaction: Any) -> bool:
         """
         Check if record is duplicate using date-based filtering.
 
@@ -128,7 +127,7 @@ class SmartDeduplicationService:
         try:
             # Parse as float and format to 2 decimals
             return f"{float(amount_str):.2f}"
-        except:
+        except ValueError:
             return amount_str
 
     def _normalize_text(self, text: str) -> str:

@@ -81,7 +81,7 @@ class MatchingUpdater:
             logger.info(f"Processing {len(rows)} target rows...")
 
             # Collect updates
-            updates = {}  # row_number -> {column_letter: value}
+            updates: dict[int, dict[str, str]] = {}
 
             for row_idx, row in enumerate(rows):
                 row_number = row_idx + 2  # Account for header and 1-based indexing
@@ -171,8 +171,6 @@ class MatchingUpdater:
             requests = []
 
             for row_num, cols in updates.items():
-                row_idx = row_num - 1
-
                 for col_name, value in cols.items():
                     col_idx = self.target_indices.get(col_name)
                     if col_idx is None:
@@ -192,7 +190,7 @@ class MatchingUpdater:
 
             if requests:
                 body = {"requests": requests}
-                response = self.sheets_client.service.spreadsheets().batchUpdate(
+                self.sheets_client.service.spreadsheets().batchUpdate(
                     spreadsheetId=self.spreadsheet_id,
                     body=body
                 ).execute()

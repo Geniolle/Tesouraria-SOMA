@@ -1,0 +1,89 @@
+version: '3.8'
+
+services:
+  gmail-to-sheets:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gmail-to-sheets
+
+    # Environment configuration
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - TIMEZONE=${TIMEZONE:-Europe/Lisbon}
+      - GMAIL_ACCOUNT_EMAIL=${GMAIL_ACCOUNT_EMAIL}
+      - GMAIL_SENDER_EMAIL=${GMAIL_SENDER_EMAIL}
+      - GMAIL_SEARCH_QUERY=${GMAIL_SEARCH_QUERY}
+      - GMAIL_LABEL_NAME=${GMAIL_LABEL_NAME}
+      - GMAIL_BACKUP_LABEL_NAME=${GMAIL_BACKUP_LABEL_NAME}
+      - SHEETS_SPREADSHEET_ID=${SHEETS_SPREADSHEET_ID}
+      - SHEETS_SHEET_NAME=${SHEETS_SHEET_NAME}
+      - ATTACHMENT_EXTENSION=${ATTACHMENT_EXTENSION:-.txt}
+      - BATCH_SIZE=${BATCH_SIZE:-100}
+      - SKIP_IF_DUPLICATE=${SKIP_IF_DUPLICATE:-true}
+      - ARCHIVE_AFTER_PROCESS=${ARCHIVE_AFTER_PROCESS:-true}
+      - ENABLE_MATCHING=${ENABLE_MATCHING:-false}
+      - ENABLE_TRANSFER=${ENABLE_TRANSFER:-true}
+
+    # Volume mounts
+    volumes:
+      # Credentials (mount as read-only)
+      - ./credentials/gmail-client-secret.json:/app/credentials/gmail-client-secret.json:ro
+      - ./credentials/sheets-service-account.json:/app/credentials/sheets-service-account.json:ro
+      - ./credentials/gmail-oauth-token.json:/app/credentials/gmail-oauth-token.json
+
+      # Data and logs
+      - ./data:/app/data
+      - ./logs:/app/logs
+
+      # Optional: .env file
+      - ./.env:/app/.env:ro
+
+    # Restart policy
+    restart: on-failure
+    restart_policy:
+      condition: on-failure
+      delay: 30s
+      max_attempts: 3
+      window: 60s
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+        labels: "service=gmail-to-sheets"
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "python", "-c", "from src.gmail_to_sheets.config.settings import load_settings; load_settings()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+# Networks
+networks:
+  default:
+    name: gmail-to-sheets-network
+    driver: bridge
+
+# Volumes
+volumes:
+  credentials:
+    driver: local
+  data:
+    driver: local
+  logs:
+    driver: local

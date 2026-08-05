@@ -7,12 +7,10 @@ Prepares all data in memory before writing in a single batch request.
 
 import logging
 import unicodedata
-from datetime import datetime
-from typing import Optional, Dict, List
+from typing import Optional
 
 from src.gmail_to_sheets.clients.sheets_client import SheetsClient
 from src.gmail_to_sheets.services.batch_writer import BatchWriter
-
 
 logger = logging.getLogger(__name__)
 
