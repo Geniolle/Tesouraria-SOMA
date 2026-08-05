@@ -139,13 +139,12 @@ class SmartDeduplicationService:
         descricao_norm = self._normalize_text(descricao)
         key = (valor_norm, descricao_norm)
 
-        # Ensure cache for this date exists
-        if data_mov not in self.cache_by_date:
-            self.cache_by_date[data_mov] = {}
+        # Load existing records for this date (preserves historical data)
+        records = self.load_existing_by_date(data_mov)
 
-        # Add to cache with a virtual row number (future writes won't overwrite)
+        # Add new transaction to cache with a virtual row number
         # Use a negative row number to indicate it's from current batch
-        self.cache_by_date[data_mov][key] = -1
+        records[key] = -1
 
         logger.debug(f"Registered in cache: {data_mov} | {valor_norm} | {descricao_norm}")
 

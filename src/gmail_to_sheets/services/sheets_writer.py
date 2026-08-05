@@ -6,6 +6,7 @@ Handles writing parsed transactions to Google Sheets.
 
 import logging
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from typing import Optional
 
 from src.gmail_to_sheets.clients.sheets_client import SheetsClient
@@ -191,8 +192,6 @@ class SheetsWriter:
             Write statistics including written_ids list
         """
         try:
-            from decimal import Decimal
-
             logger.info(f"Writing {len(transactions)} transactions...")
 
             rows_to_write = []
@@ -201,17 +200,21 @@ class SheetsWriter:
             skipped = 0
             next_sequence = self.last_sequence + 1
 
-            # Initialize balance from opening_balance (convert from string if needed)
-            if opening_balance:
-                try:
-                    if isinstance(opening_balance, str):
-                        current_balance = Decimal(opening_balance.replace(",", "."))
-                    else:
-                        current_balance = Decimal(str(opening_balance))
-                except (ValueError, AttributeError, TypeError, Exception):
-                    raise ValueError(f"Invalid opening_balance: {opening_balance}")
-            else:
+            # Validate opening_balance (None or empty string is invalid, but 0 is valid)
+            if opening_balance is None:
                 raise ValueError("opening_balance is required")
+
+            if isinstance(opening_balance, str) and not opening_balance.strip():
+                raise ValueError("opening_balance is required")
+
+            # Convert opening_balance to Decimal
+            try:
+                if isinstance(opening_balance, str):
+                    current_balance = Decimal(opening_balance.strip().replace(",", "."))
+                else:
+                    current_balance = Decimal(str(opening_balance))
+            except (ValueError, TypeError, InvalidOperation):
+                raise ValueError(f"Invalid opening_balance: {opening_balance}")
 
             logger.info(f"Starting balance: {current_balance}")
             logger.info(f"Starting ID sequence from: {next_sequence}")

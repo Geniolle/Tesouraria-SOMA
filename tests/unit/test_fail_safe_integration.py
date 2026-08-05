@@ -361,3 +361,310 @@ class TestOrchestratorArchiveFailSafe:
 
         with pytest.raises(RuntimeError, match="Archive API error"):
             orchestrator._archive_email("msg_123")
+
+
+class TestSheetsWriterZeroBalance:
+    """Test SheetsWriter accepts zero as valid opening_balance."""
+
+    def test_opening_balance_zero_decimal(self):
+        """Test that Decimal(0.00) is accepted."""
+        from decimal import Decimal
+
+        mock_sheets = Mock()
+        mock_sheets.get_headers = Mock(return_value=[
+            "ID_INTERNO", "DATA MOV.", "DATA VALOR", "DESCRIÇÃO",
+            "IMPORTÂNCIA", "TIPO", "TIMESTAMP", "SALDO CONTABILÍSTICO"
+        ])
+        mock_sheets.service = Mock()
+        mock_sheets.service.spreadsheets = Mock(return_value=Mock(
+            values=Mock(return_value=Mock(get=Mock(return_value=Mock(
+                execute=Mock(return_value={"values": []})
+            ))))
+        ))
+        mock_sheets.append_rows = Mock(return_value={"replies": []})
+
+        writer = SheetsWriter(mock_sheets, "test", "T_EXTRATO")
+
+        txn = Mock(spec=Transaction)
+        txn.data_mov = "04/08/2026"
+        txn.data_valor = "04/08/2026"
+        txn.descricao = "Test"
+        txn.valor = "50.00"
+        txn.tipo = "CRÉDITO"
+        txn.id_interno = ""
+
+        result = writer.write_transactions(
+            [txn],
+            opening_balance=Decimal("0.00"),
+            dedup_service=None
+        )
+
+        assert result["written"] == 1
+        rows = mock_sheets.append_rows.call_args[0][2]
+        assert rows[0][7] == "50,00"  # saldo_idx = 7, 0 + 50 = 50
+
+    def test_opening_balance_zero_string(self):
+        """Test that string '0.00' is accepted."""
+        mock_sheets = Mock()
+        mock_sheets.get_headers = Mock(return_value=[
+            "ID_INTERNO", "DATA MOV.", "DATA VALOR", "DESCRIÇÃO",
+            "IMPORTÂNCIA", "TIPO", "TIMESTAMP", "SALDO CONTABILÍSTICO"
+        ])
+        mock_sheets.service = Mock()
+        mock_sheets.service.spreadsheets = Mock(return_value=Mock(
+            values=Mock(return_value=Mock(get=Mock(return_value=Mock(
+                execute=Mock(return_value={"values": []})
+            ))))
+        ))
+        mock_sheets.append_rows = Mock(return_value={"replies": []})
+
+        writer = SheetsWriter(mock_sheets, "test", "T_EXTRATO")
+
+        txn = Mock(spec=Transaction)
+        txn.data_mov = "04/08/2026"
+        txn.data_valor = "04/08/2026"
+        txn.descricao = "Test"
+        txn.valor = "25.00"
+        txn.tipo = "CRÉDITO"
+        txn.id_interno = ""
+
+        result = writer.write_transactions([txn], opening_balance="0.00")
+        assert result["written"] == 1
+
+    def test_opening_balance_zero_comma_format(self):
+        """Test that string '0,00' (comma) is accepted."""
+        mock_sheets = Mock()
+        mock_sheets.get_headers = Mock(return_value=[
+            "ID_INTERNO", "DATA MOV.", "DATA VALOR", "DESCRIÇÃO",
+            "IMPORTÂNCIA", "TIPO", "TIMESTAMP", "SALDO CONTABILÍSTICO"
+        ])
+        mock_sheets.service = Mock()
+        mock_sheets.service.spreadsheets = Mock(return_value=Mock(
+            values=Mock(return_value=Mock(get=Mock(return_value=Mock(
+                execute=Mock(return_value={"values": []})
+            ))))
+        ))
+        mock_sheets.append_rows = Mock(return_value={"replies": []})
+
+        writer = SheetsWriter(mock_sheets, "test", "T_EXTRATO")
+
+        writer.write_transactions([], opening_balance="0,00")
+        # Should not raise
+
+    def test_opening_balance_none_raises(self):
+        """Test that None is rejected."""
+        mock_sheets = Mock()
+        mock_sheets.get_headers = Mock(return_value=[])
+        mock_sheets.service = Mock()
+
+        writer = SheetsWriter(mock_sheets, "test", "T_EXTRATO")
+
+        with pytest.raises(ValueError, match="opening_balance is required"):
+            writer.write_transactions([], opening_balance=None)
+
+    def test_opening_balance_empty_string_raises(self):
+        """Test that empty string is rejected."""
+        mock_sheets = Mock()
+        mock_sheets.get_headers = Mock(return_value=[])
+        mock_sheets.service = Mock()
+
+        writer = SheetsWriter(mock_sheets, "test", "T_EXTRATO")
+
+        with pytest.raises(ValueError, match="opening_balance is required"):
+            writer.write_transactions([], opening_balance="")
+
+    def test_opening_balance_spaces_only_raises(self):
+        """Test that spaces-only string is rejected."""
+        mock_sheets = Mock()
+        mock_sheets.get_headers = Mock(return_value=[])
+        mock_sheets.service = Mock()
+
+        writer = SheetsWriter(mock_sheets, "test", "T_EXTRATO")
+
+        with pytest.raises(ValueError, match="opening_balance is required"):
+            writer.write_transactions([], opening_balance="   ")
+
+
+class TestSheetsWriterExactBalance:
+    """Test exact balance calculation: 100 + 20dup - 5new = 115."""
+
+    def test_balance_100_plus_20dup_minus_5new_equals_115(self):
+        """EXACT TEST: opening=100, +20 (dup), -5 (new) -> line saldo=115."""
+        mock_sheets = Mock()
+        mock_sheets.get_headers = Mock(return_value=[
+            "ID_INTERNO", "DATA MOV.", "DATA VALOR", "DESCRIÇÃO",
+            "IMPORTÂNCIA", "TIPO", "TIMESTAMP", "SALDO CONTABILÍSTICO"
+        ])
+        mock_sheets.service = Mock()
+        mock_sheets.service.spreadsheets = Mock(return_value=Mock(
+            values=Mock(return_value=Mock(get=Mock(return_value=Mock(
+                execute=Mock(return_value={"values": []})
+            ))))
+        ))
+        mock_sheets.append_rows = Mock(return_value={"replies": []})
+
+        writer = SheetsWriter(mock_sheets, "test", "T_EXTRATO")
+
+        dedup = Mock()
+        dedup.is_duplicate = Mock(side_effect=[True, False])  # First is dup, second is new
+        dedup.register = Mock()
+
+        # Transaction 1: +20 (will be duplicated)
+        txn1 = Mock(spec=Transaction)
+        txn1.data_mov = "04/08/2026"
+        txn1.data_valor = "04/08/2026"
+        txn1.descricao = "Dup"
+        txn1.valor = "20.00"
+        txn1.tipo = "CRÉDITO"
+        txn1.id_interno = ""
+        txn1.dedup_key = Mock(return_value="dup_key")
+
+        # Transaction 2: -5 (will be new)
+        txn2 = Mock(spec=Transaction)
+        txn2.data_mov = "04/08/2026"
+        txn2.data_valor = "04/08/2026"
+        txn2.descricao = "New"
+        txn2.valor = "-5.00"
+        txn2.tipo = "DÉBITO"
+        txn2.id_interno = ""
+        txn2.dedup_key = Mock(return_value="new_key")
+
+        result = writer.write_transactions(
+            [txn1, txn2],
+            opening_balance="100.00",
+            dedup_service=dedup
+        )
+
+        # Validations
+        assert result["written"] == 1, "Only 1 new transaction should be written"
+        assert result["skipped"] == 1, "1 duplicate should be skipped"
+        assert len(result["written_ids"]) == 1, "Only 1 ID for the new transaction"
+
+        # Verify row written to sheets
+        rows = mock_sheets.append_rows.call_args[0][2]
+        assert len(rows) == 1, "Only 1 row should be appended"
+
+        saldo_cell = rows[0][7]  # SALDO CONTABILÍSTICO is index 7
+        assert saldo_cell == "115,00", f"Expected saldo 115,00 but got {saldo_cell}"
+
+
+class TestSmartDeduplicationRegisterPreservesCache:
+    """Test that register() preserves existing cache from load_existing_by_date."""
+
+    def test_register_preserves_historical_records(self):
+        """Test that register() keeps historical records intact."""
+        mock_sheets = Mock()
+        mock_sheets.service = Mock()
+
+        # Mock get_headers
+        mock_sheets.get_headers = Mock(return_value=[
+            "ID_INTERNO", "DATA MOV.", "DESCRIÇÃO", "IMPORTÂNCIA"
+        ])
+
+        # Mock spreadsheets values to return a historical record
+        def mock_get_values(**kwargs):
+            range_name = kwargs.get("range", "")
+            if "A2:Z99999" in range_name:
+                return Mock(execute=Mock(return_value={
+                    "values": [
+                        ["", "04/08/2026", "HistoricalTxn", "100.00"]
+                    ]
+                }))
+            return Mock(execute=Mock(return_value={"values": []}))
+
+        mock_sheets.service.spreadsheets = Mock(return_value=Mock(
+            values=Mock(return_value=Mock(get=mock_get_values))
+        ))
+
+        from src.gmail_to_sheets.services.smart_deduplication_service import (
+            SmartDeduplicationService,
+        )
+
+        dedup = SmartDeduplicationService(
+            sheets_client=mock_sheets,
+            spreadsheet_id="test",
+            target_sheet="CONTAORDEM"
+        )
+
+        # Register a new transaction
+        new_txn = Mock()
+        new_txn.data_mov = "04/08/2026"
+        new_txn.valor = "50.00"
+        new_txn.descricao = "NewTxn"
+
+        dedup.register(new_txn)
+
+        # Verify cache has BOTH historical and new transaction
+        records = dedup.cache_by_date.get("04/08/2026", {})
+        assert len(records) >= 2, "Cache should have historical + new records"
+
+        # Verify historical key exists
+        historical_key = ("100.00", "historicaltxn")
+        assert historical_key in records, "Historical transaction should be in cache"
+
+        # Verify new key exists
+        new_key = ("50.00", "newtxn")
+        assert new_key in records, "New registered transaction should be in cache"
+
+
+class TestBatchWriterFailSafeDirect:
+    """Test BatchWriter fail-safe directly (not through TransferService)."""
+
+    def test_batch_writer_raises_on_append_failure(self):
+        """Test that BatchWriter raises when append_rows fails."""
+        from src.gmail_to_sheets.services.batch_writer import BatchWriter
+
+        mock_sheets = Mock()
+        mock_sheets.append_rows.side_effect = RuntimeError("API error")
+
+        writer = BatchWriter(mock_sheets, "test_spreadsheet")
+
+        with pytest.raises(RuntimeError, match="API error"):
+            writer.batch_write_with_updates(
+                source_sheet="T_EXTRATO",
+                source_data=[],
+                target_sheet="CONTAORDEM",
+                target_data=[["test_row"]],
+                status_updates=None
+            )
+
+
+class TestOrchestratorMethodOrder:
+    """Test Orchestrator methods execute in correct order."""
+
+    def test_orchestrator_archive_fails_propagates(self):
+        """Test that archive error propagates and pipeline doesn't succeed."""
+        orchestrator = Orchestrator.__new__(Orchestrator)
+        orchestrator.settings = Mock()
+        orchestrator.settings.gmail.backup_label_name = "Backup"
+
+        mock_gmail = Mock()
+        mock_gmail.archive_message.side_effect = RuntimeError("Archive failed")
+        orchestrator.gmail_client = mock_gmail
+
+        with pytest.raises(RuntimeError, match="Archive failed"):
+            orchestrator._archive_email("msg_1")
+
+    def test_transfer_empty_ids_receives_empty_list(self):
+        """TEST F: Transfer receives empty list when written_ids is empty."""
+        from src.gmail_to_sheets.services.transfer_service import TransferService
+
+        mock_sheets = Mock()
+        mock_sheets.service = Mock()
+        mock_sheets.get_headers = Mock(side_effect=lambda spreadsheet_id, sheet_name: {
+            "T_EXTRATO": ["ID_INTERNO", "DATA MOV.", "DESCRIÇÃO", "TIPO", "IMPORTÂNCIA", "STATUS"],
+            "CONTAORDEM": ["ID_INTERNO", "DATA MOV.", "DESCRIÇÃO", "TIPO", "IMPORTÂNCIA", "PERÍODO", "PROCESSO"]
+        }.get(sheet_name, []))
+        mock_sheets.service.spreadsheets = Mock(return_value=Mock(
+            values=Mock(return_value=Mock(get=Mock(return_value=Mock(
+                execute=Mock(return_value={"values": []})
+            ))))
+        ))
+
+        transfer = TransferService(mock_sheets, "test", "T_EXTRATO", "CONTAORDEM")
+
+        # Passing empty list should return zero statistics
+        result = transfer.transfer_pending(source_ids=[])
+
+        assert result["transferred"] == 0
+        assert result["total_processed"] == 0
