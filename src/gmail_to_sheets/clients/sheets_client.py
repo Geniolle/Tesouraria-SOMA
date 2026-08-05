@@ -193,6 +193,7 @@ class SheetsClient:
         row: int,
         column: int,
         value: Any,
+        value_input_option: str = "USER_ENTERED",
     ) -> dict[str, Any]:
         """
         Update a single cell.
@@ -203,6 +204,7 @@ class SheetsClient:
             row: Row number (1-indexed)
             column: Column number (1-indexed)
             value: Value to set
+            value_input_option: How to interpret input (USER_ENTERED or RAW)
 
         Returns:
             API response
@@ -219,11 +221,11 @@ class SheetsClient:
             result = self.service.spreadsheets().values().update(
                 spreadsheetId=spreadsheet_id,
                 range=range_name,
-                valueInputOption="USER_ENTERED",
+                valueInputOption=value_input_option,
                 body=body,
             ).execute()
 
-            logger.debug(f"Updated cell {range_name} with value: {value}")
+            logger.debug(f"Updated cell {range_name} with value: {value} (inputOption={value_input_option})")
             return result
         except HttpError as e:
             logger.error(f"Failed to update cell: {e}")

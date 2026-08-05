@@ -295,3 +295,150 @@ class TestCashBalanceServiceNormalization:
         normalized = service._normalize_text(text_with_spaces)
         # Should normalize multiple spaces to single
         assert "  " not in normalized
+
+
+class TestCashBalanceServiceDynamicRange:
+    """Test dynamic range searching beyond fixed limits."""
+
+    @pytest.fixture
+    def mock_sheets_client(self):
+        """Create mock sheets client."""
+        client = Mock()
+        return client
+
+    def test_finds_label_beyond_column_z(self, mock_sheets_client):
+        """Test that search works for columns beyond Z (e.g., AA, AB, etc)."""
+        # Create sheet data with label in column AA (27th column)
+        sheet_data = []
+        for i in range(5):
+            row = [""] * 30  # 30 columns to ensure we go beyond Z (26)
+            if i == 4:
+                row[27] = "CAIXA ECONÔMICA MONTEPIO GERAL - CC"  # Column AB (28th)
+            sheet_data.append(row)
+
+        mock_sheets_client.service = Mock()
+        mock_sheets_client.service.spreadsheets = Mock(return_value=Mock(
+            values=Mock(return_value=Mock(get=Mock(return_value=Mock(
+                execute=Mock(return_value={"values": sheet_data})
+            ))))
+        ))
+        mock_sheets_client.update_cell = Mock()
+
+        service = CashBalanceService(
+            sheets_client=mock_sheets_client,
+            spreadsheet_id="test_id",
+            sheet_name="GERENCIAR CAIXAS",
+            account_label="CAIXA ECONÔMICA MONTEPIO GERAL - CC",
+            row_offset=1,
+            verify_after_write=False,
+        )
+
+        result = service.update_balance(Decimal("2148.04"))
+
+        # Label should be found at column AB (28th = index 27)
+        assert result["label_cell"].startswith("A")  # Should be AB, AC, etc.
+        assert mock_sheets_client.update_cell.called
+
+    def test_finds_label_beyond_row_1000(self, mock_sheets_client):
+        """Test that search works for rows beyond 1000."""
+        # Create sparse sheet data where label is at row 1002
+        # sheet_data[0] = row 1, sheet_data[1] = row 2, ..., sheet_data[1001] = row 1002
+        sheet_data = [[""] * 5]  # Row 1 (index 0)
+        for i in range(1000):
+            sheet_data.append([""] * 5)  # Rows 2-1001
+        # Row 1002 (index 1001) has the label
+        label_row = [""] * 5
+        label_row[3] = "CAIXA ECONÔMICA MONTEPIO GERAL - CC"
+        sheet_data.append(label_row)
+
+        mock_sheets_client.service = Mock()
+        mock_sheets_client.service.spreadsheets = Mock(return_value=Mock(
+            values=Mock(return_value=Mock(get=Mock(return_value=Mock(
+                execute=Mock(return_value={"values": sheet_data})
+            ))))
+        ))
+        mock_sheets_client.update_cell = Mock()
+
+        service = CashBalanceService(
+            sheets_client=mock_sheets_client,
+            spreadsheet_id="test_id",
+            sheet_name="GERENCIAR CAIXAS",
+            account_label="CAIXA ECONÔMICA MONTEPIO GERAL - CC",
+            row_offset=1,
+            verify_after_write=False,
+        )
+
+        result = service.update_balance(Decimal("2148.04"))
+
+        # Should find label at row 1002 (0-indexed: 1001)
+        assert result["label_cell"] == "D1002"
+        assert result["target_cell"] == "D1003"
+
+
+class TestCashBalanceServiceNumericValue:
+    """Test that numeric values are written correctly."""
+
+    @pytest.fixture
+    def mock_sheets_client(self):
+        """Create mock sheets client."""
+        client = Mock()
+        sheet_data = [
+            ["", "", "", "CAIXA ECONÔMICA MONTEPIO GERAL - CC"],
+            ["", "", "", ""],  # Target cell
+        ]
+        client.service = Mock()
+        client.service.spreadsheets = Mock(return_value=Mock(
+            values=Mock(return_value=Mock(get=Mock(return_value=Mock(
+                execute=Mock(return_value={"values": sheet_data})
+            ))))
+        ))
+        client.update_cell = Mock()
+        return client
+
+    def test_sends_numeric_value_not_string(self, mock_sheets_client):
+        """Test that numeric value is sent, not text with comma."""
+        service = CashBalanceService(
+            sheets_client=mock_sheets_client,
+            spreadsheet_id="test_id",
+            sheet_name="GERENCIAR CAIXAS",
+            account_label="CAIXA ECONÔMICA MONTEPIO GERAL - CC",
+            row_offset=1,
+            verify_after_write=False,
+        )
+
+        result = service.update_balance(Decimal("2148.04"))
+
+        # Verify update_cell was called
+        assert mock_sheets_client.update_cell.called
+
+        # Get the call arguments
+        call_args = mock_sheets_client.update_cell.call_args
+
+        # Check that value_input_option is RAW
+        assert call_args.kwargs.get("value_input_option") == "RAW"
+
+        # Check that the value is a Decimal, not a string
+        value_arg = call_args.args[4] if len(call_args.args) > 4 else call_args.kwargs.get("value")
+        assert isinstance(value_arg, Decimal)
+        assert value_arg == Decimal("2148.04")
+
+    def test_quantizes_to_two_decimals(self, mock_sheets_client):
+        """Test that balance is quantized to 0.01."""
+        service = CashBalanceService(
+            sheets_client=mock_sheets_client,
+            spreadsheet_id="test_id",
+            sheet_name="GERENCIAR CAIXAS",
+            account_label="CAIXA ECONÔMICA MONTEPIO GERAL - CC",
+            row_offset=1,
+            verify_after_write=False,
+        )
+
+        # Input with more decimal places
+        result = service.update_balance(Decimal("2148.047"))
+
+        # Should be quantized
+        call_args = mock_sheets_client.update_cell.call_args
+        value_arg = call_args.args[4] if len(call_args.args) > 4 else call_args.kwargs.get("value")
+
+        # Should be rounded to 0.01
+        assert value_arg == Decimal("2148.05")

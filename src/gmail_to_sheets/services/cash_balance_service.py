@@ -67,8 +67,9 @@ class CashBalanceService:
         try:
             logger.info(f"Updating cash balance in {self.sheet_name}...")
 
-            # Load the sheet data
-            range_name = f"{self.sheet_name}!A1:Z1000"
+            # Load the sheet data dynamically using entire sheet
+            # Use !A:ZZ to ensure we search the entire used area
+            range_name = f"'{self.sheet_name}'!A:ZZ"
             result = self.sheets_client.service.spreadsheets().values().get(
                 spreadsheetId=self.spreadsheet_id,
                 range=range_name,
@@ -98,17 +99,21 @@ class CashBalanceService:
             # Read previous value
             previous_value = self._get_cell_value(rows, target_row, target_col)
 
-            # Format balance for writing (two decimal places)
-            balance_formatted = f"{float(closing_balance):.2f}".replace(".", ",")
+            # Quantize balance to 0.01 EUR (Decimal precision)
+            quantized_balance = closing_balance.quantize(Decimal("0.01"))
 
-            # Write the balance
-            logger.info(f"Writing balance {balance_formatted} to {target_cell}")
+            # Format for display (two decimal places, comma separator)
+            balance_formatted = str(quantized_balance).replace(".", ",")
+
+            # Write the balance as numeric value (RAW, not USER_ENTERED)
+            logger.info(f"Writing balance {balance_formatted} ({quantized_balance}) to {target_cell}")
             self.sheets_client.update_cell(
                 self.spreadsheet_id,
                 self.sheet_name,
                 target_row + 1,  # Convert to 1-indexed
                 target_col + 1,  # Convert to 1-indexed
-                balance_formatted,
+                quantized_balance,  # Send as Decimal/number, not string
+                value_input_option="RAW",  # RAW: value is stored as-is
             )
 
             # Verify if requested
@@ -193,8 +198,8 @@ class CashBalanceService:
             Verified Decimal value, or None if verification fails
         """
         try:
-            # Re-read the sheet
-            range_name = f"{self.sheet_name}!A1:Z1000"
+            # Re-read the sheet using dynamic range
+            range_name = f"'{self.sheet_name}'!A:ZZ"
             result = self.sheets_client.service.spreadsheets().values().get(
                 spreadsheetId=self.spreadsheet_id,
                 range=range_name,

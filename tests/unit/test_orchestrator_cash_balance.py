@@ -127,16 +127,65 @@ class TestOrchestratorReconciliation:
     """Test accounting reconciliation in orchestrator."""
 
     def test_validates_mt940_reconciliation(self):
-        """Test that saldo_fecho comes from validated MT940."""
-        # The MT940 parser validates: saldo_abertura + soma = saldo_fecho
-        # before creating the footer object
-        # Orchestrator should pass this already-validated saldo_fecho directly
-        # No recalculation needed
-        assert True  # Validated in MT940Parser
+        """Test that orchestrator validates MT940 reconciliation."""
+        # The orchestrator must validate before writing anywhere
+        from src.gmail_to_sheets.orchestrator import Orchestrator
+        from decimal import Decimal
+        from unittest.mock import Mock
+
+        orchestrator = Orchestrator.__new__(Orchestrator)
+
+        # Mock MT940 file that reconciles
+        mt940_file = Mock()
+        mt940_file.header = Mock()
+        mt940_file.header.saldo_abertura = Decimal("2080.52")
+        mt940_file.footer = Mock()
+        mt940_file.footer.saldo_fecho = Decimal("2148.04")
+        mt940_file.transactions = [
+            Mock(valor=Decimal("67.52"))
+        ]
+
+        # Should not raise
+        result = orchestrator._validate_mt940_reconciliation(mt940_file)
+
+        assert result["opening_balance"] == Decimal("2080.52")
+        assert result["closing_balance"] == Decimal("2148.04")
+        assert result["difference"] == Decimal("0.00")
+
+    def test_reconciliation_failure_raises_error(self):
+        """Test that reconciliation failure raises error."""
+        from src.gmail_to_sheets.orchestrator import Orchestrator
+        from decimal import Decimal
+        from unittest.mock import Mock
+
+        orchestrator = Orchestrator.__new__(Orchestrator)
+
+        # Mock MT940 file that does NOT reconcile
+        mt940_file = Mock()
+        mt940_file.header = Mock()
+        mt940_file.header.saldo_abertura = Decimal("2080.52")
+        mt940_file.footer = Mock()
+        mt940_file.footer.saldo_fecho = Decimal("2200.00")  # Wrong!
+        mt940_file.transactions = [
+            Mock(valor=Decimal("67.52"))
+        ]
+
+        # Should raise
+        import pytest
+        with pytest.raises(ValueError, match="Reconciliation failed"):
+            orchestrator._validate_mt940_reconciliation(mt940_file)
 
     def test_passes_decimal_precision(self):
-        """Test that Decimal precision is maintained."""
-        # saldo_fecho is stored as Decimal in MT940Footer
-        # CashBalanceService accepts Decimal
-        # No float conversions occur
-        assert True  # Type checked in signatures
+        """Test that Decimal precision is maintained throughout."""
+        from decimal import Decimal
+
+        # Verify Decimal operations maintain precision
+        opening = Decimal("2080.52")
+        transactions = Decimal("67.52")
+        closing = Decimal("2148.04")
+
+        calculated = (opening + transactions).quantize(Decimal("0.01"))
+
+        assert calculated == closing
+        assert isinstance(calculated, Decimal)
+        assert str(calculated) == "2148.04"

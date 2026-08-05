@@ -71,6 +71,9 @@ class Orchestrator:
                 logger.warning("No transactions found in attachment")
                 return
 
+            # Phase 5.5: Validate accounting reconciliation
+            self._validate_mt940_reconciliation(mt940_file)
+
             # Phase 6: Smart deduplication (by date + value)
             dedup = SmartDeduplicationService(
                 sheets_client=self.sheets_client,
@@ -163,6 +166,48 @@ class Orchestrator:
             return message_ids
         except Exception as e:
             logger.error(f"Message search failed: {e}")
+            raise
+
+    def _validate_mt940_reconciliation(self, mt940_file) -> dict:
+        """Validate accounting reconciliation of MT940 file."""
+        from decimal import Decimal
+
+        try:
+            logger.info("[5.5/7] Validating MT940 reconciliation...")
+
+            opening_balance = mt940_file.header.saldo_abertura
+            closing_balance = mt940_file.footer.saldo_fecho
+            transaction_total = sum(
+                (transaction.valor for transaction in mt940_file.transactions),
+                Decimal("0.00"),
+            )
+
+            calculated_balance = opening_balance + transaction_total
+            difference = (closing_balance - calculated_balance).quantize(Decimal("0.01"))
+
+            logger.info(f"      Opening balance: {opening_balance}")
+            logger.info(f"      Transaction sum: {transaction_total}")
+            logger.info(f"      Closing balance: {closing_balance}")
+            logger.info(f"      Difference: {difference}")
+
+            if abs(difference) > Decimal("0.01"):
+                raise ValueError(
+                    f"Reconciliation failed: opening ({opening_balance}) + "
+                    f"transactions ({transaction_total}) = calculated ({calculated_balance}), "
+                    f"but closing is {closing_balance} (difference: {difference})"
+                )
+
+            logger.info("      ✓ Reconciliation validated")
+            return {
+                "opening_balance": opening_balance,
+                "transaction_total": transaction_total,
+                "closing_balance": closing_balance,
+                "calculated_balance": calculated_balance,
+                "difference": difference,
+            }
+
+        except Exception as e:
+            logger.error(f"Reconciliation validation failed: {e}")
             raise
 
     def _download_and_parse(self, message_id: str):
