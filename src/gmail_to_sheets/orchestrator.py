@@ -19,15 +19,15 @@ from src.gmail_to_sheets.clients.sheets_client import SheetsClient
 from src.gmail_to_sheets.config.settings import load_settings
 from src.gmail_to_sheets.exceptions.application import AuthenticationError
 from src.gmail_to_sheets.logging_config import setup_logging
-from src.gmail_to_sheets.services.attachment_processor import AttachmentProcessor
-from src.gmail_to_sheets.services.cash_balance_service import CashBalanceService
-from src.gmail_to_sheets.services.sheets_writer import SheetsWriter
-from src.gmail_to_sheets.services.smart_deduplication_service import SmartDeduplicationService
-from src.gmail_to_sheets.services.transaction_recovery_service import (
+from src.gmail_to_sheets.processes.extrato.attachment_processor import AttachmentProcessor
+from src.gmail_to_sheets.processes.extrato.cash_balance_service import CashBalanceService
+from src.gmail_to_sheets.processes.extrato.sheets_writer import SheetsWriter
+from src.gmail_to_sheets.processes.extrato.smart_deduplication_service import SmartDeduplicationService
+from src.gmail_to_sheets.processes.extrato.transaction_recovery_service import (
     TransactionRecoveryService,
 )
-from src.gmail_to_sheets.services.transfer_matching_service import TransferMatchingService
-from src.gmail_to_sheets.services.transfer_service import TransferService
+from src.gmail_to_sheets.processes.extrato.transfer_matching_service import TransferMatchingService
+from src.gmail_to_sheets.processes.extrato.transfer_service import TransferService
 
 logger = logging.getLogger(__name__)
 
