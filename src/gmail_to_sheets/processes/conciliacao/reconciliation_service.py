@@ -1,6 +1,6 @@
 """Serviço de conciliação que escreve DOC.SOMA na sheet de origem.
 
-Atualiza registros em T_EXTRATO com DOC.SOMA obtido de CONTAORDEM.
+Atualiza registros em sheet de origem com DOC.SOMA obtido de CONTAORDEM.
 """
 
 import logging
@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 class ReconciliationService:
-    """Serviço de conciliação para atualizar T_EXTRATO."""
+    """Serviço de conciliação para atualizar sheet de origem."""
 
     def __init__(self, sheets_client: SheetsClient, spreadsheet_id: str, source_sheet: str = "T_EXTRATO"):
         """
@@ -24,8 +24,25 @@ class ReconciliationService:
         self.sheets_client = sheets_client
         self.spreadsheet_id = spreadsheet_id
         self.source_sheet = source_sheet
-        self.doc_soma_idx = 0  # DOC.SOMA (0-indexed, coluna 1)
+        self.column_indices = self._load_column_indices()
         self.batch_updates = []
+
+    def _load_column_indices(self) -> dict:
+        """Carrega índices de colunas dynamicamente da header."""
+        try:
+            headers = self.sheets_client.get_headers(self.spreadsheet_id, self.source_sheet)
+            indices = {}
+
+            for idx, header in enumerate(headers):
+                header_name = str(header).upper().strip() if header else ""
+                indices[header_name] = idx
+
+            logger.info(f"Carregados {len(indices)} campos de {self.source_sheet}")
+            return indices
+
+        except Exception as e:
+            logger.error(f"Erro ao carregar campos de {self.source_sheet}: {e}")
+            raise
 
     def add_update(self, row_number: int, doc_soma: str) -> None:
         """
@@ -33,10 +50,10 @@ class ReconciliationService:
 
         Args:
             row_number: Número da linha para atualizar
-            doc_soma: Valor de DOC.SOMA (7 dígitos numéricos)
+            doc_soma: Valor de DOC.SOMA
         """
-        # Column K = 11ª coluna (11 = K)
-        col_letter = chr(ord('A') + self.doc_soma_idx)
+        doc_soma_idx = self.column_indices.get("DOC. SOMA", 0)
+        col_letter = chr(ord('A') + doc_soma_idx)
         cell_address = f"{col_letter}{row_number}"
         range_name = f"{self.source_sheet}!{cell_address}"
 
@@ -90,43 +107,3 @@ class ReconciliationService:
     def clear_batch(self) -> None:
         """Limpa o batch de atualizações."""
         self.batch_updates = []
-
-    def update_single_cell(self, row_number: int, doc_soma: str) -> bool:
-        """
-        Atualiza uma única célula (operação imediata, não batch).
-
-        Útil para testes ou atualização isolada.
-
-        Args:
-            row_number: Número da linha para atualizar
-            doc_soma: Valor de DOC.SOMA (7 dígitos numéricos)
-
-        Returns:
-            True se bem-sucedido, False caso contrário
-        """
-        try:
-            col_letter = chr(ord('A') + self.doc_soma_idx)
-            cell_address = f"{col_letter}{row_number}"
-            range_name = f"{self.source_sheet}!{cell_address}"
-
-            request_body = {
-                "data": [
-                    {
-                        "range": range_name,
-                        "values": [[doc_soma]]
-                    }
-                ],
-                "valueInputOption": "RAW"
-            }
-
-            response = self.sheets_client.service.spreadsheets().values().batchUpdate(
-                spreadsheetId=self.spreadsheet_id,
-                body=request_body
-            ).execute()
-
-            logger.debug(f"Atualizada célula: {range_name} = {doc_soma}")
-            return True
-
-        except Exception as e:
-            logger.error(f"Erro ao atualizar célula: {e}")
-            return False

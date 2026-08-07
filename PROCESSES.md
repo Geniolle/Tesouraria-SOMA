@@ -62,9 +62,9 @@ python -m src.gmail_to_sheets.app run-once
 
 ### 3. Conciliação
 
-**Status:** ✅ Novo | **Trigger:** Manual
+**Status:** ✅ Ativo | **Trigger:** Automático (a cada 1 minuto, defasado de 30 segundos do Entradas)
 
-Valida e preenche `DOC.SOMA` em sheets de origem pesquisando em `CONTAORDEM`.
+Preenche `DOC.SOMA` em sheets de origem pesquisando correspondências em `CONTAORDEM`.
 
 **Pipeline:**
 1. Carregamento de candidatos (DOC.SOMA vazio + ID_INTERNO preenchido)
@@ -76,12 +76,13 @@ Valida e preenche `DOC.SOMA` em sheets de origem pesquisando em `CONTAORDEM`.
 **Entrada:** Registros com DOC.SOMA vazio e ID_INTERNO preenchido  
 **Saída:** DOC.SOMA preenchido na sheet de origem
 
-**Formato DOC.SOMA:**
-- Tipo: Numérico
-- Comprimento: 7 dígitos
-- Exemplo: `5408307`
+**Automático (Scheduler):**
+```bash
+# Executa a cada 1 minuto (defasado de 30 segundos)
+python -m src.gmail_to_sheets.app run-scheduled
+```
 
-**Uso:**
+**Manual (Uma execução):**
 ```bash
 # Conciliar T_EXTRATO (padrão)
 python -m src.gmail_to_sheets.app conciliacao

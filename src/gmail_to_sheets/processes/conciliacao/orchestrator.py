@@ -1,11 +1,10 @@
 """Orquestrador do Processo de Conciliação.
 
 Coordena o pipeline completo de conciliação:
-1. Pesquisar linhas em T_EXTRATO com DOC.SOMA vazio
+1. Pesquisar linhas em sheet de origem com DOC.SOMA vazio
 2. Validar ID_INTERNO preenchido
 3. Pesquisar ID_INTERNO em CONTAORDEM
-4. Se DOC.SOMA existe em CONTAORDEM, copiar para T_EXTRATO
-5. Validar formato de DOC.SOMA (7 dígitos numéricos)
+4. Se DOC.SOMA existe em CONTAORDEM, copiar para sheet de origem
 """
 
 import logging
@@ -67,7 +66,6 @@ class ConciliationOrchestrator:
             logger.info(f"  - Candidatos encontrados: {len(candidates)}")
             logger.info(f"  - Registros conciliados: {reconciliation_result['reconciled']}")
             logger.info(f"  - Sem correspondência: {reconciliation_result['not_found']}")
-            logger.info(f"  - Formato inválido: {reconciliation_result['invalid_format']}")
             logger.info("=" * 80)
 
         except Exception as e:
@@ -94,7 +92,9 @@ class ConciliationOrchestrator:
         try:
             logger.info(f"[2/4] Carregando e validando registros de {self.source_sheet}...")
 
-            validator = ConciliationValidator()
+            validator = ConciliationValidator(
+                self.sheets_client, self.spreadsheet_id, self.source_sheet
+            )
 
             # Load data
             result = self.sheets_client.service.spreadsheets().values().get(
@@ -158,7 +158,6 @@ class ConciliationOrchestrator:
 
             reconciled = 0
             not_found = 0
-            invalid_format = 0
 
             for candidate in candidates:
                 row_num = candidate["row_number"]
@@ -174,13 +173,7 @@ class ConciliationOrchestrator:
 
                 doc_soma = lookup_result["doc_soma"]
 
-                # Validate format
-                if not self.lookup_service.validate_doc_soma_format(doc_soma):
-                    logger.debug(f"Linha {row_num}: DOC.SOMA inválido: {doc_soma}")
-                    invalid_format += 1
-                    continue
-
-                # Add to batch update
+                # Add to batch update (sem validação de formato)
                 reconciliation_svc.add_update(row_num, doc_soma)
                 logger.debug(f"Linha {row_num}: Agendada atualização com DOC.SOMA={doc_soma}")
                 reconciled += 1
@@ -193,8 +186,7 @@ class ConciliationOrchestrator:
             logger.info(f"      Conciliados: {reconciled}")
             return {
                 "reconciled": reconciled,
-                "not_found": not_found,
-                "invalid_format": invalid_format
+                "not_found": not_found
             }
 
         except Exception as e:

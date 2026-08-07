@@ -107,9 +107,11 @@ Pipeline completed successfully!
 
 ---
 
-### 3. `conciliacao` — Executar Conciliação
+### 3. `conciliacao` — Executar Conciliação Manual
 
-**Descrição:** Executa o processo de Conciliação para validar e preencher `DOC.SOMA` em uma sheet de origem pesquisando correspondências em `CONTAORDEM`.
+**Descrição:** Executa o processo de Conciliação para preencher `DOC.SOMA` em uma sheet de origem pesquisando correspondências em `CONTAORDEM`.
+
+**Nota:** O processo é **automático** quando usando `run-scheduled` (executa a cada 1 minuto, defasado de 30 segundos do Entradas).
 
 **Uso:**
 ```bash
@@ -136,34 +138,35 @@ Iniciando processo de Conciliação (T_EXTRATO)
 [1/4] Autenticando com Google Sheets...
       Sheets autenticado
 [2/4] Carregando e validando registros de T_EXTRATO...
-      Carregadas 100 linhas
-      Candidatos válidos: 25
+      Carregadas 3418 linhas
+      Candidatos válidos: 28
 [3/4] Carregando dados de referência...
-      Carregadas 500 linhas de CONTAORDEM
-      Cache construído com 500 registros indexados
+      Carregadas 4013 linhas de CONTAORDEM
+      Cache construído com 3917 registros indexados
 [4/4] Realizando conciliação...
-      Conciliados: 24
+      Atualizadas 22 linhas em batch
+      Conciliados: 22
 ================================================================================
 Processo de Conciliação concluído!
-  - Candidatos encontrados: 25
-  - Registros conciliados: 24
-  - Sem correspondência: 1
-  - Formato inválido: 0
+  - Candidatos encontrados: 28
+  - Registros conciliados: 22
+  - Sem correspondência: 6
 ================================================================================
 ```
 
 **Lógica:**
-1. Carrega linhas de `T_EXTRATO` onde `DOC.SOMA` está vazio
+1. Carrega linhas da sheet onde `DOC.SOMA` está vazio
 2. Extrai `ID_INTERNO` de cada linha
 3. Pesquisa `ID_INTERNO` em `CONTAORDEM`
-4. Se encontrar `DOC.SOMA` preenchido (7 dígitos numéricos), copia para `T_EXTRATO`
-5. Valida formato: `DOC.SOMA` deve ter exatamente 7 dígitos (ex: `5408307`)
+4. Se encontrar `DOC.SOMA` preenchido, copia para sheet de origem
+5. Batch update: atualiza todas as linhas em uma única chamada API
 
 **Casos de uso:**
 - Validar e completar dados entre sheets
 - Reconciliar após importação de dados
 - Validação cruzada de registros
 - Preenchimento automático de campos
+- Conciliação contínua (via scheduler)
 
 ---
 
@@ -181,7 +184,7 @@ python -m src.gmail_to_sheets.app status
 AppExtrato - Process Management System
   Processes:
     - Entradas: Scheduled (every 1 minute)
-    - Conciliacao: Manual trigger
+    - Conciliacao: Scheduled (every 1 minute, +30s offset)
   Status: Ready
 ```
 

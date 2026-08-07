@@ -47,9 +47,9 @@ class AppOrchestrator:
             # Don't re-raise - scheduler should continue
 
     def start_scheduler(self) -> None:
-        """Start background scheduler for Entradas (every 1 minute)."""
+        """Start background scheduler for Entradas and Conciliacao (every 1 minute)."""
         try:
-            logger.info("Starting scheduler for Entradas process...")
+            logger.info("Starting scheduler for Entradas and Conciliacao processes...")
 
             # Schedule Entradas to run every 1 minute
             self.scheduler.add_job(
@@ -61,11 +61,22 @@ class AppOrchestrator:
                 max_instances=1  # Only one instance at a time
             )
 
+            # Schedule Conciliacao to run every 1 minute (after Entradas)
+            self.scheduler.add_job(
+                self.run_conciliation,
+                trigger=IntervalTrigger(minutes=1, seconds=30),
+                id="conciliacao_job",
+                name="Conciliacao process (every 1 minute, offset)",
+                replace_existing=True,
+                max_instances=1  # Only one instance at a time
+            )
+
             self.scheduler.start()
             self.is_running = True
 
             logger.info("Scheduler started successfully")
             logger.info("Entradas process will run every 1 minute")
+            logger.info("Conciliacao process will run every 1 minute (offset by 30 seconds)")
 
         except Exception as e:
             logger.error(f"Failed to start scheduler: {e}")
@@ -122,8 +133,19 @@ class AppOrchestrator:
             logger.error(f"Process failed: {e}")
             sys.exit(1)
 
-    def run_conciliation(self, source_sheet: str = "T_EXTRATO") -> None:
-        """Run Conciliation process (one-shot)."""
+    def run_conciliation(self) -> None:
+        """Run Conciliation process (scheduled)."""
+        try:
+            logger.info("Running Conciliation process...")
+            orchestrator = ConciliationOrchestrator(source_sheet="T_EXTRATO")
+            orchestrator.run()
+
+        except Exception as e:
+            logger.error(f"Scheduled Conciliation process failed: {e}", exc_info=True)
+            # Don't re-raise - scheduler should continue
+
+    def run_conciliation_manual(self, source_sheet: str = "T_EXTRATO") -> None:
+        """Run Conciliation process (manual trigger)."""
         try:
             logger.info(f"Running Conciliation process ({source_sheet})...")
             orchestrator = ConciliationOrchestrator(source_sheet=source_sheet)
@@ -177,7 +199,7 @@ Examples:
 
     elif args.command == "conciliacao":
         logger.info(f"Running Conciliation process for {args.source_sheet}")
-        app.run_conciliation(source_sheet=args.source_sheet)
+        app.run_conciliation_manual(source_sheet=args.source_sheet)
 
     elif args.command == "status":
         logger.info("Application ready")
