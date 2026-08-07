@@ -23,8 +23,8 @@ class LookupService:
         self.sheets_client = sheets_client
         self.spreadsheet_id = spreadsheet_id
         self.contaordem_cache: dict[str, dict] = {}
-        self.id_interno_idx = 14  # ID_INTERNO em CONTAORDEM (0-indexed, coluna 15)
-        self.doc_soma_idx = 2  # DOC.SOMA em CONTAORDEM (0-indexed, coluna 3)
+        self.id_interno_idx = 16  # ID_INTERNO em CONTAORDEM (0-indexed, coluna 17)
+        self.doc_soma_idx = 4  # DOC.SOMA em CONTAORDEM (0-indexed, coluna 5)
 
     def load_contaordem_data(self) -> None:
         """Carrega todos os dados de CONTAORDEM em cache."""

@@ -24,7 +24,7 @@ class ReconciliationService:
         self.sheets_client = sheets_client
         self.spreadsheet_id = spreadsheet_id
         self.source_sheet = source_sheet
-        self.doc_soma_idx = 10  # DOC.SOMA (0-indexed, coluna 11)
+        self.doc_soma_idx = 0  # DOC.SOMA (0-indexed, coluna 1)
         self.batch_updates = []
 
     def add_update(self, row_number: int, doc_soma: str) -> None:

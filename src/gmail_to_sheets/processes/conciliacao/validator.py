@@ -16,8 +16,8 @@ class ConciliationValidator:
     def __init__(self):
         """Inicializa o validador."""
         # Column indices for T_EXTRATO
-        self.doc_soma_idx = 10  # DOC.SOMA (0-indexed, column 11)
-        self.id_interno_idx = 14  # ID_INTERNO (0-indexed, column 15)
+        self.doc_soma_idx = 0  # DOC.SOMA (0-indexed, column 1)
+        self.id_interno_idx = 8  # ID_INTERNO (0-indexed, column 9)
 
     def is_candidate_for_reconciliation(self, row: list, row_num: int) -> tuple[bool, str]:
         """
