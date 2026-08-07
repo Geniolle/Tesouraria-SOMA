@@ -15,6 +15,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from src.gmail_to_sheets.config.settings import load_settings
 from src.gmail_to_sheets.logging_config import setup_logging
 from src.gmail_to_sheets.processes.entradas.orchestrator import EntradasOrchestrator
+from src.gmail_to_sheets.processes.conciliacao.orchestrator import ConciliationOrchestrator
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +122,17 @@ class AppOrchestrator:
             logger.error(f"Process failed: {e}")
             sys.exit(1)
 
+    def run_conciliation(self, source_sheet: str = "T_EXTRATO") -> None:
+        """Run Conciliation process (one-shot)."""
+        try:
+            logger.info(f"Running Conciliation process ({source_sheet})...")
+            orchestrator = ConciliationOrchestrator(source_sheet=source_sheet)
+            orchestrator.run()
+
+        except Exception as e:
+            logger.error(f"Conciliation process failed: {e}")
+            sys.exit(1)
+
 
 def main():
     """Entry point for application."""
@@ -131,16 +143,24 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python -m src.gmail_to_sheets.app run-scheduled    # Run scheduler (every 1 min)
-  python -m src.gmail_to_sheets.app run-once          # Run once (for testing)
-  python -m src.gmail_to_sheets.app status            # Show scheduler status
+  python -m src.gmail_to_sheets.app run-scheduled              # Run scheduler (every 1 min)
+  python -m src.gmail_to_sheets.app run-once                   # Run Entradas once (for testing)
+  python -m src.gmail_to_sheets.app conciliacao T_EXTRATO      # Run Conciliation for T_EXTRATO
+  python -m src.gmail_to_sheets.app status                     # Show scheduler status
         """
     )
 
     parser.add_argument(
         "command",
-        choices=["run-scheduled", "run-once", "status"],
+        choices=["run-scheduled", "run-once", "conciliacao", "status"],
         help="Command to execute"
+    )
+
+    parser.add_argument(
+        "source_sheet",
+        nargs="?",
+        default="T_EXTRATO",
+        help="Source sheet for conciliacao command (default: T_EXTRATO)"
     )
 
     args = parser.parse_args()
@@ -155,11 +175,16 @@ Examples:
         logger.info("Running Entradas process once")
         app.run_once()
 
+    elif args.command == "conciliacao":
+        logger.info(f"Running Conciliation process for {args.source_sheet}")
+        app.run_conciliation(source_sheet=args.source_sheet)
+
     elif args.command == "status":
         logger.info("Application ready")
         print("AppExtrato - Process Management System")
         print("  Processes:")
         print("    - Entradas: Scheduled (every 1 minute)")
+        print("    - Conciliacao: Manual trigger")
         print("  Status: Ready")
 
 

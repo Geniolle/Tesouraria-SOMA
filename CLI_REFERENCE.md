@@ -107,7 +107,67 @@ Pipeline completed successfully!
 
 ---
 
-### 3. `status` — Ver Status
+### 3. `conciliacao` — Executar Conciliação
+
+**Descrição:** Executa o processo de Conciliação para validar e preencher `DOC.SOMA` em uma sheet de origem pesquisando correspondências em `CONTAORDEM`.
+
+**Uso:**
+```bash
+python -m src.gmail_to_sheets.app conciliacao [source_sheet]
+```
+
+**Argumentos:**
+- `source_sheet` (opcional): Nome da sheet de origem (padrão: `T_EXTRATO`)
+
+**Exemplos:**
+```bash
+# Conciliar T_EXTRATO (padrão)
+python -m src.gmail_to_sheets.app conciliacao
+
+# Conciliar outra sheet
+python -m src.gmail_to_sheets.app conciliacao OUTRA_SHEET
+```
+
+**Saída:**
+```
+================================================================================
+Iniciando processo de Conciliação (T_EXTRATO)
+================================================================================
+[1/4] Autenticando com Google Sheets...
+      Sheets autenticado
+[2/4] Carregando e validando registros de T_EXTRATO...
+      Carregadas 100 linhas
+      Candidatos válidos: 25
+[3/4] Carregando dados de referência...
+      Carregadas 500 linhas de CONTAORDEM
+      Cache construído com 500 registros indexados
+[4/4] Realizando conciliação...
+      Conciliados: 24
+================================================================================
+Processo de Conciliação concluído!
+  - Candidatos encontrados: 25
+  - Registros conciliados: 24
+  - Sem correspondência: 1
+  - Formato inválido: 0
+================================================================================
+```
+
+**Lógica:**
+1. Carrega linhas de `T_EXTRATO` onde `DOC.SOMA` está vazio
+2. Extrai `ID_INTERNO` de cada linha
+3. Pesquisa `ID_INTERNO` em `CONTAORDEM`
+4. Se encontrar `DOC.SOMA` preenchido (7 dígitos numéricos), copia para `T_EXTRATO`
+5. Valida formato: `DOC.SOMA` deve ter exatamente 7 dígitos (ex: `5408307`)
+
+**Casos de uso:**
+- Validar e completar dados entre sheets
+- Reconciliar após importação de dados
+- Validação cruzada de registros
+- Preenchimento automático de campos
+
+---
+
+### 4. `status` — Ver Status
 
 **Descrição:** Exibe informações sobre a aplicação e seus processos.
 
@@ -121,6 +181,7 @@ python -m src.gmail_to_sheets.app status
 AppExtrato - Process Management System
   Processes:
     - Entradas: Scheduled (every 1 minute)
+    - Conciliacao: Manual trigger
   Status: Ready
 ```
 
@@ -168,7 +229,23 @@ docker-compose up -d appextrato
 docker-compose logs -f appextrato
 ```
 
-### Exemplo 3: Debug/Troubleshooting
+### Exemplo 3: Executar Conciliação
+
+```bash
+# Conciliar T_EXTRATO (padrão)
+python -m src.gmail_to_sheets.app conciliacao
+
+# Conciliar outra sheet
+python -m src.gmail_to_sheets.app conciliacao OUTRA_SHEET
+
+# Conciliar e salvar log
+python -m src.gmail_to_sheets.app conciliacao T_EXTRATO 2>&1 | tee conciliacao.log
+
+# Testar conciliação
+python test_conciliation_process.py
+```
+
+### Exemplo 4: Debug/Troubleshooting
 
 ```bash
 # Executar uma vez com logs detalhados
@@ -179,6 +256,9 @@ python -m src.gmail_to_sheets.app run-once 2>&1 | tee debug.log
 
 # Testar validação especificamente
 python test_entradas_process.py
+
+# Testar conciliação
+python test_conciliation_process.py
 
 # Ver logs históricos
 tail -100 logs/gmail-to-sheets.log | grep ERROR
@@ -343,7 +423,9 @@ sudo journalctl --vacuum=time=30d
 - [ ] `.env` configurado com credenciais válidas
 - [ ] Credenciais arquivos no lugar certo
 - [ ] Teste local passou (`python test_entradas_process.py`)
+- [ ] Teste de conciliação passou (`python test_conciliation_process.py`)
 - [ ] Uma execução testada (`python -m src.gmail_to_sheets.app run-once`)
+- [ ] Conciliação testada (`python -m src.gmail_to_sheets.app conciliacao`)
 - [ ] Pronto para produção (`python -m src.gmail_to_sheets.app run-scheduled`)
 
 ---
