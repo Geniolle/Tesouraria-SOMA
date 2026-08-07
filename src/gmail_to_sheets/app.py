@@ -96,6 +96,8 @@ class AppOrchestrator:
 
     def run_interactive(self) -> None:
         """Run scheduler in interactive mode (with signal handlers)."""
+        import time
+
         def signal_handler(signum, frame):
             logger.info(f"Received signal {signum}")
             self.stop_scheduler()
@@ -109,9 +111,9 @@ class AppOrchestrator:
             self.start_scheduler()
             logger.info("Application running. Press Ctrl+C to stop.")
 
-            # Keep the application running
-            while True:
-                signal.pause()
+            # Keep the application running (cross-platform)
+            while self.is_running:
+                time.sleep(1)
 
         except KeyboardInterrupt:
             logger.info("Keyboard interrupt received")
