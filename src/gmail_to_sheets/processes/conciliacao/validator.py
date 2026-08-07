@@ -50,7 +50,7 @@ class ConciliationValidator:
 
         Critérios:
         - DOC.SOMA deve estar vazio
-        - ID_INTERNO deve estar preenchido
+        - ID_INTERNO deve estar preenchido e ter formato válido (3 letras + 10 dígitos)
 
         Args:
             row: Dados da linha
@@ -77,7 +77,39 @@ class ConciliationValidator:
         if not id_interno:
             return False, "ID_INTERNO vazio"
 
+        # Validar formato: 3 letras + 10 dígitos (ex: ENT0000000270, EXT0000001234)
+        if not self._is_valid_id_format(id_interno):
+            return False, f"ID_INTERNO formato inválido: {id_interno}"
+
         return True, ""
+
+    def _is_valid_id_format(self, id_interno: str) -> bool:
+        """
+        Valida formato de ID_INTERNO: 3 letras + 10 dígitos.
+
+        Exemplos válidos:
+        - ENT0000000270
+        - EXT0000001234
+        - DIA0000000001
+
+        Args:
+            id_interno: ID para validar
+
+        Returns:
+            True se válido, False caso contrário
+        """
+        if len(id_interno) != 13:
+            return False
+
+        # Primeiras 3 caracteres devem ser letras
+        if not id_interno[:3].isalpha():
+            return False
+
+        # Últimos 10 caracteres devem ser dígitos
+        if not id_interno[3:].isdigit():
+            return False
+
+        return True
 
     def extract_search_key(self, row: list) -> str:
         """
