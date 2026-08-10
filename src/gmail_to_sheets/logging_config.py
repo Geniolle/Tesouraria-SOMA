@@ -1,10 +1,11 @@
 """
 Logging configuration for the application.
 
-Sets up structured logging to file and console.
+Sets up structured logging to file and console with automatic rotation.
 """
 
 import logging
+import logging.handlers
 from pathlib import Path
 
 
@@ -23,8 +24,19 @@ def setup_logging(log_file: str, log_level: str) -> None:
         "[%(asctime)s] %(levelname)-8s [%(name)s] %(message)s"
     )
 
-    # File handler
-    file_handler = logging.FileHandler(log_path)
+    root_logger = logging.getLogger()
+
+    # Clear existing handlers to avoid duplicates when setup_logging is called multiple times
+    root_logger.handlers.clear()
+
+    root_logger.setLevel(getattr(logging, log_level.upper()))
+
+    # Rotating file handler: 50MB max, keep 5 backups
+    file_handler = logging.handlers.RotatingFileHandler(
+        str(log_path),
+        maxBytes=50 * 1024 * 1024,  # 50 MB
+        backupCount=5
+    )
     file_handler.setLevel(getattr(logging, log_level.upper()))
     file_handler.setFormatter(logging.Formatter(log_format))
 
@@ -33,10 +45,7 @@ def setup_logging(log_file: str, log_level: str) -> None:
     console_handler.setLevel(getattr(logging, log_level.upper()))
     console_handler.setFormatter(logging.Formatter(log_format))
 
-    # Root logger
-    root_logger = logging.getLogger()
-    root_logger.setLevel(getattr(logging, log_level.upper()))
     root_logger.addHandler(file_handler)
     root_logger.addHandler(console_handler)
 
-    root_logger.info(f"Logging initialized: level={log_level}, file={log_path}")
+    root_logger.info(f"Logging initialized: level={log_level}, file={log_path}, max_size=50MB")
