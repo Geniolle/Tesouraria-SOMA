@@ -81,7 +81,7 @@ class TransferService:
     def _load_existing_ids(self) -> set:
         """Load existing IDs from target sheet."""
         try:
-            range_name = f"{self.target_sheet}!A2:Z99999"
+            range_name = self.sheets_client.get_data_range(self.spreadsheet_id, self.target_sheet)
             result = self.sheets_client.service.spreadsheets().values().get(
                 spreadsheetId=self.spreadsheet_id,
                 range=range_name,
@@ -136,7 +136,7 @@ class TransferService:
             logger.info(f"Starting batch transfer from {self.source_sheet} to {self.target_sheet}")
 
             # Load source data
-            range_name = f"{self.source_sheet}!A2:Z99999"
+            range_name = self.sheets_client.get_data_range(self.spreadsheet_id, self.source_sheet)
             result = self.sheets_client.service.spreadsheets().values().get(
                 spreadsheetId=self.spreadsheet_id,
                 range=range_name,

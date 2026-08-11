@@ -113,7 +113,7 @@ class TransferMatchingService:
     def _load_reference_data(self) -> list[list]:
         """Load reference data for matching."""
         try:
-            range_name = f"{self.reference_sheet}!A2:Z99999"
+            range_name = self.sheets_client.get_data_range(self.spreadsheet_id, self.reference_sheet)
             result = self.sheets_client.service.spreadsheets().values().get(
                 spreadsheetId=self.spreadsheet_id,
                 range=range_name,
@@ -130,7 +130,7 @@ class TransferMatchingService:
     def _init_sequential_state(self) -> None:
         """Initialize sequential state from existing DESCRIÇÃO SOMA values."""
         try:
-            range_name = f"{self.target_sheet}!A2:Z99999"
+            range_name = self.sheets_client.get_data_range(self.spreadsheet_id, self.target_sheet)
             result = self.sheets_client.service.spreadsheets().values().get(
                 spreadsheetId=self.spreadsheet_id,
                 range=range_name,
@@ -178,7 +178,7 @@ class TransferMatchingService:
     def _load_existing_ids(self) -> dict:
         """Load existing IDs from target with their row numbers."""
         try:
-            range_name = f"{self.target_sheet}!A2:Z99999"
+            range_name = self.sheets_client.get_data_range(self.spreadsheet_id, self.target_sheet)
             result = self.sheets_client.service.spreadsheets().values().get(
                 spreadsheetId=self.spreadsheet_id,
                 range=range_name,
@@ -236,7 +236,7 @@ class TransferMatchingService:
             logger.info("Starting integrated transfer+matching (batch optimized)...")
 
             # Load source data
-            range_name = f"{self.source_sheet}!A2:Z99999"
+            range_name = self.sheets_client.get_data_range(self.spreadsheet_id, self.source_sheet)
             result = self.sheets_client.service.spreadsheets().values().get(
                 spreadsheetId=self.spreadsheet_id,
                 range=range_name,

@@ -177,7 +177,7 @@ class MatchingService:
     def _load_data(self, sheet_name: str) -> list[list]:
         """Load all data rows from sheet."""
         try:
-            range_name = f"{sheet_name}!A2:Z99999"
+            range_name = self.sheets_client.get_data_range(self.spreadsheet_id, sheet_name)
             result = self.sheets_client.service.spreadsheets().values().get(
                 spreadsheetId=self.spreadsheet_id,
                 range=range_name,
@@ -205,7 +205,7 @@ class MatchingService:
 
             num_rows = len(data)
 
-            range_name = f"{sheet_name}!A2:Z99999"
+            range_name = self.sheets_client.get_data_range(self.spreadsheet_id, sheet_name)
             self.sheets_client.service.spreadsheets().values().update(
                 spreadsheetId=self.spreadsheet_id,
                 range=range_name,
@@ -482,7 +482,7 @@ class MatchingService:
         doc_soma_str = str(doc_soma or "").strip()
         if not doc_soma_str:
             return True
-        return doc_soma_str.upper() == "EM ERRO"
+        return doc_soma_str.upper() in {"EM ERRO", "ANALISAR"}
 
     @staticmethod
     def _normalize_text(text: str) -> str:

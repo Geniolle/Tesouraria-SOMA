@@ -60,8 +60,13 @@ class ConciliationValidator:
             Tupla (is_valid, error_message)
         """
         # Encontrar índices de colunas
-        doc_soma_idx = self.column_indices.get("DOC. SOMA", 0)
-        id_interno_idx = self.column_indices.get("ID_INTERNO", 8)
+        doc_soma_idx = self.column_indices.get("DOC. SOMA")
+        id_interno_idx = self.column_indices.get("ID_INTERNO")
+
+        if doc_soma_idx is None:
+            return False, "DOC.SOMA ausente"
+        if id_interno_idx is None:
+            return False, "ID_INTERNO ausente"
 
         # Validar DOC.SOMA vazio
         if doc_soma_idx < len(row) and row[doc_soma_idx]:
@@ -121,7 +126,7 @@ class ConciliationValidator:
         Returns:
             ID_INTERNO
         """
-        id_interno_idx = self.column_indices.get("ID_INTERNO", 8)
-        if id_interno_idx < len(row):
+        id_interno_idx = self.column_indices.get("ID_INTERNO")
+        if id_interno_idx is not None and id_interno_idx < len(row):
             return str(row[id_interno_idx]).strip()
         return ""

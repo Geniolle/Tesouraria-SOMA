@@ -132,6 +132,19 @@ class SheetsClient:
             logger.error(f"Failed to get headers: {e}")
             raise
 
+    def get_data_range(
+        self,
+        spreadsheet_id: str,
+        sheet_name: str,
+        start_row: int = 2,
+        end_row: int = 99999,
+    ) -> str:
+        """Build a data range that adapts to the current header width."""
+        headers = self.get_headers(spreadsheet_id, sheet_name)
+        last_col = self._number_to_column(max(len(headers), 1))
+        quoted_sheet = self._quote_sheet_name(sheet_name)
+        return f"{quoted_sheet}!A{start_row}:{last_col}{end_row}"
+
     def get_row(
         self,
         spreadsheet_id: str,

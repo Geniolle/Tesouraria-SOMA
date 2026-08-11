@@ -25,6 +25,9 @@ class ReconciliationService:
         self.spreadsheet_id = spreadsheet_id
         self.source_sheet = source_sheet
         self.column_indices = self._load_column_indices()
+        self.doc_soma_idx = self.column_indices.get("DOC. SOMA")
+        if self.doc_soma_idx is None:
+            raise RuntimeError(f"Coluna DOC. SOMA não encontrada em {self.source_sheet}")
         self.batch_updates = []
 
     def _load_column_indices(self) -> dict:
@@ -52,8 +55,7 @@ class ReconciliationService:
             row_number: Número da linha para atualizar
             doc_soma: Valor de DOC.SOMA
         """
-        doc_soma_idx = self.column_indices.get("DOC. SOMA", 0)
-        col_letter = chr(ord('A') + doc_soma_idx)
+        col_letter = self._number_to_column(self.doc_soma_idx + 1)
         cell_address = f"{col_letter}{row_number}"
         range_name = f"{self.source_sheet}!{cell_address}"
 
@@ -107,3 +109,13 @@ class ReconciliationService:
     def clear_batch(self) -> None:
         """Limpa o batch de atualizações."""
         self.batch_updates = []
+
+    @staticmethod
+    def _number_to_column(col_num: int) -> str:
+        """Convert column number to Excel-style letters."""
+        col_letter = ""
+        while col_num > 0:
+            col_num -= 1
+            col_letter = chr(65 + col_num % 26) + col_letter
+            col_num //= 26
+        return col_letter

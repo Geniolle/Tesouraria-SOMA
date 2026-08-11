@@ -114,7 +114,7 @@ class EntradasOrchestrator:
             # Load data
             result = self.sheets_client.service.spreadsheets().values().get(
                 spreadsheetId=self.spreadsheet_id,
-                range="DÍZIMOS/OFERTAS!A2:Z99999",
+                range=self.sheets_client.get_data_range(self.spreadsheet_id, "DÍZIMOS/OFERTAS"),
             ).execute()
 
             rows = result.get("values", [])

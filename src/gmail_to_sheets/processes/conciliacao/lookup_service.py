@@ -49,15 +49,19 @@ class LookupService:
 
             result = self.sheets_client.service.spreadsheets().values().get(
                 spreadsheetId=self.spreadsheet_id,
-                range="CONTAORDEM!A2:Z99999",
+                range=self.sheets_client.get_data_range(self.spreadsheet_id, "CONTAORDEM"),
             ).execute()
 
             rows = result.get("values", [])
             logger.info(f"      Carregadas {len(rows)} linhas de CONTAORDEM")
 
             # Encontrar índices
-            id_interno_idx = self.column_indices.get("ID_INTERNO", 16)
-            doc_soma_idx = self.column_indices.get("DOC. SOMA", 4)
+            id_interno_idx = self.column_indices.get("ID_INTERNO")
+            doc_soma_idx = self.column_indices.get("DOC. SOMA")
+            if id_interno_idx is None:
+                raise RuntimeError("Coluna ID_INTERNO não encontrada em CONTAORDEM")
+            if doc_soma_idx is None:
+                raise RuntimeError("Coluna DOC. SOMA não encontrada em CONTAORDEM")
 
             # Indexar por ID_INTERNO para lookup rápido
             for row_num, row in enumerate(rows, start=2):

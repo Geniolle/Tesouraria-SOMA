@@ -83,7 +83,7 @@ class SheetsWriter:
                 return 0
 
             # Get all data rows - use large range to capture all
-            range_name = f"{self.sheet_name}!A2:Z99999"
+            range_name = self.sheets_client.get_data_range(self.spreadsheet_id, self.sheet_name)
             result = self.sheets_client.service.spreadsheets().values().get(
                 spreadsheetId=self.spreadsheet_id,
                 range=range_name,
@@ -130,7 +130,7 @@ class SheetsWriter:
             logger.info("Loading existing transactions for deduplication...")
 
             # Get all data rows (skip header) - use large range to capture all
-            range_name = f"{self.sheet_name}!A2:Z99999"
+            range_name = self.sheets_client.get_data_range(self.spreadsheet_id, self.sheet_name)
             result = self.sheets_client.service.spreadsheets().values().get(
                 spreadsheetId=self.spreadsheet_id,
                 range=range_name,

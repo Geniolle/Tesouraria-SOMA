@@ -53,7 +53,7 @@ class TransactionRecoveryService:
         """Load all data from source sheet for analysis."""
         try:
             logger.debug(f"Loading data from {self.source_sheet}...")
-            range_name = f"{self.source_sheet}!A2:Z99999"
+            range_name = self.sheets_client.get_data_range(self.spreadsheet_id, self.source_sheet)
             result = self.sheets_client.service.spreadsheets().values().get(
                 spreadsheetId=self.spreadsheet_id,
                 range=range_name,

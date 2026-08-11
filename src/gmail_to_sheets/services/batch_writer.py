@@ -75,7 +75,7 @@ class BatchWriter:
             if source_data:
                 try:
                     logger.info(f"Batch updating {len(source_data)} rows in {source_sheet}")
-                    range_name = f"{source_sheet}!A2:Z99999"
+                    range_name = self.sheets_client.get_data_range(self.spreadsheet_id, source_sheet)
                     self.sheets_client.service.spreadsheets().values().update(
                         spreadsheetId=self.spreadsheet_id,
                         range=range_name,

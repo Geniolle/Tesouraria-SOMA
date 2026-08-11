@@ -61,7 +61,7 @@ class EntryDeduplicationService:
             # Load all data rows
             result = self.sheets_client.service.spreadsheets().values().get(
                 spreadsheetId=self.spreadsheet_id,
-                range=f"{self.target_sheet}!A2:Z99999",
+                range=self.sheets_client.get_data_range(self.spreadsheet_id, self.target_sheet),
             ).execute()
 
             rows = result.get("values", [])
