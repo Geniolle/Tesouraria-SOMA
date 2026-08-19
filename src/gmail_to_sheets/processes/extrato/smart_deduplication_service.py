@@ -36,9 +36,13 @@ class SmartDeduplicationService:
 
         try:
             # Load all data from CONTAORDEM
+            range_name = self.sheets_client.get_data_range(self.spreadsheet_id, self.target_sheet)
+            if not isinstance(range_name, str) or not range_name:
+                range_name = f"{self.target_sheet}!A2:Z99999"
+
             result = self.sheets_client.service.spreadsheets().values().get(
                 spreadsheetId=self.spreadsheet_id,
-                range=self.sheets_client.get_data_range(self.spreadsheet_id, self.target_sheet),
+                range=range_name,
             ).execute()
 
             rows = result.get("values", [])

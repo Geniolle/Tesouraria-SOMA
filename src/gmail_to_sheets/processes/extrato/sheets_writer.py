@@ -1,16 +1,23 @@
-"""
-Sheets Writer Service
+"""Sheets writer service for the extrato process."""
 
-Handles writing parsed transactions to Google Sheets.
-"""
+from __future__ import annotations
 
 import logging
-from datetime import datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Optional
 
 from src.gmail_to_sheets.clients.sheets_client import SheetsClient
 from src.gmail_to_sheets.models.transaction import Transaction
+from src.gmail_to_sheets.processes.extrato.sheets_writer_support import (
+    format_decimal,
+    load_existing_dedup_keys,
+    load_headers,
+    load_last_sequence,
+    map_columns,
+    parse_opening_balance,
+    transaction_to_row,
+    write_closing_balance,
+)
 from src.gmail_to_sheets.validators.deduplication import DeduplicationService
 
 logger = logging.getLogger(__name__)
@@ -24,15 +31,7 @@ class SheetsWriter:
         sheets_client: SheetsClient,
         spreadsheet_id: str,
         sheet_name: str,
-    ):
-        """
-        Initialize Sheets writer.
-
-        Args:
-            sheets_client: Authenticated Sheets client
-            spreadsheet_id: Target spreadsheet ID
-            sheet_name: Target sheet name
-        """
+    ) -> None:
         self.sheets_client = sheets_client
         self.spreadsheet_id = spreadsheet_id
         self.sheet_name = sheet_name
@@ -41,137 +40,45 @@ class SheetsWriter:
         self.last_sequence = self._load_last_sequence()
 
     def _load_headers(self) -> list[str]:
-        """
-        Load headers from sheet.
-
-        Returns:
-            List of header names
-        """
+        """Load headers from sheet."""
         try:
-            headers = self.sheets_client.get_headers(
-                self.spreadsheet_id, self.sheet_name
-            )
-            logger.info(f"Loaded {len(headers)} columns from {self.sheet_name}")
+            headers = load_headers(self.sheets_client, self.spreadsheet_id, self.sheet_name)
+            logger.info("Loaded %s columns from %s", len(headers), self.sheet_name)
             return headers
-        except Exception as e:
-            logger.error(f"Failed to load headers: {e}")
+        except Exception as exc:
+            logger.error("Failed to load headers: %s", exc)
             raise
 
     def _map_columns(self) -> dict[str, int]:
-        """
-        Map column names to indices.
-
-        Returns:
-            Dictionary mapping column name to 0-indexed position
-        """
-        indices = {}
-        for idx, header in enumerate(self.headers):
-            indices[header.strip()] = idx
-        return indices
+        """Map column names to indices."""
+        return map_columns(self.headers)
 
     def _load_last_sequence(self) -> int:
-        """
-        Load the last ID_INTERNO sequence number from sheet.
-
-        Returns:
-            Last sequence number (or 0 if no IDs found)
-        """
+        """Load the last ID_INTERNO sequence number from sheet."""
         try:
-            id_idx = self.column_indices.get("ID_INTERNO")
-            if id_idx is None:
-                logger.debug("ID_INTERNO column not found, starting from 0")
-                return 0
-
-            # Get all data rows - use large range to capture all
-            range_name = self.sheets_client.get_data_range(self.spreadsheet_id, self.sheet_name)
-            result = self.sheets_client.service.spreadsheets().values().get(
-                spreadsheetId=self.spreadsheet_id,
-                range=range_name,
-            ).execute()
-
-            rows = result.get("values", [])
-            if not rows:
-                logger.debug("No existing transactions, starting from 0")
-                return 0
-
-            # Find highest sequence number by scanning all rows
-            max_sequence = 0
-            for row in rows:
-                if id_idx < len(row) and row[id_idx]:
-                    id_interno = row[id_idx].strip()
-                    if id_interno and id_interno.startswith("EXT"):
-                        try:
-                            # Extract numeric part from both formats:
-                            # EXT0000003365 -> 3365
-                            # EXT0001000016 -> 1000016
-                            numeric_part = int(id_interno[3:])
-                            max_sequence = max(max_sequence, numeric_part)
-                        except (ValueError, IndexError):
-                            logger.debug(f"Could not parse ID: {id_interno}")
-                            pass
-
-            logger.info(f"Found last ID_INTERNO sequence: {max_sequence} (found {len(rows)} rows)")
-            return max_sequence
-
-        except Exception as e:
-            logger.warning(f"Error loading last sequence: {e}, starting from 0")
+            return load_last_sequence(
+                self.sheets_client,
+                self.spreadsheet_id,
+                self.sheet_name,
+                self.column_indices,
+            )
+        except Exception as exc:
+            logger.warning("Error loading last sequence: %s, starting from 0", exc)
             return 0
 
-    def load_existing_dedup_keys(
-        self, dedup_service: DeduplicationService
-    ) -> None:
-        """
-        Load existing transactions for deduplication.
-
-        Args:
-            dedup_service: Deduplication service to populate
-        """
+    def load_existing_dedup_keys(self, dedup_service: DeduplicationService) -> None:
+        """Load existing transactions for deduplication."""
         try:
             logger.info("Loading existing transactions for deduplication...")
-
-            # Get all data rows (skip header) - use large range to capture all
-            range_name = self.sheets_client.get_data_range(self.spreadsheet_id, self.sheet_name)
-            result = self.sheets_client.service.spreadsheets().values().get(
-                spreadsheetId=self.spreadsheet_id,
-                range=range_name,
-            ).execute()
-
-            rows = result.get("values", [])
-
-            if not rows:
-                logger.info("No existing transactions found")
-                return
-
-            # Get column indices safely
-            data_mov_idx = self.column_indices.get("DATA MOV.")
-            desc_idx = self.column_indices.get("DESCRIÇÃO")
-            valor_idx = self.column_indices.get("IMPORTÂNCIA")
-
-            if data_mov_idx is None or desc_idx is None or valor_idx is None:
-                logger.error("Missing required columns for deduplication")
-                return
-
-            existing_keys = set()
-            for row in rows:
-                try:
-                    # Build key from: DATA MOV | DESCRICAO | IMPORTANCIA
-                    if data_mov_idx < len(row) and desc_idx < len(row) and valor_idx < len(row):
-                        data_mov = str(row[data_mov_idx]).strip() if row[data_mov_idx] else ""
-                        descricao = str(row[desc_idx]).strip() if row[desc_idx] else ""
-                        valor = str(row[valor_idx]).strip() if row[valor_idx] else ""
-
-                        if data_mov and descricao and valor:
-                            key = f"{data_mov}|{descricao}|{valor}"
-                            existing_keys.add(key)
-                except Exception as e:
-                    logger.debug(f"Error processing row: {e}")
-                    continue
-
-            dedup_service.add_existing(existing_keys)
-            logger.info(f"Loaded {len(existing_keys)} existing transactions from {len(rows)} rows")
-
-        except Exception as e:
-            logger.error(f"Failed to load existing transactions: {e}")
+            load_existing_dedup_keys(
+                self.sheets_client,
+                self.spreadsheet_id,
+                self.sheet_name,
+                self.column_indices,
+                dedup_service,
+            )
+        except Exception as exc:
+            logger.error("Failed to load existing transactions: %s", exc)
             raise
 
     def write_transactions(
@@ -180,47 +87,21 @@ class SheetsWriter:
         opening_balance: Optional[str] = None,
         dedup_service: Optional[DeduplicationService] = None,
     ) -> dict:
-        """
-        Write transactions to sheet with progressive balance calculation.
-
-        Args:
-            transactions: List of transactions to write
-            opening_balance: Opening balance from MT940 (used as first saldo)
-            dedup_service: Optional deduplication service
-
-        Returns:
-            Write statistics including written_ids list
-        """
+        """Write transactions to sheet with progressive balance calculation."""
         try:
-            logger.info(f"Writing {len(transactions)} transactions...")
+            logger.info("Writing %s transactions...", len(transactions))
 
             rows_to_write = []
             written_ids = []
             written = 0
             skipped = 0
             next_sequence = self.last_sequence + 1
+            current_balance = parse_opening_balance(opening_balance)
 
-            # Validate opening_balance (None or empty string is invalid, but 0 is valid)
-            if opening_balance is None:
-                raise ValueError("opening_balance is required")
-
-            if isinstance(opening_balance, str) and not opening_balance.strip():
-                raise ValueError("opening_balance is required")
-
-            # Convert opening_balance to Decimal
-            try:
-                if isinstance(opening_balance, str):
-                    current_balance = Decimal(opening_balance.strip().replace(",", "."))
-                else:
-                    current_balance = Decimal(str(opening_balance))
-            except (ValueError, TypeError, InvalidOperation):
-                raise ValueError(f"Invalid opening_balance: {opening_balance}")
-
-            logger.info(f"Starting balance: {current_balance}")
-            logger.info(f"Starting ID sequence from: {next_sequence}")
+            logger.info("Starting balance: %s", current_balance)
+            logger.info("Starting ID sequence from: %s", next_sequence)
 
             for txn in transactions:
-                # Update balance BEFORE checking duplicates
                 try:
                     valor_decimal = Decimal(str(txn.valor).replace(",", "."))
                 except (ValueError, TypeError):
@@ -228,22 +109,19 @@ class SheetsWriter:
 
                 current_balance += valor_decimal
 
-                # Check for duplicates AFTER balance update
                 if dedup_service and dedup_service.is_duplicate(txn):
-                    logger.debug(f"Skipping duplicate: {txn.dedup_key()}")
+                    logger.debug("Skipping duplicate: %s", txn.dedup_key())
                     skipped += 1
                     continue
 
-                # Generate sequential ID using last known sequence
                 sequencial = next_sequence
                 next_sequence += 1
-
-                # Generate ID_INTERNO in the same format used later
                 id_interno = f"EXT{str(sequencial).zfill(10)}"
 
-                # Build row with calculated balance and ID
-                row = self._transaction_to_row(
-                    txn,
+                row = transaction_to_row(
+                    txn=txn,
+                    headers=self.headers,
+                    column_indices=self.column_indices,
                     saldo_contabilistico=current_balance,
                     sequencial=sequencial,
                 )
@@ -263,15 +141,13 @@ class SheetsWriter:
                     "written_ids": [],
                 }
 
-            # Append to sheet
             result = self.sheets_client.append_rows(
                 self.spreadsheet_id,
                 self.sheet_name,
                 rows_to_write,
             )
 
-            logger.info(f"Successfully wrote {written} transactions with IDs: {written_ids}")
-
+            logger.info("Successfully wrote %s transactions with IDs: %s", written, written_ids)
             return {
                 "written": written,
                 "skipped": skipped,
@@ -279,93 +155,36 @@ class SheetsWriter:
                 "written_ids": written_ids,
                 "api_response": result,
             }
-
-        except Exception as e:
-            logger.error(f"Failed to write transactions: {e}")
+        except Exception as exc:
+            logger.error("Failed to write transactions: %s", exc)
             raise
 
     def _transaction_to_row(
-        self, txn: Transaction, saldo_contabilistico = None, sequencial: int = 0
+        self,
+        txn: Transaction,
+        saldo_contabilistico=None,
+        sequencial: int = 0,
     ) -> list:
-        """
-        Convert transaction to sheet row with formatting.
-
-        Args:
-            txn: Transaction to convert
-            saldo_contabilistico: Calculated progressive balance (Decimal or float)
-            sequencial: Sequential number for ID_INTERNO generation
-
-        Returns:
-            List of values in column order
-        """
-        from decimal import Decimal
-
-        # Create row with empty values for all columns
-        row = [""] * len(self.headers)
-
-        # Format IMPORTÂNCIA with 0,00 format
-        try:
-            valor_decimal = Decimal(str(txn.valor).replace(",", "."))
-            valor_formatado = format(valor_decimal, ".2f").replace(".", ",")
-        except (ValueError, TypeError):
-            valor_formatado = "0,00"
-
-        # Format SALDO CONTABILÍSTICO if provided
-        saldo_formatado = ""
-        if saldo_contabilistico is not None:
-            try:
-                if isinstance(saldo_contabilistico, Decimal):
-                    saldo_formatado = format(saldo_contabilistico, ".2f").replace(".", ",")
-                else:
-                    saldo_decimal = Decimal(str(saldo_contabilistico))
-                    saldo_formatado = format(saldo_decimal, ".2f").replace(".", ",")
-            except (ValueError, TypeError):
-                saldo_formatado = "0,00"
-
-        # Generate ID_INTERNO if not set
-        # Format: EXT0000NNNNN (e.g., EXT0000003366)
-        id_interno = txn.id_interno
-        if not id_interno and sequencial > 0:
-            id_interno = f"EXT{str(sequencial).zfill(10)}"
-
-        # Map transaction fields to columns
-        column_mapping = {
-            "DATA MOV.": txn.data_mov,
-            "DATA VALOR": txn.data_valor,
-            "DESCRIÇÃO": txn.descricao,
-            "IMPORTÂNCIA": valor_formatado,
-            "TIPO": txn.tipo,
-            "TIMESTAMP": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
-            "SALDO CONTABILÍSTICO": saldo_formatado,
-            "ID_INTERNO": id_interno,
-        }
-
-        # Fill in values
-        for col_name, value in column_mapping.items():
-            idx = self.column_indices.get(col_name)
-            if idx is not None:
-                row[idx] = value
-
-        return row
+        """Convert transaction to sheet row with formatting."""
+        return transaction_to_row(
+            txn=txn,
+            headers=self.headers,
+            column_indices=self.column_indices,
+            saldo_contabilistico=saldo_contabilistico,
+            sequencial=sequencial,
+        )
 
     def write_closing_balance(self, row_number: int, balance: str) -> None:
-        """
-        Write closing balance to specific row.
-
-        Args:
-            row_number: Row number (1-indexed)
-            balance: Balance value
-        """
+        """Write closing balance to specific row."""
         try:
-            saldo_idx = self.column_indices.get("SALDO CONTABILÍSTICO", 6)
-            if saldo_idx is not None:
-                self.sheets_client.update_cell(
-                    self.spreadsheet_id,
-                    self.sheet_name,
-                    row_number,
-                    saldo_idx + 1,  # Convert to 1-indexed
-                    balance,
-                )
-        except Exception as e:
-            logger.error(f"Failed to write closing balance: {e}")
+            write_closing_balance(
+                self.sheets_client,
+                self.spreadsheet_id,
+                self.sheet_name,
+                self.column_indices,
+                row_number,
+                balance,
+            )
+        except Exception as exc:
+            logger.error("Failed to write closing balance: %s", exc)
             raise
