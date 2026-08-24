@@ -114,38 +114,40 @@ class EntryStatusUpdater:
                 "errors": []
             }
 
-        try:
-            col_letter = self._number_to_column(self.finance_column_index + 1)
-            range_name = f"{self.SOURCE_SHEET}!{col_letter}{min(row_numbers)}:{col_letter}{max(row_numbers)}"
+        updated_count = 0
+        failed_count = 0
+        errors = []
 
-            # Prepare values to update
-            values = [[self.STATUS_VALUE] for _ in range(len(row_numbers))]
+        for row_number in sorted(row_numbers):
+            try:
+                col_number = self.finance_column_index + 1
 
-            logger.info(f"Updating {len(row_numbers)} rows in batch...")
+                logger.debug(f"Updating row {row_number}...")
 
-            result = self.sheets_client.service.spreadsheets().values().update(
-                spreadsheetId=self.spreadsheet_id,
-                range=range_name,
-                valueInputOption="USER_ENTERED",
-                body={"values": values}
-            ).execute()
+                self.sheets_client.update_cell(
+                    self.spreadsheet_id,
+                    self.SOURCE_SHEET,
+                    row_number,
+                    col_number,
+                    self.STATUS_VALUE
+                )
 
-            updated_count = result.get("updatedCells", 0)
-            logger.info(f"Batch update completed: {updated_count} cells updated")
+                updated_count += 1
+                logger.info(f"Row {row_number} marked as {self.STATUS_VALUE}")
 
-            return {
-                "updated": updated_count,
-                "failed": len(row_numbers) - updated_count,
-                "errors": []
-            }
+            except Exception as e:
+                failed_count += 1
+                error_msg = f"Row {row_number}: {e}"
+                errors.append(error_msg)
+                logger.error(f"Failed to update row {row_number}: {e}")
 
-        except Exception as e:
-            logger.error(f"Batch update failed: {e}")
-            return {
-                "updated": 0,
-                "failed": len(row_numbers),
-                "errors": [str(e)]
-            }
+        logger.info(f"Batch update completed: {updated_count} updated, {failed_count} failed")
+
+        return {
+            "updated": updated_count,
+            "failed": failed_count,
+            "errors": errors
+        }
 
     @staticmethod
     def _number_to_column(col_num: int) -> str:
