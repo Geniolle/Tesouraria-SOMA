@@ -8,7 +8,7 @@ WORKDIR /build
 # Copy requirements and application code
 COPY pyproject.toml setup.py* ./
 COPY src/ ./src/
-RUN pip install --no-cache-dir --user --no-deps -e .
+RUN pip install --no-cache-dir --user -e .
 
 # Stage 2: Runtime
 FROM python:3.11-slim
