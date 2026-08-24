@@ -1,11 +1,11 @@
 """
 Entradas Process Orchestrator
 
-Coordinates the complete pipeline for transferring entries from
-DÍZIMOS/OFERTAS to CONTAORDEM.
+Coordinates the complete pipeline for marking entries in DÍZIMOS/OFERTAS
+when their OCR processing is complete (DOC.SOMA is filled).
 
 Pipeline:
-1. Validate entries (TIPO, DOC.SOMA, FINANCE, VALOR, DATA)
+1. Validate entries (DATA, TIPO, DOC.SOMA filled, FINANCE empty, VALOR > 0)
 2. Deduplicate against CONTAORDEM (data+valor+descrição)
 3. Transfer to CONTAORDEM with mapped fields
 4. Update FINANCE = "Transferido" in DÍZIMOS/OFERTAS

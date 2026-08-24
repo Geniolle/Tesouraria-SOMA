@@ -57,7 +57,7 @@ class EntryValidator:
 
         Criteria:
         - TIPO must be "DÍZIMOS/OFERTAS" or "DIA VERBO MISSÔES"
-        - DOC.SOMA must be empty
+        - DOC.SOMA must be filled (não vazio)
         - FINANCE must be empty
         - VALOR must be > 0
         - DATA must exist and be valid
@@ -85,9 +85,9 @@ class EntryValidator:
             if tipo not in ["DÍZIMOS/OFERTAS", "DIA VERBO MISSÔES"]:
                 return False, f"TIPO inválido: {tipo}"
 
-            # Validate DOC.SOMA (must be empty)
-            if doc_soma and str(doc_soma).strip():
-                return False, "DOC.SOMA não está vazio"
+            # Validate DOC.SOMA (must be filled/não vazio)
+            if not doc_soma or not str(doc_soma).strip():
+                return False, "DOC.SOMA está vazio"
 
             # Validate FINANCE (must be empty)
             if finance and str(finance).strip():
@@ -136,8 +136,8 @@ class EntryValidator:
             if tipo not in ["DÍZIMOS/OFERTAS", "DIA VERBO MISSÔES"]:
                 errors.append(f"TIPO inválido: {tipo}")
 
-            if doc_soma and str(doc_soma).strip():
-                errors.append("DOC.SOMA não está vazio")
+            if not doc_soma or not str(doc_soma).strip():
+                errors.append("DOC.SOMA está vazio")
 
             if finance and str(finance).strip():
                 errors.append("FINANCE não está vazio")
