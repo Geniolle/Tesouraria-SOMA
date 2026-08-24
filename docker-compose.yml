@@ -41,11 +41,6 @@ services:
 
     # Restart policy
     restart: on-failure
-    restart_policy:
-      condition: on-failure
-      delay: 30s
-      max_attempts: 3
-      window: 60s
 
     # Resource limits
     deploy:

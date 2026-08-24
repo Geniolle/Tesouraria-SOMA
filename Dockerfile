@@ -5,8 +5,9 @@ FROM python:3.11-slim as builder
 
 WORKDIR /build
 
-# Copy requirements and install dependencies
+# Copy requirements and application code
 COPY pyproject.toml setup.py* ./
+COPY src/ ./src/
 RUN pip install --no-cache-dir --user --no-deps -e .
 
 # Stage 2: Runtime
