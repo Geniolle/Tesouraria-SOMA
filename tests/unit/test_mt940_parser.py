@@ -253,6 +253,22 @@ class TestMT940ParserDescriptions:
         desc = result.transactions[0].descricao
         assert "SALÁRIO" in desc or "SAL" in desc.upper()
 
+
+    def test_parse_cartao_bustrade_sets_tipo_cartao(self):
+        """Test special MT940 description maps TIPO to Cartão."""
+        content = """:20:STARTUMSEITE
+:25:MT940_ACCOUNT
+:28C:0/1
+:60F:C260804EUR1000,00
+:61:2608050805D1000,NMSCPAG.CARTAOBUSTRADE
+:62F:C260804EUR2000,00
+:20:ENDUMSEITE
+"""
+        parser = MT940Parser("test_cartao_bustrade.txt")
+        result = parser.parse(content)
+
+        assert result.transactions[0].tipo == "Cartão"
+
     def test_parse_empty_description(self):
         """Test handling of transactions with minimal/empty description."""
         content = """:20:STARTUMSEITE

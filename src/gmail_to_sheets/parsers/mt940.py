@@ -165,8 +165,6 @@ class MT940Parser:
 
             dc_indicator = content[10]
             is_credit = dc_indicator == "C"
-            tipo = "Entrada" if is_credit else "Saída"
-
             # Extract amount (after position 10, before NMSC)
             nmsc_index = content.find("NMSC")
             if nmsc_index <= 11:
@@ -187,6 +185,8 @@ class MT940Parser:
             if not descricao:
                 return None
 
+            tipo = self._resolve_transaction_type(descricao, is_credit)
+
             transaction = Transaction(
                 data_mov=data_mov_txn,
                 data_valor=data_mov_txn,
@@ -201,6 +201,13 @@ class MT940Parser:
         except Exception as e:
             logger.debug(f"Error parsing transaction: {e}")
             return None
+
+    def _resolve_transaction_type(self, descricao: str, is_credit: bool) -> str:
+        """Resolve transaction type for MT940 rows."""
+        descricao_norm = descricao.replace("/", "").strip().upper()
+        if descricao_norm == "PAG.CARTAOBUSTRADE":
+            return "Cartão"
+        return "Entrada" if is_credit else "Saída"
 
     def _parse_footer(self, lines: list[str]) -> MT940Footer:
         """Parse closing balance section (final balance from end of file)."""
