@@ -1,5 +1,7 @@
-version: '3.8'
-
+#
+# Support compose file for local or future container-based workflows.
+# Production currently runs on the remote server via systemd.
+#
 services:
   gmail-to-sheets:
     build:
