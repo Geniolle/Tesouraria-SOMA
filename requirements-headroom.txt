@@ -1,0 +1,34 @@
+# ==============================================================================
+# Headroom AI - Context Optimization & Compression Layer for AI Agents / LLMs
+# Docs: https://headroom-docs.vercel.app/docs
+# Repo: https://github.com/headroomlabs-ai/headroom
+# Python Version: >= 3.10
+# ==============================================================================
+
+# Instalação Completa (inclui CLI, Proxy, MCP, compressores de texto/código/JSON)
+headroom-ai[all]>=0.36.5
+
+# ------------------------------------------------------------------------------
+# INSTRUÇÕES DE INSTALAÇÃO E USO:
+# ------------------------------------------------------------------------------
+# 1. Instalação padrão via pip:
+#    pip install -r requirements-headroom.txt
+#    # ou diretamente:
+#    pip install "headroom-ai[all]"
+#
+# 2. Instalação isolada da CLI como ferramenta global (Recomendado via uv):
+#    uv tool install --python 3.13 "headroom-ai[all]"
+#
+# 3. Instalação granular por módulos / extras (opcional):
+#    - SDK Core apenas:       pip install headroom-ai
+#    - Proxy Server:          pip install "headroom-ai[proxy]"
+#    - MCP Server:            pip install "headroom-ai[mcp]"
+#    - LangChain Integration: pip install "headroom-ai[langchain]"
+#    - Outros extras:         [ml], [code], [memory], [vector], [agno], [evals]
+#
+# 4. Modos de Operação Principais:
+#    - Iniciar Proxy Local:   headroom proxy --port 8787
+#    - Envelopar Agente:      headroom wrap claude  (ou cursor, aider, codex, etc.)
+#    - Diagnóstico do Setup:  headroom doctor
+#    - Dashboard de Métricas: headroom dashboard
+# ==============================================================================
