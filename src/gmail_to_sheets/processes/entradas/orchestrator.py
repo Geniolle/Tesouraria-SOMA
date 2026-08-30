@@ -17,16 +17,16 @@ import logging
 from src.gmail_to_sheets.clients.sheets_client import SheetsClient
 from src.gmail_to_sheets.config.settings import load_settings
 from src.gmail_to_sheets.logging_config import setup_logging
-from src.gmail_to_sheets.processes.entradas.entry_validator import EntryValidator
 from src.gmail_to_sheets.processes.entradas.entry_deduplication import (
     EntryDeduplicationService,
-)
-from src.gmail_to_sheets.processes.entradas.entry_transfer_service import (
-    EntryTransferService,
 )
 from src.gmail_to_sheets.processes.entradas.entry_status_updater import (
     EntryStatusUpdater,
 )
+from src.gmail_to_sheets.processes.entradas.entry_transfer_service import (
+    EntryTransferService,
+)
+from src.gmail_to_sheets.processes.entradas.entry_validator import EntryValidator
 
 logger = logging.getLogger(__name__)
 
@@ -34,14 +34,14 @@ logger = logging.getLogger(__name__)
 class EntradasOrchestrator:
     """Main orchestrator for Entradas process."""
 
-    def __init__(self):
+    def __init__(self, settings=None, sheets_client: SheetsClient | None = None):
         """Initialize orchestrator."""
-        self.settings = load_settings()
+        self.settings = settings or load_settings()
         setup_logging(self.settings.log_file, self.settings.log_level)
-        self.sheets_client: SheetsClient | None = None
+        self.sheets_client: SheetsClient | None = sheets_client
         self.spreadsheet_id = self.settings.sheets.spreadsheet_id
 
-    def run(self) -> None:
+    def run(self) -> dict:
         """Execute complete Entradas pipeline."""
         try:
             logger.info("=" * 80)
@@ -55,7 +55,13 @@ class EntradasOrchestrator:
             entries = self._load_and_validate_entries()
             if not entries:
                 logger.warning("No valid entries found for transfer")
-                return
+                return {
+                    "validated": 0,
+                    "invalid": 0,
+                    "transferred": 0,
+                    "duplicates": 0,
+                    "updated": 0,
+                }
 
             logger.info(f"Found {len(entries['valid'])} valid entries")
 
@@ -63,7 +69,13 @@ class EntradasOrchestrator:
             deduped_entries = self._deduplicate_entries(entries["valid"])
             if not deduped_entries:
                 logger.warning("No entries after deduplication")
-                return
+                return {
+                    "validated": len(entries["valid"]),
+                    "invalid": len(entries["invalid"]),
+                    "transferred": 0,
+                    "duplicates": 0,
+                    "updated": 0,
+                }
 
             logger.info(f"After deduplication: {len(deduped_entries)} entries")
 
@@ -84,6 +96,13 @@ class EntradasOrchestrator:
             logger.info(f"  - Duplicates: {transfer_result['duplicates']}")
             logger.info(f"  - Status updated: {update_result['updated']}")
             logger.info("=" * 80)
+            return {
+                "validated": len(entries["valid"]),
+                "invalid": len(entries["invalid"]),
+                "transferred": transfer_result["transferred"],
+                "duplicates": transfer_result["duplicates"],
+                "updated": update_result["updated"],
+            }
 
         except Exception as e:
             logger.error(f"Pipeline failed: {e}", exc_info=True)
@@ -92,6 +111,8 @@ class EntradasOrchestrator:
     def _authenticate_sheets(self) -> None:
         """Authenticate with Google Sheets API."""
         try:
+            if self.sheets_client is not None:
+                return
             logger.info("[1/6] Authenticating with Google Sheets...")
             self.sheets_client = SheetsClient(
                 service_account_path=str(self.settings.sheets.service_account_path)

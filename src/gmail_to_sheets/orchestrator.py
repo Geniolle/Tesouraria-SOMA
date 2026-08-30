@@ -15,13 +15,13 @@ from src.gmail_to_sheets.clients.sheets_client import SheetsClient
 from src.gmail_to_sheets.config.settings import load_settings
 from src.gmail_to_sheets.exceptions.application import AuthenticationError
 from src.gmail_to_sheets.logging_config import setup_logging
+from src.gmail_to_sheets.processes.extrato.cash_balance_service import CashBalanceService
 from src.gmail_to_sheets.processes.extrato.pipeline_support import (
     archive_email,
     download_and_parse_attachment,
     select_latest_message,
     validate_mt940_reconciliation,
 )
-from src.gmail_to_sheets.processes.extrato.cash_balance_service import CashBalanceService
 from src.gmail_to_sheets.processes.extrato.sheets_writer import SheetsWriter
 from src.gmail_to_sheets.processes.extrato.smart_deduplication_service import (
     SmartDeduplicationService,
@@ -40,14 +40,19 @@ logger = logging.getLogger(__name__)
 class Orchestrator:
     """Main flow controller for the gmail-to-sheets pipeline."""
 
-    def __init__(self) -> None:
-        self.settings = load_settings()
+    def __init__(
+        self,
+        settings=None,
+        gmail_client: GmailClient | None = None,
+        sheets_client: SheetsClient | None = None,
+    ) -> None:
+        self.settings = settings or load_settings()
         setup_logging(self.settings.log_file, self.settings.log_level)
-        self.gmail_client: GmailClient | None = None
+        self.gmail_client: GmailClient | None = gmail_client
         self.sheets_writer: SheetsWriter | None = None
-        self.sheets_client: SheetsClient | None = None
+        self.sheets_client: SheetsClient | None = sheets_client
 
-    def run(self) -> None:
+    def run(self) -> dict:
         """Execute the complete pipeline."""
         try:
             logger.info("=" * 80)
@@ -61,14 +66,26 @@ class Orchestrator:
             message_ids = self._search_messages()
             if not message_ids:
                 logger.warning("No emails found matching criteria")
-                return
+                return {
+                    "written": 0,
+                    "skipped": 0,
+                    "recovered": 0,
+                    "transferred": 0,
+                    "already_exists": 0,
+                }
 
             message_id = self._select_latest_message(message_ids)
 
             mt940_file = self._download_and_parse(message_id)
             if not mt940_file or not mt940_file.transactions:
                 logger.warning("No transactions found in attachment")
-                return
+                return {
+                    "written": 0,
+                    "skipped": 0,
+                    "recovered": 0,
+                    "transferred": 0,
+                    "already_exists": 0,
+                }
 
             self._validate_mt940_reconciliation(mt940_file)
 
@@ -133,6 +150,13 @@ class Orchestrator:
                             f"  - Cash balance updated in {cash_balance_result['target_cell']}"
                         )
             logger.info("=" * 80)
+            return {
+                "written": result["written"],
+                "skipped": result["skipped"],
+                "recovered": len(recovered_ids),
+                "transferred": transfer_result["transferred"],
+                "already_exists": transfer_result["already_exists"],
+            }
         except Exception as e:
             logger.error(f"Pipeline failed: {e}", exc_info=True)
             raise
@@ -140,6 +164,8 @@ class Orchestrator:
     def _authenticate_gmail(self) -> None:
         """Authenticate with Gmail API."""
         try:
+            if self.gmail_client is not None:
+                return
             logger.info("[2/7] Authenticating with Gmail API...")
             authenticator = GmailAuthenticator(
                 client_secrets_path=self.settings.gmail.client_secrets_path,
@@ -155,6 +181,14 @@ class Orchestrator:
     def _authenticate_sheets(self) -> None:
         """Authenticate with Google Sheets API."""
         try:
+            if self.sheets_client is not None:
+                if not self.sheets_writer:
+                    self.sheets_writer = SheetsWriter(
+                        sheets_client=self.sheets_client,
+                        spreadsheet_id=self.settings.sheets.spreadsheet_id,
+                        sheet_name=self.settings.sheets.sheet_name,
+                    )
+                return
             logger.info("[3/7] Authenticating with Google Sheets...")
             self.sheets_client = SheetsClient(
                 service_account_path=self.settings.sheets.service_account_path

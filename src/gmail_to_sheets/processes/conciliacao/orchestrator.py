@@ -12,11 +12,11 @@ import logging
 from src.gmail_to_sheets.clients.sheets_client import SheetsClient
 from src.gmail_to_sheets.config.settings import load_settings
 from src.gmail_to_sheets.logging_config import setup_logging
-from src.gmail_to_sheets.processes.conciliacao.validator import ConciliationValidator
 from src.gmail_to_sheets.processes.conciliacao.lookup_service import LookupService
 from src.gmail_to_sheets.processes.conciliacao.reconciliation_service import (
     ReconciliationService,
 )
+from src.gmail_to_sheets.processes.conciliacao.validator import ConciliationValidator
 
 logger = logging.getLogger(__name__)
 
@@ -24,20 +24,25 @@ logger = logging.getLogger(__name__)
 class ConciliationOrchestrator:
     """Orquestrador principal do processo de conciliação."""
 
-    def __init__(self, source_sheet: str = "T_EXTRATO"):
+    def __init__(
+        self,
+        source_sheet: str = "T_EXTRATO",
+        settings=None,
+        sheets_client: SheetsClient | None = None,
+    ):
         """
         Inicializa o orquestrador.
 
         Args:
             source_sheet: Sheet de origem (padrão: T_EXTRATO)
         """
-        self.settings = load_settings()
+        self.settings = settings or load_settings()
         setup_logging(self.settings.log_file, self.settings.log_level)
-        self.sheets_client: SheetsClient | None = None
+        self.sheets_client: SheetsClient | None = sheets_client
         self.spreadsheet_id = self.settings.sheets.spreadsheet_id
         self.source_sheet = source_sheet
 
-    def run(self) -> None:
+    def run(self) -> dict:
         """Executa o pipeline completo de conciliação."""
         try:
             logger.info("=" * 80)
@@ -51,7 +56,11 @@ class ConciliationOrchestrator:
             candidates = self._load_and_validate_candidates()
             if not candidates:
                 logger.warning("Nenhum registro candidato para conciliação")
-                return
+                return {
+                    "candidates": 0,
+                    "reconciled": 0,
+                    "not_found": 0,
+                }
 
             logger.info(f"Encontrados {len(candidates)} registros candidatos")
 
@@ -67,6 +76,11 @@ class ConciliationOrchestrator:
             logger.info(f"  - Registros conciliados: {reconciliation_result['reconciled']}")
             logger.info(f"  - Sem correspondência: {reconciliation_result['not_found']}")
             logger.info("=" * 80)
+            return {
+                "candidates": len(candidates),
+                "reconciled": reconciliation_result["reconciled"],
+                "not_found": reconciliation_result["not_found"],
+            }
 
         except Exception as e:
             logger.error(f"Pipeline falhou: {e}", exc_info=True)
@@ -75,6 +89,8 @@ class ConciliationOrchestrator:
     def _authenticate_sheets(self) -> None:
         """Autentica com Google Sheets API."""
         try:
+            if self.sheets_client is not None:
+                return
             logger.info("[1/4] Autenticando com Google Sheets...")
             self.sheets_client = SheetsClient(
                 service_account_path=str(self.settings.sheets.service_account_path)

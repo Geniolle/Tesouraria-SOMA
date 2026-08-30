@@ -15,13 +15,11 @@ import signal
 import sys
 import time
 
-from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.interval import IntervalTrigger
-
 from src.gmail_to_sheets.clients.gmail_auth import GmailAuthenticator
 from src.gmail_to_sheets.clients.gmail_client import GmailClient
 from src.gmail_to_sheets.config.settings import load_settings
 from src.gmail_to_sheets.logging_config import setup_logging
+from src.gmail_to_sheets.orchestration import CentralOrchestrator
 from src.gmail_to_sheets.orchestrator import Orchestrator as ExtratoOrchestrator
 from src.gmail_to_sheets.processes.conciliacao.orchestrator import ConciliationOrchestrator
 from src.gmail_to_sheets.processes.entradas.orchestrator import EntradasOrchestrator
@@ -35,97 +33,72 @@ class AppRunner:
     def __init__(self) -> None:
         self.settings = load_settings()
         setup_logging(self.settings.log_file, self.settings.log_level)
-        self.scheduler = BackgroundScheduler()
+        self.central_orchestrator = CentralOrchestrator(settings=self.settings)
+        self.scheduler = self.central_orchestrator.scheduler
         self.is_running = False
-        self.extrato_running = False
-        self.entradas_running = False
-        self.conciliacao_running = False
         self.gmail_client: GmailClient | None = None
 
     def run_extrato(self) -> None:
         """Run Extrato process (Gmail MT940 extraction to Google Sheets)."""
-        if self.extrato_running:
-            logger.warning("Extrato process already running, skipping this cycle")
-            return
-
-        self.extrato_running = True
         try:
             logger.info("=" * 80)
             logger.info("Starting Extrato process (Gmail MT940 Extraction)...")
             logger.info("=" * 80)
 
-            orchestrator = ExtratoOrchestrator()
+            orchestrator = ExtratoOrchestrator(
+                settings=self.settings,
+                gmail_client=self.central_orchestrator.context.get_gmail_client(),
+                sheets_client=self.central_orchestrator.context.get_sheets_client(),
+            )
             orchestrator.run()
 
             logger.info("Extrato process completed successfully")
         except Exception as e:
             logger.error(f"Extrato process failed: {e}", exc_info=True)
-        finally:
-            self.extrato_running = False
 
     def run_entradas(self) -> None:
         """Run Entradas process (DÍZIMOS/OFERTAS to CONTAORDEM)."""
-        if self.entradas_running:
-            logger.warning("Entradas process already running, skipping this cycle")
-            return
-
-        self.entradas_running = True
         try:
             logger.info("=" * 80)
             logger.info("Starting Entradas process (DÍZIMOS/OFERTAS -> CONTAORDEM)...")
             logger.info("=" * 80)
 
-            orchestrator = EntradasOrchestrator()
+            orchestrator = EntradasOrchestrator(
+                settings=self.settings,
+                sheets_client=self.central_orchestrator.context.get_sheets_client(),
+            )
             orchestrator.run()
 
             logger.info("Entradas process completed successfully")
         except Exception as e:
             logger.error(f"Entradas process failed: {e}", exc_info=True)
-        finally:
-            self.entradas_running = False
 
     def run_conciliation(self, source_sheet: str = "T_EXTRATO") -> None:
         """Run Conciliacao process."""
-        if self.conciliacao_running:
-            logger.warning("Conciliacao process already running, skipping this cycle")
-            return
-
-        self.conciliacao_running = True
         try:
             logger.info("=" * 80)
             logger.info(f"Starting Conciliacao process for {source_sheet}...")
             logger.info("=" * 80)
 
-            orchestrator = ConciliationOrchestrator(source_sheet=source_sheet)
+            orchestrator = ConciliationOrchestrator(
+                source_sheet=source_sheet,
+                settings=self.settings,
+                sheets_client=self.central_orchestrator.context.get_sheets_client(),
+            )
             orchestrator.run()
 
             logger.info("Conciliacao process completed successfully")
         except Exception as e:
             logger.error(f"Conciliacao process failed: {e}", exc_info=True)
-        finally:
-            self.conciliacao_running = False
 
-    def run_full_cycle(self) -> None:
-        """Run all 3 processes in sequential order: Extrato -> Entradas -> Conciliação."""
-        logger.info("=" * 80)
-        logger.info("Executing FULL cycle (Extrato -> Entradas -> Conciliacao)...")
-        logger.info("=" * 80)
-
-        # 1. Extrato (reads Gmail, writes to T_EXTRATO & CONTAORDEM)
-        self.run_extrato()
-
-        # 2. Entradas (transfers validated entries to CONTAORDEM)
-        self.run_entradas()
-
-        # 3. Conciliacao (matches and reconciles against CONTAORDEM)
-        self.run_conciliation(source_sheet="T_EXTRATO")
-
-        logger.info("FULL cycle execution finished")
+    def run_tick(self) -> object:
+        """Run one intelligent orchestration tick."""
+        return self.central_orchestrator.run_tick()
 
     def run_once(self) -> None:
-        """Run full cycle once (for testing and manual triggers)."""
+        """Run one orchestration tick once (for testing and manual triggers)."""
         try:
-            self.run_full_cycle()
+            self.run_tick()
         except Exception as e:
             logger.error(f"Process execution failed: {e}")
             sys.exit(1)
@@ -157,29 +130,9 @@ class AppRunner:
     def start_scheduler(self) -> None:
         """Start the background scheduler."""
         try:
-            logger.info("Starting scheduler for Extrato, Entradas and Conciliacao processes...")
-
-            self.scheduler.add_job(
-                self.run_full_cycle,
-                trigger=IntervalTrigger(minutes=2),
-                id="full_cycle_job",
-                name="Full pipeline cycle (Extrato -> Entradas -> Conciliacao every 2 minutes)",
-                replace_existing=True,
-                max_instances=1,
-                coalesce=True,
-            )
-
-            self.scheduler.start()
-            self.is_running = True
-
-            logger.info("Scheduler started successfully")
-            logger.info("=" * 80)
-            logger.info("SCHEDULE:")
-            logger.info("  Full Cycle: every 2 minutes")
-            logger.info("  Sequence:   1. Extrato (Gmail MT940)")
-            logger.info("              2. Entradas (Dízimos/Ofertas)")
-            logger.info("              3. Conciliação (T_EXTRATO)")
-            logger.info("=" * 80)
+            self.central_orchestrator.start_scheduler()
+            self.scheduler = self.central_orchestrator.scheduler
+            self.is_running = self.central_orchestrator.is_running
         except Exception as e:
             logger.error(f"Failed to start scheduler: {e}")
             raise
@@ -187,11 +140,8 @@ class AppRunner:
     def stop_scheduler(self) -> None:
         """Stop the background scheduler gracefully."""
         try:
-            if self.is_running and self.scheduler.running:
-                logger.info("Stopping scheduler...")
-                self.scheduler.shutdown(wait=True)
-                self.is_running = False
-                logger.info("Scheduler stopped successfully")
+            self.central_orchestrator.stop_scheduler()
+            self.is_running = self.central_orchestrator.is_running
         except Exception as e:
             logger.error(f"Error stopping scheduler: {e}")
 
@@ -291,6 +241,10 @@ class AppRunner:
         logger.info("Read-only inbox validation completed")
         return summaries
 
+    def status_lines(self) -> list[str]:
+        """Return static status text without contacting external services."""
+        return self.central_orchestrator.status_lines()
+
 
 def build_parser() -> argparse.ArgumentParser:
     """Build the application CLI parser."""
@@ -299,8 +253,8 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python -m src.gmail_to_sheets.app run-scheduled              # Run scheduler (all processes every 2 min)
-  python -m src.gmail_to_sheets.app run-once                   # Run full cycle once (Extrato + Entradas + Conciliação)
+  python -m src.gmail_to_sheets.app run-scheduled              # Run central scheduler (every 60 seconds)
+  python -m src.gmail_to_sheets.app run-once                   # Run one orchestration tick
   python -m src.gmail_to_sheets.app extrato                    # Run Extrato only (Gmail MT940 download)
   python -m src.gmail_to_sheets.app entradas                   # Run Entradas only (Dízimos/Ofertas transfer)
   python -m src.gmail_to_sheets.app check-inbox                # Validate inbox only, no actions
@@ -341,7 +295,7 @@ def run_cli(argv: list[str] | None = None) -> int:
         logger.info("Starting application with automatic scheduler")
         app.run_interactive()
     elif args.command == "run-once":
-        logger.info("Running full pipeline cycle once")
+        logger.info("Running one orchestration tick")
         app.run_once()
     elif args.command == "extrato":
         logger.info("Running Extrato process once (Gmail MT940 Extraction)")
@@ -357,12 +311,8 @@ def run_cli(argv: list[str] | None = None) -> int:
         app.run_conciliation_manual(source_sheet=args.source_sheet)
     elif args.command == "status":
         logger.info("Application ready")
-        print("AppExtrato - Process Management System")
-        print("  Processes:")
-        print("    - Extrato:     Scheduled (Gmail MT940 Extraction -> T_EXTRATO & CONTAORDEM)")
-        print("    - Entradas:    Scheduled (DÍZIMOS/OFERTAS -> CONTAORDEM)")
-        print("    - Conciliacao: Scheduled (T_EXTRATO Reconciliation)")
-        print("  Status: Ready")
+        for line in app.status_lines():
+            print(line)
 
     return 0
 

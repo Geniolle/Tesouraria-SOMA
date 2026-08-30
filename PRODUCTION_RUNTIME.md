@@ -9,6 +9,7 @@ This project currently has a single active production runtime.
 - Runtime: `systemd`
 - Service name: `appextrato.service`
 - Start command: `/home/opc/AppExtrato/venv/bin/python -m src.gmail_to_sheets.app run-scheduled`
+- Scheduler: single central orchestrator tick every 60 seconds
 
 ## Role of Docker
 

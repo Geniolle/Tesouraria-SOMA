@@ -4,6 +4,7 @@ Pesquisa linhas em CONTAORDEM usando o ID_INTERNO como chave.
 """
 
 import logging
+
 from src.gmail_to_sheets.clients.sheets_client import SheetsClient
 
 logger = logging.getLogger(__name__)

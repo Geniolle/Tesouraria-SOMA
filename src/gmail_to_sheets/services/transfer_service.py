@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from src.gmail_to_sheets.processes.extrato import transfer_service as _impl
-from src.gmail_to_sheets.services.batch_writer import BatchWriter as _RealBatchWriter
 
 
 class _BatchWriterProxy:

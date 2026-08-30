@@ -9,7 +9,6 @@ from typing import Optional
 from src.gmail_to_sheets.clients.sheets_client import SheetsClient
 from src.gmail_to_sheets.models.transaction import Transaction
 from src.gmail_to_sheets.processes.extrato.sheets_writer_support import (
-    format_decimal,
     load_existing_dedup_keys,
     load_headers,
     load_last_sequence,

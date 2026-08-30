@@ -10,12 +10,33 @@ This project is a modular Python pipeline for Gmail MT940 processing and sheet s
 - Validation and deduplication
 - Sheet writing and transfer logic
 - Process orchestrators
+- Central orchestration layer
+
+## Central Orchestrator
+
+Production now uses a single scheduler entrypoint:
+
+- `CentralOrchestrator`
+- `ProcessRegistry`
+- managed processes with a shared interface:
+  - `check_pending()` is read-only
+  - `run()` performs the real work
+
+The scheduler wakes every 60 seconds, checks each registered process in priority order, and only runs processes that report pending work.
 
 ## Main Processes
 
 - `Extrato`: imports MT940 attachments and writes them to Google Sheets
 - `Entradas`: transfers validated manual entries from `DIZIMOS/OFERTAS` to `CONTAORDEM`
 - `Conciliacao`: fills `DOC.SOMA` by matching rows against `CONTAORDEM`
+
+## How to add a new managed process
+
+1. Implement the managed-process interface with `name`, `priority`, `check_pending()`, and `run()`.
+2. Keep `check_pending()` read-only and cheap.
+3. Reuse existing validators and services instead of duplicating business rules.
+4. Register the new process in `ProcessRegistry`.
+5. Add unit tests for pending detection, execution, and scheduler ordering.
 
 ## Runtime
 

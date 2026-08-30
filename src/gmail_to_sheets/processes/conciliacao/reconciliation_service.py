@@ -4,6 +4,7 @@ Atualiza registros em sheet de origem com DOC.SOMA obtido de CONTAORDEM.
 """
 
 import logging
+
 from src.gmail_to_sheets.clients.sheets_client import SheetsClient
 
 logger = logging.getLogger(__name__)

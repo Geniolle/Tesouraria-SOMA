@@ -24,6 +24,12 @@ Each process has:
 - a dedicated `README.md`
 - specialized services and an orchestrator
 
+The central scheduler now wraps these process implementations through a shared managed-process interface. Each managed process exposes:
+
+- `check_pending()` for read-only work detection
+- `run()` for the real execution path
+- `priority` for deterministic sequential ordering
+
 ## Related Docs
 
 - [`ARCHITECTURE.md`](ARCHITECTURE.md)

@@ -6,7 +6,6 @@ Handles data mapping, deduplication, and status updates.
 """
 
 import logging
-import unicodedata
 from datetime import datetime
 from typing import Optional
 
