@@ -22,7 +22,7 @@ from src.gmail_to_sheets.logging_config import setup_logging
 from src.gmail_to_sheets.orchestration import CentralOrchestrator
 from src.gmail_to_sheets.orchestrator import Orchestrator as ExtratoOrchestrator
 from src.gmail_to_sheets.processes.conciliacao.orchestrator import ConciliationOrchestrator
-from src.gmail_to_sheets.processes.entradas.orchestrator import EntradasOrchestrator
+from src.gmail_to_sheets.processes.entradas.orchestrator import EntradasOrchestrator\nfrom src.gmail_to_sheets.processes.saidas.orchestrator import SaidasOrchestrator
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +73,23 @@ class AppRunner:
         except Exception as e:
             logger.error(f"Entradas process failed: {e}", exc_info=True)
 
+    def run_saidas(self) -> None:
+        """Run SAÍDAS -> CONTAORDEM process."""
+        try:
+            logger.info("=" * 80)
+            logger.info("Starting SAÍDAS process (SAÍDAS -> CONTAORDEM)...")
+            logger.info("=" * 80)
+
+            orchestrator = SaidasOrchestrator(
+                settings=self.settings,
+                sheets_client=self.central_orchestrator.context.get_sheets_client(),
+            )
+            orchestrator.run()
+
+            logger.info("SAÍDAS process completed successfully")
+        except Exception as e:
+            logger.error(f"SAÍDAS process failed: {e}", exc_info=True)
+
     def run_conciliation(self, source_sheet: str = "T_EXTRATO") -> None:
         """Run Conciliacao process."""
         try:
@@ -117,6 +134,14 @@ class AppRunner:
             self.run_entradas()
         except Exception as e:
             logger.error(f"Entradas execution failed: {e}")
+            sys.exit(1)
+
+    def run_saidas_once(self) -> None:
+        """Run SAÍDAS process once manually."""
+        try:
+            self.run_saidas()
+        except Exception as e:
+            logger.error(f"SAÍDAS execution failed: {e}")
             sys.exit(1)
 
     def run_conciliation_manual(self, source_sheet: str = "T_EXTRATO") -> None:
@@ -256,7 +281,9 @@ Examples:
   python -m src.gmail_to_sheets.app run-scheduled              # Run central scheduler (every 60 seconds)
   python -m src.gmail_to_sheets.app run-once                   # Run one orchestration tick
   python -m src.gmail_to_sheets.app extrato                    # Run Extrato only (Gmail MT940 download)
-  python -m src.gmail_to_sheets.app entradas                   # Run Entradas only (Dízimos/Ofertas transfer)
+  python -m src.gmail_to_sheets.app entradas                   # Backward-compatible Dízimos/Ofertas command
+  python -m src.gmail_to_sheets.app dizimos-ofertas            # Run Dízimos/Ofertas transfer
+  python -m src.gmail_to_sheets.app saidas                     # Run SAÍDAS transfer
   python -m src.gmail_to_sheets.app check-inbox                # Validate inbox only, no actions
   python -m src.gmail_to_sheets.app conciliacao T_EXTRATO      # Run Conciliation for T_EXTRATO
   python -m src.gmail_to_sheets.app status                     # Show scheduler status
@@ -270,6 +297,8 @@ Examples:
             "run-once",
             "extrato",
             "entradas",
+            "dizimos-ofertas",
+            "saidas",
             "conciliacao",
             "check-inbox",
             "status",
@@ -300,9 +329,12 @@ def run_cli(argv: list[str] | None = None) -> int:
     elif args.command == "extrato":
         logger.info("Running Extrato process once (Gmail MT940 Extraction)")
         app.run_extrato_once()
-    elif args.command == "entradas":
-        logger.info("Running Entradas process once")
+    elif args.command in {"entradas", "dizimos-ofertas"}:
+        logger.info("Running Dízimos/Ofertas process once")
         app.run_entradas_once()
+    elif args.command == "saidas":
+        logger.info("Running SAÍDAS process once")
+        app.run_saidas_once()
     elif args.command == "check-inbox":
         logger.info("Running read-only inbox validation")
         app.check_inbox()
