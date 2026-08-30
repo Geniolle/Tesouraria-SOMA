@@ -1,39 +1,50 @@
-# DIZIMOS/OFERTAS Structure
+# DÍZIMOS/OFERTAS Structure
 
-This document summarizes the source sheet used by the Entradas process.
+This document summarizes the source sheet used by the
+`DizimosOfertas` managed process.
 
 ## Purpose
 
-`DIZIMOS/OFERTAS` is the input sheet for manual entries that can be transferred to `CONTAORDEM`.
+`DÍZIMOS/OFERTAS` is the input sheet for manual entries that can be
+transferred to `CONTAORDEM`.
 
 ## Key Fields
 
 - `DATA`
 - `TIPO`
 - `DOC. SOMA`
-- `NUMERO DOCUMENTO`
+- `NÚMERO DOCUMENTO`
 - `VALOR`
 - `FINANCE`
 - `ID_INTERNO`
 
 ## Transfer Rules
 
-- `TIPO` must match the expected entry types.
-- `DOC. SOMA` must be empty before transfer.
-- `FINANCE` must be empty before transfer.
-- `VALOR` must be greater than zero.
-- `DATA` must be present and valid.
+A row is finance-ready when:
+
+- `DATA` is filled
+- `TIPO` is `DÍZIMOS/OFERTAS` or `DIA VERBO MISSÔES`
+- `DOC. SOMA` is filled
+- `FINANCE` is empty
+- `VALOR > 0`
+
+The managed pending probe also excludes rows already present in
+`CONTAORDEM` by `ID_INTERNO` or by the normalized
+`DATA + VALOR + DESCRIÇÃO` business key.
 
 ## Transfer Mapping
 
 - `DATA` -> `DATA MOV.`
-- `NUMERO DOCUMENTO` -> part of `DESCRICAO`
-- `VALOR` -> `IMPORTANCIA`
+- `NÚMERO DOCUMENTO` -> part of `DESCRIÇÃO`
+- `VALOR` -> `IMPORTÂNCIA`
 - `ID_INTERNO` -> copied as-is
-- `TIPO` -> fixed target type `Entrada`
+- target `TIPO` -> `Entrada`
+- target `PROCESSO` -> `DÍZIMOS/OFERTAS`
 
-## Notes
+## Completion
 
-- `ID_INTERNO` already exists in the source sheet.
-- `DOC. SOMA` is filled after transfer to mark the row as processed.
-- `FINANCE = Transferido` is used to prevent reprocessing.
+After successful transfer:
+
+`FINANCE = Transferido`
+
+This prevents reprocessing by the source transfer pipeline.
