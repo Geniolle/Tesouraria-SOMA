@@ -350,12 +350,16 @@ class SheetsClient:
 
     def mark_sheet_dirty(self, sheet_name: str) -> None:
         """Mark a sheet as changed and requiring post-write housekeeping."""
+        if not hasattr(self, "_dirty_sheets"):
+            self._dirty_sheets = set()
         key = self._normalize_sheet_key(sheet_name)
         if key:
             self._dirty_sheets.add(key)
 
     def is_sheet_dirty(self, sheet_name: str) -> bool:
         """Return whether a sheet was changed through this client."""
+        if not hasattr(self, "_dirty_sheets"):
+            self._dirty_sheets = set()
         return self._normalize_sheet_key(sheet_name) in self._dirty_sheets
 
     def sort_sheet_by_column(
