@@ -1,8 +1,17 @@
+import logging
 from dataclasses import dataclass
 from unittest.mock import Mock, patch
 
 from src.gmail_to_sheets.orchestration.central import CentralOrchestrator
-from src.gmail_to_sheets.orchestration.models import PendingResult, ProcessResult, ProcessStatus
+from src.gmail_to_sheets.orchestration.health import (
+    HealthStore,
+    ProcessHealthState,
+)
+from src.gmail_to_sheets.orchestration.models import (
+    PendingResult,
+    ProcessResult,
+    ProcessStatus,
+)
 from src.gmail_to_sheets.orchestration.registry import ProcessRegistry
 
 
@@ -51,9 +60,21 @@ class TestProcessRegistry:
     def test_registry_orders_by_priority(self):
         registry = ProcessRegistry(
             [
-                FakeProcess("Conciliacao", 30, PendingResult(False)),
-                FakeProcess("Extrato", 10, PendingResult(False)),
-                FakeProcess("Entradas", 20, PendingResult(False)),
+                FakeProcess(
+                    "Conciliacao",
+                    30,
+                    PendingResult(False),
+                ),
+                FakeProcess(
+                    "Extrato",
+                    10,
+                    PendingResult(False),
+                ),
+                FakeProcess(
+                    "Entradas",
+                    20,
+                    PendingResult(False),
+                ),
             ]
         )
 
@@ -65,20 +86,32 @@ class TestProcessRegistry:
 
 
 class TestCentralOrchestratorScheduler:
-    @patch("src.gmail_to_sheets.orchestration.central.BackgroundScheduler")
-    @patch("src.gmail_to_sheets.orchestration.central.IntervalTrigger")
-    @patch("src.gmail_to_sheets.orchestration.central.setup_logging")
+    @patch(
+        "src.gmail_to_sheets.orchestration.central.BackgroundScheduler"
+    )
+    @patch(
+        "src.gmail_to_sheets.orchestration.central.IntervalTrigger"
+    )
+    @patch(
+        "src.gmail_to_sheets.orchestration.central.setup_logging"
+    )
     def test_scheduler_configured_for_sixty_seconds(
         self,
         mock_setup_logging,
         mock_interval_trigger,
         mock_scheduler_cls,
+        tmp_path,
     ):
         settings = _make_settings()
         mock_scheduler = Mock()
         mock_scheduler_cls.return_value = mock_scheduler
+        store = HealthStore(tmp_path / "health.json")
 
-        orchestrator = CentralOrchestrator(settings=settings, registry=ProcessRegistry())
+        orchestrator = CentralOrchestrator(
+            settings=settings,
+            registry=ProcessRegistry(),
+            health_store=store,
+        )
         orchestrator.start_scheduler()
 
         mock_interval_trigger.assert_called_once_with(seconds=60)
@@ -91,17 +124,29 @@ class TestCentralOrchestratorScheduler:
 
 
 class TestCentralOrchestratorTick:
-    @patch("src.gmail_to_sheets.orchestration.central.setup_logging")
-    def test_tick_skips_process_without_pending(self, mock_setup_logging):
+    @patch(
+        "src.gmail_to_sheets.orchestration.central.setup_logging"
+    )
+    def test_tick_skips_process_without_pending(
+        self,
+        mock_setup_logging,
+        tmp_path,
+    ):
         settings = _make_settings()
         process = FakeProcess(
             name="Extrato",
             priority=10,
-            pending=PendingResult(has_work=False, count=0, reason="none"),
+            pending=PendingResult(
+                has_work=False,
+                count=0,
+                reason="none",
+            ),
         )
+        store = HealthStore(tmp_path / "health.json")
         orchestrator = CentralOrchestrator(
             settings=settings,
             registry=ProcessRegistry([process]),
+            health_store=store,
         )
 
         summary = orchestrator.run_tick()
@@ -110,13 +155,29 @@ class TestCentralOrchestratorTick:
         assert process.run_calls == 0
         assert summary.results[0].status == ProcessStatus.SKIPPED
 
-    @patch("src.gmail_to_sheets.orchestration.central.setup_logging")
-    def test_tick_runs_process_with_pending_once(self, mock_setup_logging):
+        health = store.load()["Extrato"]
+        assert health.state == ProcessHealthState.IDLE
+        assert health.consecutive_failures == 0
+        assert health.last_check_at is not None
+        assert health.last_run_at is None
+
+    @patch(
+        "src.gmail_to_sheets.orchestration.central.setup_logging"
+    )
+    def test_tick_runs_process_with_pending_once(
+        self,
+        mock_setup_logging,
+        tmp_path,
+    ):
         settings = _make_settings()
         process = FakeProcess(
             name="Extrato",
             priority=10,
-            pending=PendingResult(has_work=True, count=1, reason="work"),
+            pending=PendingResult(
+                has_work=True,
+                count=1,
+                reason="work",
+            ),
             result=ProcessResult(
                 process_name="Extrato",
                 status=ProcessStatus.SUCCESS,
@@ -124,9 +185,11 @@ class TestCentralOrchestratorTick:
                 duration_seconds=0.1,
             ),
         )
+        store = HealthStore(tmp_path / "health.json")
         orchestrator = CentralOrchestrator(
             settings=settings,
             registry=ProcessRegistry([process]),
+            health_store=store,
         )
 
         summary = orchestrator.run_tick()
@@ -136,19 +199,39 @@ class TestCentralOrchestratorTick:
         assert summary.results[0].status == ProcessStatus.SUCCESS
         assert summary.results[0].processed == 2
 
-    @patch("src.gmail_to_sheets.orchestration.central.setup_logging")
-    def test_tick_continues_after_failure(self, mock_setup_logging):
+        health = store.load()["Extrato"]
+        assert health.state == ProcessHealthState.SUCCESS
+        assert health.last_run_at is not None
+        assert health.last_success_at is not None
+        assert health.consecutive_failures == 0
+
+    @patch(
+        "src.gmail_to_sheets.orchestration.central.setup_logging"
+    )
+    def test_tick_continues_after_failure(
+        self,
+        mock_setup_logging,
+        tmp_path,
+    ):
         settings = _make_settings()
         failing = FakeProcess(
             name="Extrato",
             priority=10,
-            pending=PendingResult(has_work=True, count=1, reason="work"),
+            pending=PendingResult(
+                has_work=True,
+                count=1,
+                reason="work",
+            ),
             run_side_effect=RuntimeError("boom"),
         )
         succeeding = FakeProcess(
             name="Entradas",
             priority=20,
-            pending=PendingResult(has_work=True, count=1, reason="work"),
+            pending=PendingResult(
+                has_work=True,
+                count=1,
+                reason="work",
+            ),
             result=ProcessResult(
                 process_name="Entradas",
                 status=ProcessStatus.SUCCESS,
@@ -156,9 +239,11 @@ class TestCentralOrchestratorTick:
                 duration_seconds=0.1,
             ),
         )
+        store = HealthStore(tmp_path / "health.json")
         orchestrator = CentralOrchestrator(
             settings=settings,
             registry=ProcessRegistry([failing, succeeding]),
+            health_store=store,
         )
 
         summary = orchestrator.run_tick()
@@ -170,17 +255,33 @@ class TestCentralOrchestratorTick:
             ProcessStatus.SUCCESS,
         ]
 
-    @patch("src.gmail_to_sheets.orchestration.central.setup_logging")
-    def test_tick_summary_contains_duration_and_results(self, mock_setup_logging):
+        health = store.load()
+        assert health["Extrato"].consecutive_failures == 1
+        assert health["Extrato"].state == ProcessHealthState.FAILED
+        assert health["Entradas"].state == ProcessHealthState.SUCCESS
+
+    @patch(
+        "src.gmail_to_sheets.orchestration.central.setup_logging"
+    )
+    def test_tick_summary_contains_duration_and_results(
+        self,
+        mock_setup_logging,
+        tmp_path,
+    ):
         settings = _make_settings()
         process = FakeProcess(
             name="Conciliacao",
             priority=30,
-            pending=PendingResult(has_work=False, count=0, reason="none"),
+            pending=PendingResult(
+                has_work=False,
+                count=0,
+                reason="none",
+            ),
         )
         orchestrator = CentralOrchestrator(
             settings=settings,
             registry=ProcessRegistry([process]),
+            health_store=HealthStore(tmp_path / "health.json"),
         )
 
         summary = orchestrator.run_tick()
@@ -188,3 +289,114 @@ class TestCentralOrchestratorTick:
         assert summary.duration_seconds >= 0
         assert len(summary.results) == 1
 
+    @patch(
+        "src.gmail_to_sheets.orchestration.central.setup_logging"
+    )
+    def test_repeated_failures_emit_health_alert(
+        self,
+        mock_setup_logging,
+        tmp_path,
+        caplog,
+    ):
+        settings = _make_settings()
+        process = FakeProcess(
+            name="Extrato",
+            priority=10,
+            pending=PendingResult(
+                has_work=True,
+                count=1,
+                reason="work",
+            ),
+            run_side_effect=RuntimeError("persistent boom"),
+        )
+        store = HealthStore(tmp_path / "health.json")
+        orchestrator = CentralOrchestrator(
+            settings=settings,
+            registry=ProcessRegistry([process]),
+            health_store=store,
+        )
+
+        caplog.set_level(logging.CRITICAL)
+        orchestrator.run_tick()
+        orchestrator.run_tick()
+        orchestrator.run_tick()
+
+        health = store.load()["Extrato"]
+        assert health.consecutive_failures == 3
+        assert health.state == ProcessHealthState.FAILED
+        assert "PROCESS HEALTH ALERT" in caplog.text
+
+    @patch(
+        "src.gmail_to_sheets.orchestration.central.setup_logging"
+    )
+    def test_idle_tick_resets_consecutive_failures(
+        self,
+        mock_setup_logging,
+        tmp_path,
+    ):
+        settings = _make_settings()
+        process = FakeProcess(
+            name="Extrato",
+            priority=10,
+            pending=PendingResult(
+                has_work=True,
+                count=1,
+                reason="work",
+            ),
+            run_side_effect=RuntimeError("boom"),
+        )
+        store = HealthStore(tmp_path / "health.json")
+        orchestrator = CentralOrchestrator(
+            settings=settings,
+            registry=ProcessRegistry([process]),
+            health_store=store,
+        )
+
+        orchestrator.run_tick()
+        assert store.load()["Extrato"].consecutive_failures == 1
+
+        process.run_side_effect = None
+        process.pending = PendingResult(
+            has_work=False,
+            count=0,
+            reason="none",
+        )
+        orchestrator.run_tick()
+
+        health = store.load()["Extrato"]
+        assert health.state == ProcessHealthState.IDLE
+        assert health.consecutive_failures == 0
+        assert health.last_error is None
+
+    @patch(
+        "src.gmail_to_sheets.orchestration.central.setup_logging"
+    )
+    def test_status_reads_persisted_health_without_external_calls(
+        self,
+        mock_setup_logging,
+        tmp_path,
+    ):
+        settings = _make_settings()
+        process = FakeProcess(
+            name="Extrato",
+            priority=10,
+            pending=PendingResult(
+                has_work=True,
+                count=1,
+                reason="work",
+            ),
+        )
+        store = HealthStore(tmp_path / "health.json")
+        orchestrator = CentralOrchestrator(
+            settings=settings,
+            registry=ProcessRegistry([process]),
+            health_store=store,
+        )
+        orchestrator.run_tick()
+
+        lines = orchestrator.status_lines()
+        output = "\n".join(lines)
+
+        assert "AppExtrato Orchestrator" in output
+        assert "state=SUCCESS" in output
+        assert "failures=0" in output
