@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -47,6 +47,7 @@ class ProcessContext:
     settings: Any
     gmail_client: GmailClient | None = None
     sheets_client: SheetsClient | None = None
+    headers_cache: dict[str, list[str]] = field(default_factory=dict)
 
     def get_gmail_client(self) -> GmailClient:
         """Return a shared Gmail client, creating it on first use."""
@@ -66,3 +67,16 @@ class ProcessContext:
                 service_account_path=Path(self.settings.sheets.service_account_path)
             )
         return self.sheets_client
+
+    def get_sheet_headers(self, sheet_name: str) -> list[str]:
+        """Return cached sheet headers.
+
+        Headers are metadata and safe to cache for the lifetime of the service.
+        A service restart refreshes the cache if the spreadsheet structure changes.
+        """
+        if sheet_name not in self.headers_cache:
+            self.headers_cache[sheet_name] = self.get_sheets_client().get_headers(
+                self.settings.sheets.spreadsheet_id,
+                sheet_name,
+            )
+        return list(self.headers_cache[sheet_name])
