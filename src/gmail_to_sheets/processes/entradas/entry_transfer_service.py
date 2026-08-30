@@ -222,67 +222,7 @@ class EntryTransferService:
             raise EntryTransferError(f"Failed to append row: {e}") from e
 
     def sort_by_date(self) -> None:
-        """Sort CONTAORDEM by DATA MOV. in descending order."""
-        try:
-            logger.info(f"Sorting {self.target_sheet} by DATA MOV. (descending)...")
-
-            # Get last row
-            last_row = self.sheets_client.get_last_row(
-                self.spreadsheet_id, self.target_sheet
-            )
-
-            if last_row <= 2:
-                logger.info("No data to sort")
-                return
-
-            # Get sheet ID
-            result = self.sheets_client.service.spreadsheets().get(
-                spreadsheetId=self.spreadsheet_id,
-                fields="sheets.properties"
-            ).execute()
-
-            sheet_id = None
-            for sheet in result.get("sheets", []):
-                if sheet["properties"]["title"] == self.target_sheet:
-                    sheet_id = sheet["properties"]["sheetId"]
-                    break
-
-            if sheet_id is None:
-                logger.warning(f"Could not find sheet ID for {self.target_sheet}")
-                return
-
-            # Get DATA MOV. column index
-            data_idx = self.target_indices.get("DATA MOV.")
-            if data_idx is None:
-                logger.warning("DATA MOV. column not found")
-                return
-
-            # Create sort request
-            request = {
-                "sortRange": {
-                    "range": {
-                        "sheetId": sheet_id,
-                        "startRowIndex": 1,  # Skip header
-                        "endRowIndex": last_row,
-                        "startColumnIndex": 0,
-                        "endColumnIndex": len(self.target_headers),
-                    },
-                    "sortSpecs": [
-                        {
-                            "dimensionIndex": data_idx,
-                            "sortOrder": "DESCENDING"
-                        }
-                    ]
-                }
-            }
-
-            self.sheets_client.service.spreadsheets().batchUpdate(
-                spreadsheetId=self.spreadsheet_id,
-                body={"requests": [request]}
-            ).execute()
-
-            logger.info("Sort completed successfully")
-
-        except Exception as e:
-            logger.error(f"Failed to sort sheet: {e}")
-            # Don't raise - sorting is not critical
+        """Sort CONTAORDEM by DATA MOV. descending."""
+        self.sheets_client.sort_contaordem_by_data_mov(
+            self.spreadsheet_id
+        )
