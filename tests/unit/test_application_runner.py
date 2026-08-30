@@ -30,6 +30,8 @@ class TestApplicationRunnerParser:
             "run-once",
             "extrato",
             "entradas",
+            "dizimos-ofertas",
+            "saidas",
             "conciliacao",
             "check-inbox",
             "status",
@@ -93,6 +95,53 @@ class TestApplicationRunnerCLIRouting:
         assert exit_code == 0
         mock_run_interactive.assert_called_once()
 
+
+    @patch("src.gmail_to_sheets.application_runner.CentralOrchestrator")
+    @patch("src.gmail_to_sheets.application_runner.setup_logging")
+    @patch("src.gmail_to_sheets.application_runner.load_settings")
+    @patch.object(AppRunner, "run_entradas_once")
+    def test_run_cli_routes_dizimos_ofertas(
+        self,
+        mock_run,
+        mock_load_settings,
+        mock_setup_logging,
+        mock_central_cls,
+    ):
+        settings = _make_settings()
+        mock_load_settings.return_value = settings
+        mock_central = Mock()
+        mock_central.scheduler = Mock()
+        mock_central.context = Mock()
+        mock_central_cls.return_value = mock_central
+
+        exit_code = run_cli(["dizimos-ofertas"])
+
+        assert exit_code == 0
+        mock_run.assert_called_once()
+
+    @patch("src.gmail_to_sheets.application_runner.CentralOrchestrator")
+    @patch("src.gmail_to_sheets.application_runner.setup_logging")
+    @patch("src.gmail_to_sheets.application_runner.load_settings")
+    @patch.object(AppRunner, "run_saidas_once")
+    def test_run_cli_routes_saidas(
+        self,
+        mock_run,
+        mock_load_settings,
+        mock_setup_logging,
+        mock_central_cls,
+    ):
+        settings = _make_settings()
+        mock_load_settings.return_value = settings
+        mock_central = Mock()
+        mock_central.scheduler = Mock()
+        mock_central.context = Mock()
+        mock_central_cls.return_value = mock_central
+
+        exit_code = run_cli(["saidas"])
+
+        assert exit_code == 0
+        mock_run.assert_called_once()
+
     @patch("src.gmail_to_sheets.application_runner.CentralOrchestrator")
     @patch("src.gmail_to_sheets.application_runner.setup_logging")
     @patch("src.gmail_to_sheets.application_runner.load_settings")
@@ -115,8 +164,9 @@ class TestApplicationRunnerCLIRouting:
             "Scheduler interval: 60 seconds",
             "Processes:",
             "  Extrato      priority=10",
-            "  Entradas     priority=20",
-            "  Conciliacao  priority=30",
+            "  DizimosOfertas priority=20",
+            "  Saidas       priority=30",
+            "  Conciliacao  priority=40",
         ]
         mock_central_cls.return_value = mock_central
         mock_status_lines.return_value = mock_central.status_lines.return_value

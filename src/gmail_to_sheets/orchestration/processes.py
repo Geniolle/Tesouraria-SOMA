@@ -13,8 +13,13 @@ from src.gmail_to_sheets.processes.conciliacao.orchestrator import (
     ConciliationOrchestrator,
 )
 from src.gmail_to_sheets.processes.conciliacao.validator import ConciliationValidator
+from src.gmail_to_sheets.processes.entradas.entry_deduplication import (
+    EntryDeduplicationService,
+)
 from src.gmail_to_sheets.processes.entradas.entry_validator import EntryValidator
 from src.gmail_to_sheets.processes.entradas.orchestrator import EntradasOrchestrator
+from src.gmail_to_sheets.processes.saidas.orchestrator import SaidasOrchestrator
+from src.gmail_to_sheets.processes.saidas.validator import SaidaValidator
 
 from .models import PendingResult, ProcessContext, ProcessResult, ProcessStatus
 
@@ -50,20 +55,6 @@ class _BaseManagedProcess:
         )
 
     @staticmethod
-    def _build_skipped(
-        process_name: str,
-        reason: str,
-        started_at: float,
-    ) -> ProcessResult:
-        return ProcessResult(
-            process_name=process_name,
-            status=ProcessStatus.SKIPPED,
-            processed=0,
-            duration_seconds=perf_counter() - started_at,
-            error=reason,
-        )
-
-    @staticmethod
     def _build_failed(
         process_name: str,
         error: Exception,
@@ -76,6 +67,17 @@ class _BaseManagedProcess:
             duration_seconds=perf_counter() - started_at,
             error=str(error),
         )
+
+    @staticmethod
+    def _row_value(
+        row: list,
+        column_indices: dict[str, int],
+        field_name: str,
+    ) -> str:
+        index = column_indices.get(field_name.upper().strip())
+        if index is None or index >= len(row) or row[index] is None:
+            return ""
+        return str(row[index]).strip()
 
 
 class ExtratoProcess(_BaseManagedProcess):
@@ -128,18 +130,20 @@ class ExtratoProcess(_BaseManagedProcess):
             return self._build_failed(self.name, error, started_at)
 
 
-class EntradasProcess(_BaseManagedProcess):
-    """Managed wrapper around the Entradas process."""
+class DizimosOfertasProcess(_BaseManagedProcess):
+    """Managed DÍZIMOS/OFERTAS -> CONTAORDEM transfer process."""
 
-    name = "Entradas"
+    name = "DizimosOfertas"
     priority = 20
     source_sheet = "DÍZIMOS/OFERTAS"
     required_fields = (
         "DATA",
         "TIPO",
         "DOC. SOMA",
-        "FINANCE",
+        "NÚMERO DOCUMENTO",
         "VALOR",
+        "FINANCE",
+        "ID_INTERNO",
     )
 
     def __init__(self, context: ProcessContext) -> None:
@@ -147,11 +151,7 @@ class EntradasProcess(_BaseManagedProcess):
         self._pending_entries: list[_PendingEntry] = []
 
     def check_pending(self) -> PendingResult:
-        """Return after the first valid entry is found.
-
-        The probe reads only the smallest contiguous column window containing
-        fields required by EntryValidator.
-        """
+        """Find the first valid non-duplicate DÍZIMOS/OFERTAS row."""
         sheets_client = self.context.get_sheets_client()
         spreadsheet_id = self.context.settings.sheets.spreadsheet_id
         headers = self.context.get_sheet_headers(self.source_sheet)
@@ -169,10 +169,53 @@ class EntradasProcess(_BaseManagedProcess):
             self.required_fields,
         )
 
+        dedup: EntryDeduplicationService | None = None
         self._pending_entries = []
+
         for row_number, row in rows:
             is_valid, _ = validator.is_valid_entry(row, row_number)
             if not is_valid:
+                continue
+
+            data = self._row_value(
+                row,
+                validator.column_indices,
+                "DATA",
+            )
+            valor = self._row_value(
+                row,
+                validator.column_indices,
+                "VALOR",
+            )
+            numero_documento = self._row_value(
+                row,
+                validator.column_indices,
+                "NÚMERO DOCUMENTO",
+            )
+            id_interno = self._row_value(
+                row,
+                validator.column_indices,
+                "ID_INTERNO",
+            )
+            descricao = (
+                f"{numero_documento} - DÍZIMOS E OFERTAS (CULTO)"
+                if numero_documento
+                else "DÍZIMOS E OFERTAS (CULTO)"
+            )
+
+            if dedup is None:
+                dedup = EntryDeduplicationService(
+                    sheets_client,
+                    spreadsheet_id,
+                    headers=self.context.get_sheet_headers("CONTAORDEM"),
+                )
+
+            if dedup.is_duplicate(
+                data,
+                valor,
+                descricao,
+                id_interno=id_interno,
+            ):
                 continue
 
             self._pending_entries = [
@@ -184,13 +227,13 @@ class EntradasProcess(_BaseManagedProcess):
             return PendingResult(
                 has_work=True,
                 count=1,
-                reason="At least one valid entry is pending",
+                reason="DÍZIMOS/OFERTAS row ready for transfer",
             )
 
         return PendingResult(
             has_work=False,
             count=0,
-            reason="No valid entries pending",
+            reason="No DÍZIMOS/OFERTAS rows ready for transfer",
         )
 
     def run(self) -> ProcessResult:
@@ -205,7 +248,115 @@ class EntradasProcess(_BaseManagedProcess):
             return self._build_success(self.name, processed, started_at)
         except Exception as error:
             logger.error(
-                "Entradas process failed during managed execution: %s",
+                "DizimosOfertas failed during managed execution: %s",
+                error,
+                exc_info=True,
+            )
+            return self._build_failed(self.name, error, started_at)
+
+
+class SaidasProcess(_BaseManagedProcess):
+    """Managed SAÍDAS -> CONTAORDEM transfer process."""
+
+    name = "Saidas"
+    priority = 30
+    source_sheet = "SAÍDAS"
+    required_fields = (
+        "ID_INTERNO",
+        "DATA",
+        "TIPO",
+        "DOC. SOMA",
+        "VALOR DA COMPRA",
+        "DESCRIÇÃO DA COMPRA",
+        "STATUS DA TESOURARIA",
+        "FINANCE",
+    )
+
+    def __init__(self, context: ProcessContext) -> None:
+        super().__init__(context)
+        self._pending_entries: list[_PendingEntry] = []
+
+    def check_pending(self) -> PendingResult:
+        """Find the first valid non-duplicate SAÍDAS row."""
+        sheets_client = self.context.get_sheets_client()
+        spreadsheet_id = self.context.settings.sheets.spreadsheet_id
+        headers = self.context.get_sheet_headers(self.source_sheet)
+        validator = SaidaValidator(
+            sheets_client,
+            spreadsheet_id,
+            headers=headers,
+        )
+
+        rows = read_projected_rows(
+            sheets_client,
+            spreadsheet_id,
+            self.source_sheet,
+            validator.column_indices,
+            self.required_fields,
+        )
+
+        dedup: EntryDeduplicationService | None = None
+        self._pending_entries = []
+
+        for row_number, row in rows:
+            is_valid, _ = validator.is_valid_entry(row, row_number)
+            if not is_valid:
+                continue
+
+            data = validator.get_field(row, "DATA") or ""
+            valor = validator.get_field(row, "VALOR DA COMPRA") or ""
+            descricao = validator.get_field(
+                row,
+                "DESCRIÇÃO DA COMPRA",
+            ) or ""
+            id_interno = validator.get_field(row, "ID_INTERNO")
+
+            if dedup is None:
+                dedup = EntryDeduplicationService(
+                    sheets_client,
+                    spreadsheet_id,
+                    headers=self.context.get_sheet_headers("CONTAORDEM"),
+                )
+
+            if dedup.is_duplicate(
+                data,
+                valor,
+                descricao,
+                id_interno=id_interno,
+            ):
+                continue
+
+            self._pending_entries = [
+                _PendingEntry(
+                    row_number=row_number,
+                    row_data=row,
+                )
+            ]
+            return PendingResult(
+                has_work=True,
+                count=1,
+                reason="SAÍDAS row ready for transfer",
+            )
+
+        return PendingResult(
+            has_work=False,
+            count=0,
+            reason="No SAÍDAS rows ready for transfer",
+        )
+
+    def run(self) -> ProcessResult:
+        started_at = perf_counter()
+        try:
+            orchestrator = SaidasOrchestrator(
+                settings=self.context.settings,
+                sheets_client=self.context.get_sheets_client(),
+            )
+            summary = orchestrator.run() or {}
+            processed = int(summary.get("transferred", 0))
+            return self._build_success(self.name, processed, started_at)
+        except Exception as error:
+            logger.error(
+                "Saidas failed during managed execution: %s",
                 error,
                 exc_info=True,
             )
@@ -213,10 +364,10 @@ class EntradasProcess(_BaseManagedProcess):
 
 
 class ConciliacaoProcess(_BaseManagedProcess):
-    """Managed wrapper around the Conciliacao process."""
+    """Managed wrapper around the T_EXTRATO reconciliation process."""
 
     name = "Conciliacao"
-    priority = 30
+    priority = 40
     source_required_fields = ("DOC. SOMA", "ID_INTERNO")
 
     def __init__(
@@ -288,7 +439,9 @@ class ConciliacaoProcess(_BaseManagedProcess):
 
         actionable: list[dict[str, str]] = []
         for candidate in candidates:
-            lookup = lookup_service.lookup_doc_soma(candidate["id_interno"])
+            lookup = lookup_service.lookup_doc_soma(
+                candidate["id_interno"]
+            )
             if lookup.get("found") and lookup.get("doc_soma"):
                 actionable.append(
                     {
@@ -330,3 +483,6 @@ class ConciliacaoProcess(_BaseManagedProcess):
                 exc_info=True,
             )
             return self._build_failed(self.name, error, started_at)
+
+
+EntradasProcess = DizimosOfertasProcess

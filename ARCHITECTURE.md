@@ -1,6 +1,7 @@
 # Architecture Overview
 
-This project is a modular Python pipeline for Gmail MT940 processing and sheet synchronization.
+This project is a modular Python pipeline for Gmail MT940 processing and
+sheet synchronization.
 
 ## Main Layers
 
@@ -23,21 +24,38 @@ Production uses a single scheduler entrypoint:
   - `check_pending()` is read-only
   - `run()` performs the real work
 
-The scheduler wakes every 60 seconds, checks each registered process in priority order, and only runs processes that report pending work.
+The scheduler wakes every 60 seconds, checks each registered process in
+priority order, and only runs processes that report actionable work.
 
-Execution is sequential. Two managed processes are never started in parallel by the central scheduler.
+Execution is sequential. Two managed processes are never started in parallel
+by the central scheduler.
+
+Current order:
+
+1. `Extrato` — priority 10
+2. `DizimosOfertas` — priority 20
+3. `Saidas` — priority 30
+4. `Conciliacao` — priority 40
 
 ## Read-only pending probes
 
 Pending probes are designed to be cheap and non-destructive.
 
 - `Extrato`: Gmail search with `max_results=1`
-- `Entradas`: reads only the projected column window required by `EntryValidator` and stops logical scanning after the first valid row
-- `Conciliacao`: reads only `DOC. SOMA` and `ID_INTERNO` from the source, then projects only `ID_INTERNO` and `DOC. SOMA` from `CONTAORDEM`
+- `DizimosOfertas`: projects the fields required by `EntryValidator`,
+  checks duplicate protection only after a valid source candidate exists, and
+  stops after the first actionable row
+- `Saidas`: projects the fields required by `SaidaValidator`, checks
+  `CONTAORDEM` only after a finance-ready source candidate exists, and stops
+  after the first actionable row
+- `Conciliacao`: reads only `DOC. SOMA` and `ID_INTERNO` from the source,
+  then projects only `ID_INTERNO` and `DOC. SOMA` from `CONTAORDEM`
 
-Sheet headers are cached in the shared process context for the lifetime of the service. A service restart refreshes this metadata cache.
+Sheet headers are cached in the shared process context for the lifetime of
+the service. A service restart refreshes this metadata cache.
 
-The projection helper preserves original column indexes by left-padding projected rows before existing validators consume them.
+The projection helper preserves original column indexes by left-padding
+projected rows before existing validators consume them.
 
 ## Process health
 
@@ -45,7 +63,8 @@ The orchestrator persists a lightweight local health snapshot in:
 
 `data/orchestrator-health.json`
 
-The file contains operational metadata only. It does not contain Google credentials, tokens, private keys, spreadsheet cell data, or email contents.
+The file contains operational metadata only. It does not contain Google
+credentials, tokens, private keys, spreadsheet cell data, or email contents.
 
 Per-process health includes:
 
@@ -59,26 +78,27 @@ Per-process health includes:
 - last error summary
 - last pending count
 
-The `status` CLI reads this local file only and does not call Gmail or Google Sheets APIs.
+The `status` CLI reads this local file only and does not call Gmail or
+Google Sheets APIs.
 
-After three consecutive failures for one process, the orchestrator writes a `PROCESS HEALTH ALERT` at CRITICAL level to the normal application/systemd logs. Additional reminders are emitted every ten consecutive failures.
+After three consecutive failures for one process, the orchestrator writes a
+`PROCESS HEALTH ALERT` at CRITICAL level to the normal application/systemd
+logs. Additional reminders are emitted every ten consecutive failures.
 
-A successful run or a clean idle check resets the consecutive failure counter.
-
-## Main Processes
-
-- `Extrato`: imports MT940 attachments and writes them to Google Sheets
-- `Entradas`: transfers validated manual entries from `DIZIMOS/OFERTAS` to `CONTAORDEM`
-- `Conciliacao`: fills `DOC.SOMA` by matching rows against `CONTAORDEM`
+A successful run or a clean idle check resets the consecutive failure
+counter.
 
 ## How to add a new managed process
 
-1. Implement the managed-process interface with `name`, `priority`, `check_pending()`, and `run()`.
+1. Implement the managed-process interface with `name`, `priority`,
+   `check_pending()`, and `run()`.
 2. Keep `check_pending()` read-only and cheap.
 3. Project only fields needed to determine whether work exists.
-4. Reuse existing validators and services instead of duplicating business rules.
+4. Reuse existing validators and services instead of duplicating business
+   rules.
 5. Register the new process in `ProcessRegistry`.
-6. Add unit tests for pending detection, execution, health state, and scheduler ordering.
+6. Add unit tests for pending detection, execution, health state, and
+   scheduler ordering.
 
 ## Runtime
 

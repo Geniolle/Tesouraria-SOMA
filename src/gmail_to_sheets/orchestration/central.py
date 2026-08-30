@@ -21,7 +21,12 @@ from .health import (
     utc_now_iso,
 )
 from .models import ProcessContext, ProcessResult, ProcessStatus
-from .processes import ConciliacaoProcess, EntradasProcess, ExtratoProcess
+from .processes import (
+    ConciliacaoProcess,
+    DizimosOfertasProcess,
+    ExtratoProcess,
+    SaidasProcess,
+)
 from .registry import ProcessRegistry
 
 logger = logging.getLogger(__name__)
@@ -53,7 +58,8 @@ class CentralOrchestrator:
         self.registry = registry or ProcessRegistry(
             [
                 ExtratoProcess(self.context),
-                EntradasProcess(self.context),
+                DizimosOfertasProcess(self.context),
+                SaidasProcess(self.context),
                 ConciliacaoProcess(self.context),
             ]
         )
@@ -270,7 +276,8 @@ class CentralOrchestrator:
         logger.info("SCHEDULE:")
         logger.info("  Tick:       every 60 seconds")
         logger.info(
-            "  Processes:  Extrato -> Entradas -> Conciliacao"
+            "  Processes:  %s",
+            " -> ".join(process.name for process in self.registry),
         )
         logger.info("=" * 80)
 
