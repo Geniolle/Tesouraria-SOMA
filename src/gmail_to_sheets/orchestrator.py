@@ -121,6 +121,16 @@ class Orchestrator:
             else:
                 transfer_result = self._transfer_to_contaordem(all_ids)
 
+            if not self.sheets_client:
+                raise RuntimeError("Sheets client not initialized")
+            sort_result = self.sheets_client.ensure_contaordem_sorted(
+                self.settings.sheets.spreadsheet_id
+            )
+            if sort_result.get("sorted"):
+                logger.info(
+                    "      CONTAORDEM sorted by DATA MOV. descending"
+                )
+
             cash_balance_result = None
             if self.settings.cash_balance.update_enabled:
                 cash_balance_result = self._update_cash_balance(
