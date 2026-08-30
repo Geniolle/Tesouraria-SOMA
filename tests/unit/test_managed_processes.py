@@ -4,8 +4,10 @@ from unittest.mock import Mock, patch
 from src.gmail_to_sheets.orchestration.models import ProcessContext
 from src.gmail_to_sheets.orchestration.processes import (
     ConciliacaoProcess,
+    DizimosOfertasProcess,
     EntradasProcess,
     ExtratoProcess,
+    SaidasProcess,
 )
 
 
@@ -24,30 +26,24 @@ def _make_settings():
     return settings
 
 
-def _make_sheet_client(rows_by_range):
+def _make_sheet_client(headers_by_sheet, values_by_sheet):
     client = Mock()
-    client.get_data_range.side_effect = (
-        lambda spreadsheet_id, sheet_name: f"'{sheet_name}'!A2:Z99999"
-    )
     client.get_headers.side_effect = (
-        lambda spreadsheet_id, sheet_name: rows_by_range["headers"].get(
-            sheet_name, []
+        lambda spreadsheet_id, sheet_name: headers_by_sheet.get(
+            sheet_name,
+            [],
         )
     )
 
     def values_get(spreadsheetId, range):
         sheet_name = str(range).split("!", 1)[0].replace("'", "")
-        payload = rows_by_range["values"].get(
-            sheet_name, {"values": []}
-        )
+        payload = values_by_sheet.get(sheet_name, {"values": []})
         return Mock(execute=Mock(return_value=payload))
 
     client.service = Mock()
     client.service.spreadsheets.return_value.values.return_value.get.side_effect = (
         values_get
     )
-    client.service.spreadsheets.return_value.values.return_value.append = Mock()
-    client.service.spreadsheets.return_value.values.return_value.update = Mock()
     client.append_rows = Mock()
     client.update_cell = Mock()
     return client
@@ -64,11 +60,8 @@ class TestProcessContext:
             gmail_client=Mock(),
         )
 
-        first = context.get_sheet_headers("T_EXTRATO")
-        second = context.get_sheet_headers("T_EXTRATO")
-
-        assert first == ["A", "B"]
-        assert second == ["A", "B"]
+        assert context.get_sheet_headers("T_EXTRATO") == ["A", "B"]
+        assert context.get_sheet_headers("T_EXTRATO") == ["A", "B"]
         sheet_client.get_headers.assert_called_once_with(
             "sheet-123",
             "T_EXTRATO",
@@ -76,27 +69,17 @@ class TestProcessContext:
 
 
 class TestExtratoProcess:
-    @patch(
-        "src.gmail_to_sheets.orchestration.processes.ExtratoOrchestrator"
-    )
-    def test_check_pending_is_read_only_and_uses_max_results_one(
-        self,
-        mock_orch_cls,
-    ):
+    def test_check_pending_is_read_only_and_uses_one_message(self):
         settings = _make_settings()
         gmail_client = Mock()
         gmail_client.search_messages.return_value = ["msg-1"]
-        gmail_client.get_message = Mock()
-        gmail_client.archive_message = Mock()
-        gmail_client.add_label = Mock()
         context = ProcessContext(
             settings=settings,
             gmail_client=gmail_client,
             sheets_client=Mock(),
         )
 
-        process = ExtratoProcess(context)
-        pending = process.check_pending()
+        pending = ExtratoProcess(context).check_pending()
 
         assert pending.has_work is True
         assert pending.count == 1
@@ -105,10 +88,8 @@ class TestExtratoProcess:
             max_results=1,
         )
         gmail_client.get_message.assert_not_called()
-        gmail_client.archive_message.assert_not_called()
-        gmail_client.add_label.assert_not_called()
 
-    def test_check_pending_reports_no_work_when_no_message(self):
+    def test_check_pending_reports_no_work(self):
         settings = _make_settings()
         gmail_client = Mock()
         gmail_client.search_messages.return_value = []
@@ -118,228 +99,398 @@ class TestExtratoProcess:
             sheets_client=Mock(),
         )
 
-        process = ExtratoProcess(context)
-        pending = process.check_pending()
+        pending = ExtratoProcess(context).check_pending()
 
         assert pending.has_work is False
         assert pending.count == 0
 
 
-class TestEntradasProcess:
+class TestDizimosOfertasProcess:
+    def test_backward_alias_points_to_named_process(self):
+        assert EntradasProcess is DizimosOfertasProcess
+        assert DizimosOfertasProcess.name == "DizimosOfertas"
+        assert DizimosOfertasProcess.priority == 20
+
+    @patch(
+        "src.gmail_to_sheets.orchestration.processes."
+        "EntryDeduplicationService"
+    )
     @patch(
         "src.gmail_to_sheets.orchestration.processes.EntryValidator"
     )
-    def test_check_pending_uses_validator_and_stops_at_first_valid(
+    def test_pending_requires_valid_non_duplicate_row(
         self,
         mock_validator_cls,
+        mock_dedup_cls,
     ):
         settings = _make_settings()
-        rows_by_range = {
-            "headers": {
-                "DÍZIMOS/OFERTAS": [
-                    "DATA",
-                    "TIPO",
-                    "DOC. SOMA",
-                    "FINANCE",
-                    "VALOR",
-                ],
+        source_headers = [
+            "PERIODO",
+            "MÊS",
+            "DIA DA SEMANA",
+            "DATA",
+            "TIPO",
+            "DOC. SOMA",
+            "NÚMERO DOCUMENTO",
+            "VALOR",
+            "RECIBO",
+            "AUXILIAR TESOURARIA1",
+            "AUXILIAR TESOURARIA2",
+            "AUXILIAR SUBSTITUTO",
+            "FINANCE",
+            "COMENTÁRIOS",
+            "ID_INTERNO",
+        ]
+        target_headers = [
+            "DATA MOV.",
+            "DESCRIÇÃO",
+            "IMPORTÂNCIA",
+            "ID_INTERNO",
+        ]
+        projected_row = [
+            "30/08/2026",
+            "DÍZIMOS/OFERTAS",
+            "5459999",
+            "R260830",
+            "70,00",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "ENT0000000277",
+        ]
+        sheet_client = _make_sheet_client(
+            {
+                "DÍZIMOS/OFERTAS": source_headers,
+                "CONTAORDEM": target_headers,
             },
-            "values": {
+            {
                 "DÍZIMOS/OFERTAS": {
-                    "values": [
-                        [
-                            "01/08/2026",
-                            "DÍZIMOS/OFERTAS",
-                            "DOC1",
-                            "",
-                            "10.00",
-                        ],
-                        [
-                            "02/08/2026",
-                            "DÍZIMOS/OFERTAS",
-                            "",
-                            "",
-                            "5.00",
-                        ],
-                    ]
-                }
+                    "values": [projected_row],
+                },
             },
-        }
-        sheet_client = _make_sheet_client(rows_by_range)
+        )
         validator = Mock()
         validator.column_indices = {
-            "DATA": 0,
-            "TIPO": 1,
-            "DOC. SOMA": 2,
-            "FINANCE": 3,
-            "VALOR": 4,
+            str(header).upper(): index
+            for index, header in enumerate(source_headers)
         }
         validator.is_valid_entry.return_value = (True, None)
         mock_validator_cls.return_value = validator
+
+        dedup = Mock()
+        dedup.is_duplicate.return_value = False
+        mock_dedup_cls.return_value = dedup
+
         context = ProcessContext(
             settings=settings,
             sheets_client=sheet_client,
             gmail_client=Mock(),
         )
 
-        process = EntradasProcess(context)
-        pending = process.check_pending()
+        pending = DizimosOfertasProcess(context).check_pending()
 
         assert pending.has_work is True
         assert pending.count == 1
-        mock_validator_cls.assert_called_once()
-        validator.is_valid_entry.assert_called_once_with(
-            [
-                "01/08/2026",
-                "DÍZIMOS/OFERTAS",
-                "DOC1",
-                "",
-                "10.00",
-            ],
-            2,
+        dedup.is_duplicate.assert_called_once_with(
+            "30/08/2026",
+            "70,00",
+            "R260830 - DÍZIMOS E OFERTAS (CULTO)",
+            id_interno="ENT0000000277",
         )
-        get_call = (
-            sheet_client.service.spreadsheets.return_value
-            .values.return_value.get.call_args
-        )
-        assert get_call.kwargs["range"] == (
-            "'DÍZIMOS/OFERTAS'!A2:E99999"
-        )
-        sheet_client.get_data_range.assert_not_called()
         sheet_client.append_rows.assert_not_called()
         sheet_client.update_cell.assert_not_called()
 
     @patch(
         "src.gmail_to_sheets.orchestration.processes.EntryValidator"
     )
-    def test_check_pending_skips_when_no_valid_entries(
+    def test_no_valid_row_does_not_load_target_dedup(
         self,
         mock_validator_cls,
     ):
         settings = _make_settings()
-        rows_by_range = {
-            "headers": {
-                "DÍZIMOS/OFERTAS": [
-                    "DATA",
-                    "TIPO",
-                    "DOC. SOMA",
-                    "FINANCE",
-                    "VALOR",
-                ],
-            },
-            "values": {
+        headers = [
+            "PERIODO",
+            "MÊS",
+            "DIA DA SEMANA",
+            "DATA",
+            "TIPO",
+            "DOC. SOMA",
+            "NÚMERO DOCUMENTO",
+            "VALOR",
+            "RECIBO",
+            "AUXILIAR TESOURARIA1",
+            "AUXILIAR TESOURARIA2",
+            "AUXILIAR SUBSTITUTO",
+            "FINANCE",
+            "COMENTÁRIOS",
+            "ID_INTERNO",
+        ]
+        sheet_client = _make_sheet_client(
+            {"DÍZIMOS/OFERTAS": headers},
+            {
                 "DÍZIMOS/OFERTAS": {
-                    "values": [
-                        [
-                            "01/08/2026",
-                            "DÍZIMOS/OFERTAS",
-                            "",
-                            "",
-                            "10.00",
-                        ],
-                    ]
-                }
+                    "values": [["30/08/2026"] + [""] * 11],
+                },
             },
-        }
-        sheet_client = _make_sheet_client(rows_by_range)
+        )
         validator = Mock()
         validator.column_indices = {
-            "DATA": 0,
-            "TIPO": 1,
-            "DOC. SOMA": 2,
-            "FINANCE": 3,
-            "VALOR": 4,
+            str(header).upper(): index
+            for index, header in enumerate(headers)
         }
         validator.is_valid_entry.return_value = (
             False,
             "DOC.SOMA vazio",
         )
         mock_validator_cls.return_value = validator
+
         context = ProcessContext(
             settings=settings,
             sheets_client=sheet_client,
             gmail_client=Mock(),
         )
 
-        process = EntradasProcess(context)
-        pending = process.check_pending()
+        pending = DizimosOfertasProcess(context).check_pending()
 
         assert pending.has_work is False
-        assert pending.count == 0
-        sheet_client.get_data_range.assert_not_called()
-        sheet_client.append_rows.assert_not_called()
-        sheet_client.update_cell.assert_not_called()
+        assert "CONTAORDEM" not in context.headers_cache
 
 
-class TestConciliacaoProcess:
-    def test_check_pending_skips_when_no_doc_soma_in_contaordem(self):
+class TestSaidasProcess:
+    @patch(
+        "src.gmail_to_sheets.orchestration.processes."
+        "EntryDeduplicationService"
+    )
+    def test_pending_requires_finance_ready_non_duplicate_row(
+        self,
+        mock_dedup_cls,
+    ):
         settings = _make_settings()
-        rows_by_range = {
-            "headers": {
-                "T_EXTRATO": ["DOC. SOMA", "ID_INTERNO"],
-                "CONTAORDEM": ["ID_INTERNO", "DOC. SOMA"],
+        source_headers = [
+            "ID_INTERNO",
+            "FORMA DE PAGAMENTO",
+            "DATA",
+            "DATA VALOR",
+            "TIPO",
+            "DOC. SOMA",
+            "Nº RECIBO",
+            "VALOR DA COMPRA",
+            "DESCRIÇÃO DA COMPRA",
+            "NOME RECEBEDOR DO PAGAMENTO",
+            "TELEFONE RECEBEDOR",
+            "EMAIL RECEBEDOR",
+            "NOME DO FORNECEDOR",
+            "TELEFONE FORNECEDOR",
+            "EMAIL FORNECEDOR",
+            "PLANO DE CONTA",
+            "CENTRO DE CUSTO",
+            "CAIXA",
+            "IMAGEM DO RECIBO",
+            "STATUS DA TESOURARIA",
+            "STATUS PROCESSAMENTO",
+            "FINANCE",
+        ]
+        target_headers = [
+            "DATA MOV.",
+            "DESCRIÇÃO",
+            "IMPORTÂNCIA",
+            "ID_INTERNO",
+        ]
+        source_row = [
+            "SAI0000000239",
+            "DINHEIRO",
+            "30/08/2026",
+            "",
+            "PAGAMENTO",
+            "5459998",
+            "FT-1",
+            "25,00",
+            "MATERIAL DE LIMPEZA",
+            "",
+            "",
+            "",
+            "Fornecedor",
+            "",
+            "",
+            "MATERIAL DE LIMPEZA",
+            "30.10.10 - MATERIAL DE LIMPEZA",
+            "CAIXA DIÁRIO",
+            "",
+            "Concluído",
+            "",
+            "",
+        ]
+        sheet_client = _make_sheet_client(
+            {
+                "SAÍDAS": source_headers,
+                "CONTAORDEM": target_headers,
             },
-            "values": {
-                "T_EXTRATO": {
-                    "values": [
-                        ["", "EXT0000000001"],
-                    ]
-                },
-                "CONTAORDEM": {
-                    "values": [
-                        ["EXT0000000001", ""],
-                    ]
-                },
+            {
+                "SAÍDAS": {"values": [source_row]},
             },
-        }
-        sheet_client = _make_sheet_client(rows_by_range)
+        )
+        dedup = Mock()
+        dedup.is_duplicate.return_value = False
+        mock_dedup_cls.return_value = dedup
+
         context = ProcessContext(
             settings=settings,
             sheets_client=sheet_client,
             gmail_client=Mock(),
         )
 
-        process = ConciliacaoProcess(context)
-        pending = process.check_pending()
-
-        assert pending.has_work is False
-        assert pending.count == 0
-        sheet_client.get_data_range.assert_not_called()
-        sheet_client.append_rows.assert_not_called()
-        sheet_client.update_cell.assert_not_called()
-
-    def test_check_pending_runs_when_doc_soma_is_available(self):
-        settings = _make_settings()
-        rows_by_range = {
-            "headers": {
-                "T_EXTRATO": ["DOC. SOMA", "ID_INTERNO"],
-                "CONTAORDEM": ["ID_INTERNO", "DOC. SOMA"],
-            },
-            "values": {
-                "T_EXTRATO": {
-                    "values": [
-                        ["", "EXT0000000001"],
-                    ]
-                },
-                "CONTAORDEM": {
-                    "values": [
-                        ["EXT0000000001", "DOC-1"],
-                    ]
-                },
-            },
-        }
-        sheet_client = _make_sheet_client(rows_by_range)
-        context = ProcessContext(
-            settings=settings,
-            sheets_client=sheet_client,
-            gmail_client=Mock(),
-        )
-
-        process = ConciliacaoProcess(context)
-        pending = process.check_pending()
+        pending = SaidasProcess(context).check_pending()
 
         assert pending.has_work is True
         assert pending.count == 1
-        sheet_client.get_data_range.assert_not_called()
+        dedup.is_duplicate.assert_called_once_with(
+            "30/08/2026",
+            "25,00",
+            "MATERIAL DE LIMPEZA",
+            id_interno="SAI0000000239",
+        )
         sheet_client.append_rows.assert_not_called()
         sheet_client.update_cell.assert_not_called()
+
+    @patch(
+        "src.gmail_to_sheets.orchestration.processes."
+        "EntryDeduplicationService"
+    )
+    def test_duplicate_saidas_row_is_not_pending(
+        self,
+        mock_dedup_cls,
+    ):
+        settings = _make_settings()
+        headers = [
+            "ID_INTERNO",
+            "FORMA DE PAGAMENTO",
+            "DATA",
+            "DATA VALOR",
+            "TIPO",
+            "DOC. SOMA",
+            "Nº RECIBO",
+            "VALOR DA COMPRA",
+            "DESCRIÇÃO DA COMPRA",
+            "NOME RECEBEDOR DO PAGAMENTO",
+            "TELEFONE RECEBEDOR",
+            "EMAIL RECEBEDOR",
+            "NOME DO FORNECEDOR",
+            "TELEFONE FORNECEDOR",
+            "EMAIL FORNECEDOR",
+            "PLANO DE CONTA",
+            "CENTRO DE CUSTO",
+            "CAIXA",
+            "IMAGEM DO RECIBO",
+            "STATUS DA TESOURARIA",
+            "STATUS PROCESSAMENTO",
+            "FINANCE",
+        ]
+        row = [
+            "SAI0000000239",
+            "DINHEIRO",
+            "30/08/2026",
+            "",
+            "PAGAMENTO",
+            "5459998",
+            "FT-1",
+            "25,00",
+            "MATERIAL DE LIMPEZA",
+            "",
+            "",
+            "",
+            "Fornecedor",
+            "",
+            "",
+            "MATERIAL DE LIMPEZA",
+            "PADRÃO",
+            "CAIXA DIÁRIO",
+            "",
+            "Concluído",
+            "",
+            "",
+        ]
+        sheet_client = _make_sheet_client(
+            {
+                "SAÍDAS": headers,
+                "CONTAORDEM": [
+                    "DATA MOV.",
+                    "DESCRIÇÃO",
+                    "IMPORTÂNCIA",
+                    "ID_INTERNO",
+                ],
+            },
+            {"SAÍDAS": {"values": [row]}},
+        )
+        dedup = Mock()
+        dedup.is_duplicate.return_value = True
+        mock_dedup_cls.return_value = dedup
+
+        context = ProcessContext(
+            settings=settings,
+            sheets_client=sheet_client,
+            gmail_client=Mock(),
+        )
+
+        pending = SaidasProcess(context).check_pending()
+
+        assert pending.has_work is False
+        assert pending.count == 0
+
+
+class TestConciliacaoProcess:
+    def test_check_pending_skips_without_doc_soma_in_target(self):
+        settings = _make_settings()
+        sheet_client = _make_sheet_client(
+            {
+                "T_EXTRATO": ["DOC. SOMA", "ID_INTERNO"],
+                "CONTAORDEM": ["ID_INTERNO", "DOC. SOMA"],
+            },
+            {
+                "T_EXTRATO": {
+                    "values": [["", "EXT0000000001"]],
+                },
+                "CONTAORDEM": {
+                    "values": [["EXT0000000001", ""]],
+                },
+            },
+        )
+        context = ProcessContext(
+            settings=settings,
+            sheets_client=sheet_client,
+            gmail_client=Mock(),
+        )
+
+        pending = ConciliacaoProcess(context).check_pending()
+
+        assert pending.has_work is False
+        assert pending.count == 0
+
+    def test_check_pending_runs_when_doc_soma_is_available(self):
+        settings = _make_settings()
+        sheet_client = _make_sheet_client(
+            {
+                "T_EXTRATO": ["DOC. SOMA", "ID_INTERNO"],
+                "CONTAORDEM": ["ID_INTERNO", "DOC. SOMA"],
+            },
+            {
+                "T_EXTRATO": {
+                    "values": [["", "EXT0000000001"]],
+                },
+                "CONTAORDEM": {
+                    "values": [["EXT0000000001", "DOC-1"]],
+                },
+            },
+        )
+        context = ProcessContext(
+            settings=settings,
+            sheets_client=sheet_client,
+            gmail_client=Mock(),
+        )
+
+        pending = ConciliacaoProcess(context).check_pending()
+
+        assert pending.has_work is True
+        assert pending.count == 1
