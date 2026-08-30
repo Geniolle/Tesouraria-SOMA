@@ -85,6 +85,43 @@ class CentralOrchestrator:
         except Exception:
             logger.exception("Unable to persist orchestrator health state")
 
+    def _enforce_contaordem_order(
+        self,
+        process_name: str,
+        result: ProcessResult,
+    ) -> ProcessResult:
+        """Sort dirty CONTAORDEM before the process result is finalized."""
+        sheets_client = self.context.sheets_client
+        if (
+            sheets_client is None
+            or not sheets_client.is_sheet_dirty("CONTAORDEM")
+        ):
+            return result
+
+        try:
+            sort_result = sheets_client.ensure_contaordem_sorted(
+                self.settings.sheets.spreadsheet_id
+            )
+            if sort_result.get("sorted"):
+                logger.info(
+                    "%-12s CONTAORDEM sorted by DATA MOV. descending",
+                    process_name,
+                )
+        except Exception as error:
+            logger.exception(
+                "%s failed to enforce CONTAORDEM ordering",
+                process_name,
+            )
+            result.status = ProcessStatus.FAILED
+            sort_error = f"CONTAORDEM sort failed: {error}"
+            result.error = (
+                f"{result.error}; {sort_error}"
+                if result.error
+                else sort_error
+            )
+
+        return result
+
     def _mark_idle(self, process_name: str, pending_count: int) -> None:
         health = self._health_for(process_name)
         health.state = ProcessHealthState.IDLE
@@ -216,6 +253,11 @@ class CentralOrchestrator:
                     error=str(error),
                 )
                 results.append(result)
+
+            result = self._enforce_contaordem_order(
+                process.name,
+                result,
+            )
 
             if result.status == ProcessStatus.SUCCESS:
                 logger.info(

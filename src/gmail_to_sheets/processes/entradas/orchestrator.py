@@ -85,7 +85,7 @@ class EntradasOrchestrator:
             # Phase 5: Update FINANCE status
             update_result = self._update_status(transfer_result["transferred_rows"])
 
-            # Phase 6: Sort CONTAORDEM
+            # Phase 6: Enforce CONTAORDEM ordering after any mutation
             self._sort_contaordem()
 
             logger.info("=" * 80)
@@ -292,23 +292,18 @@ class EntradasOrchestrator:
             raise
 
     def _sort_contaordem(self) -> None:
-        """Sort CONTAORDEM by DATA MOV. descending."""
+        """Enforce CONTAORDEM ordering by DATA MOV. descending."""
         if not self.sheets_client:
             raise RuntimeError("Sheets client not initialized")
 
-        try:
-            logger.info("[6/6] Sorting CONTAORDEM by DATA MOV....")
-
-            transfer_service = EntryTransferService(
-                self.sheets_client, self.spreadsheet_id
-            )
-            transfer_service.sort_by_date()
-
-            logger.info("      Sort completed")
-
-        except Exception as e:
-            logger.error(f"Sort failed: {e}")
-            # Don't raise - sorting is not critical
+        logger.info("[6/6] Sorting CONTAORDEM by DATA MOV....")
+        result = self.sheets_client.ensure_contaordem_sorted(
+            self.spreadsheet_id
+        )
+        if result.get("sorted"):
+            logger.info("      CONTAORDEM sort completed")
+        else:
+            logger.info("      CONTAORDEM already ordered/no mutation")
 
 
 def run_entradas_process():

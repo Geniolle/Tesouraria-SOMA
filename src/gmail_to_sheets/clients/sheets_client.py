@@ -30,6 +30,7 @@ class SheetsClient:
         self.service_account_path = Path(service_account_path)
         self.credentials = self._load_credentials()
         self.service = build("sheets", "v4", credentials=self.credentials)
+        self._dirty_sheets: set[str] = set()
 
     @staticmethod
     def _quote_sheet_name(sheet_name: str) -> str:
@@ -259,6 +260,8 @@ class SheetsClient:
                 f"Appended {len(rows)} rows to {sheet_name}: "
                 f"{result.get('updates', {}).get('updatedRows', 0)} rows updated"
             )
+            if rows:
+                self.mark_sheet_dirty(sheet_name)
 
             return result
         except HttpError as e:
@@ -330,11 +333,146 @@ class SheetsClient:
                 body=body,
             ).execute()
 
-            logger.debug(f"Updated cell {range_name} with value: {value} (inputOption={value_input_option})")
+            logger.debug(
+                f"Updated cell {range_name} with value: {value} "
+                f"(inputOption={value_input_option})"
+            )
+            self.mark_sheet_dirty(sheet_name)
             return result
         except HttpError as e:
             logger.error(f"Failed to update cell: {e}")
             raise
+
+    @staticmethod
+    def _normalize_sheet_key(sheet_name: str) -> str:
+        """Normalize a sheet name for internal dirty-state tracking."""
+        return str(sheet_name or "").strip().casefold()
+
+    def mark_sheet_dirty(self, sheet_name: str) -> None:
+        """Mark a sheet as changed and requiring post-write housekeeping."""
+        if not hasattr(self, "_dirty_sheets"):
+            self._dirty_sheets = set()
+        key = self._normalize_sheet_key(sheet_name)
+        if key:
+            self._dirty_sheets.add(key)
+
+    def is_sheet_dirty(self, sheet_name: str) -> bool:
+        """Return whether a sheet was changed through this client."""
+        if not hasattr(self, "_dirty_sheets"):
+            self._dirty_sheets = set()
+        return self._normalize_sheet_key(sheet_name) in self._dirty_sheets
+
+    def sort_sheet_by_column(
+        self,
+        spreadsheet_id: str,
+        sheet_name: str,
+        column_name: str,
+        *,
+        descending: bool = True,
+        header_rows: int = 1,
+    ) -> dict[str, Any]:
+        """Sort an entire sheet by a named column.
+
+        The sort is strict: a missing column or sheet raises instead of
+        silently leaving the sheet in an unknown order.
+        """
+        headers = self.get_headers(spreadsheet_id, sheet_name)
+        normalized_column = str(column_name).strip().casefold()
+        column_index = next(
+            (
+                index
+                for index, header in enumerate(headers)
+                if str(header).strip().casefold() == normalized_column
+            ),
+            None,
+        )
+        if column_index is None:
+            raise RuntimeError(
+                f"Column '{column_name}' not found in sheet '{sheet_name}'"
+            )
+
+        sheet_id = self.get_sheet_id(spreadsheet_id, sheet_name)
+        if sheet_id is None:
+            raise RuntimeError(f"Sheet '{sheet_name}' not found")
+
+        last_row = self.get_last_row(spreadsheet_id, sheet_name)
+        if last_row <= header_rows:
+            self._dirty_sheets.discard(
+                self._normalize_sheet_key(sheet_name)
+            )
+            return {
+                "sorted": False,
+                "sheet": sheet_name,
+                "column": column_name,
+                "rows": 0,
+            }
+
+        request = {
+            "sortRange": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "startRowIndex": header_rows,
+                    "endRowIndex": last_row,
+                    "startColumnIndex": 0,
+                    "endColumnIndex": max(len(headers), 1),
+                },
+                "sortSpecs": [
+                    {
+                        "dimensionIndex": column_index,
+                        "sortOrder": (
+                            "DESCENDING" if descending else "ASCENDING"
+                        ),
+                    }
+                ],
+            }
+        }
+        self.service.spreadsheets().batchUpdate(
+            spreadsheetId=spreadsheet_id,
+            body={"requests": [request]},
+        ).execute()
+
+        self._dirty_sheets.discard(
+            self._normalize_sheet_key(sheet_name)
+        )
+        logger.info(
+            "Sorted %s by %s (%s)",
+            sheet_name,
+            column_name,
+            "descending" if descending else "ascending",
+        )
+        return {
+            "sorted": True,
+            "sheet": sheet_name,
+            "column": column_name,
+            "rows": max(last_row - header_rows, 0),
+        }
+
+    def sort_contaordem_by_data_mov(
+        self,
+        spreadsheet_id: str,
+    ) -> dict[str, Any]:
+        """Sort CONTAORDEM by DATA MOV. descending."""
+        return self.sort_sheet_by_column(
+            spreadsheet_id,
+            "CONTAORDEM",
+            "DATA MOV.",
+            descending=True,
+        )
+
+    def ensure_contaordem_sorted(
+        self,
+        spreadsheet_id: str,
+    ) -> dict[str, Any]:
+        """Sort CONTAORDEM only when this client changed it."""
+        if not self.is_sheet_dirty("CONTAORDEM"):
+            return {
+                "sorted": False,
+                "sheet": "CONTAORDEM",
+                "column": "DATA MOV.",
+                "rows": 0,
+                "reason": "not-dirty",
+            }
+        return self.sort_contaordem_by_data_mov(spreadsheet_id)
 
     @staticmethod
     def _number_to_column(col_num: int) -> str:

@@ -112,7 +112,13 @@ class TransferMatchingService:
             )
             update_result = updater.update_rows(update_rows)
             logger.info(
-                f"Update result: {update_result['updated']} cells updated, {update_result['errors']} errors"
+                f"Update result: {update_result['updated']} cells updated, "
+                f"{update_result['errors']} errors"
+            )
+
+        if self.target_sheet.strip().casefold() == "contaordem":
+            self.sheets_client.ensure_contaordem_sorted(
+                self.spreadsheet_id
             )
 
         return stats

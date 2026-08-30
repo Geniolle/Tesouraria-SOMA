@@ -110,60 +110,10 @@ class SaidaTransferService:
             raise SaidaTransferError(str(error)) from error
 
     def sort_by_date(self) -> None:
-        """Sort CONTAORDEM by DATA MOV. descending after a successful batch."""
-        try:
-            last_row = self.sheets_client.get_last_row(
-                self.spreadsheet_id,
-                self.target_sheet,
-            )
-            if last_row <= 2:
-                return
-
-            metadata = self.sheets_client.service.spreadsheets().get(
-                spreadsheetId=self.spreadsheet_id,
-                fields="sheets.properties",
-            ).execute()
-
-            sheet_id = next(
-                (
-                    sheet["properties"]["sheetId"]
-                    for sheet in metadata.get("sheets", [])
-                    if sheet["properties"]["title"] == self.target_sheet
-                ),
-                None,
-            )
-            data_index = self.target_indices.get("DATA MOV.")
-
-            if sheet_id is None or data_index is None:
-                logger.warning("Unable to sort CONTAORDEM by DATA MOV.")
-                return
-
-            self.sheets_client.service.spreadsheets().batchUpdate(
-                spreadsheetId=self.spreadsheet_id,
-                body={
-                    "requests": [
-                        {
-                            "sortRange": {
-                                "range": {
-                                    "sheetId": sheet_id,
-                                    "startRowIndex": 1,
-                                    "endRowIndex": last_row,
-                                    "startColumnIndex": 0,
-                                    "endColumnIndex": len(self.target_headers),
-                                },
-                                "sortSpecs": [
-                                    {
-                                        "dimensionIndex": data_index,
-                                        "sortOrder": "DESCENDING",
-                                    }
-                                ],
-                            }
-                        }
-                    ]
-                },
-            ).execute()
-        except Exception as error:
-            logger.warning("CONTAORDEM sort failed: %s", error)
+        """Sort CONTAORDEM by DATA MOV. descending."""
+        self.sheets_client.sort_contaordem_by_data_mov(
+            self.spreadsheet_id
+        )
 
     def _source(self, row: list, field: str) -> Optional[str]:
         index = self.source_indices.get(field.upper())

@@ -50,6 +50,17 @@ Every managed process exposes:
 
 Processes without actionable records are skipped.
 
+## Mandatory CONTAORDEM ordering
+
+Whenever any process inserts or updates records in `CONTAORDEM`, the sheet
+must finish ordered by:
+
+`DATA MOV.` descending.
+
+This is a global invariant, not a process-specific business rule. The shared
+Sheets client tracks mutations and the central orchestrator provides a
+fallback enforcement step after every managed process.
+
 ## Duplicate protection
 
 Finance transfers use both:

@@ -190,6 +190,11 @@ class TransferService:
                         f"{len(status_updates or {})}, got {batch_result['status_updates_applied']}"
                     )
 
+            if self.target_sheet.strip().casefold() == "contaordem":
+                self.sheets_client.ensure_contaordem_sorted(
+                    self.spreadsheet_id
+                )
+
             logger.info(
                 "Transfer completed: %s transferred, %s duplicates",
                 stats["transferred"],

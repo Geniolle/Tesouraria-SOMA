@@ -83,6 +83,7 @@ class BatchWriter:
                         body={"values": source_data}
                     ).execute()
                     stats["source_rows_updated"] = len(source_data)
+                    self.sheets_client.mark_sheet_dirty(source_sheet)
                     logger.info(f"Updated {len(source_data)} rows in {source_sheet}")
                 except Exception as e:
                     logger.error(f"Failed to update {source_sheet}: {e}")
@@ -94,6 +95,7 @@ class BatchWriter:
                     logger.info(f"Batch updating status for {len(status_updates)} rows")
                     self._batch_update_status(source_sheet, status_updates)
                     stats["status_updates_applied"] = len(status_updates)
+                    self.sheets_client.mark_sheet_dirty(source_sheet)
                     logger.info(f"Updated status for {len(status_updates)} rows")
                 except Exception as e:
                     logger.error(f"Failed to update status: {e}")

@@ -57,6 +57,27 @@ the service. A service restart refreshes this metadata cache.
 The projection helper preserves original column indexes by left-padding
 projected rows before existing validators consume them.
 
+## CONTAORDEM ordering invariant
+
+`CONTAORDEM` has a mandatory post-write invariant:
+
+- base column: `DATA MOV.`
+- order: descending (most recent first)
+- header row is excluded from sorting
+
+The shared `SheetsClient` tracks sheet mutations. Any managed process that
+changes `CONTAORDEM` marks it dirty, and the central orchestrator enforces
+the sort before finalizing the process result.
+
+Current process orchestrators also enforce the same invariant on their
+standalone/manual execution path.
+
+If the sort fails after a mutation, the managed process is reported as
+`FAILED`; the failure is not silently ignored.
+
+This ordering must remain centralized. New processes should not implement
+their own independent sort algorithm.
+
 ## Process health
 
 The orchestrator persists a lightweight local health snapshot in:

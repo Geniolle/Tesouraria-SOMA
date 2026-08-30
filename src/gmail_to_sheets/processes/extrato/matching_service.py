@@ -164,8 +164,11 @@ class MatchingService:
             if ref_data:
                 self._write_timestamp(self.reference_sheet, ref_data)
 
-            # Sort by DATA MOV. (descending)
-            self._sort_by_date(self.source_sheet)
+            # Enforce DATA MOV. ordering after CONTAORDEM mutation.
+            if self.source_sheet.strip().casefold() == "contaordem":
+                self.sheets_client.ensure_contaordem_sorted(
+                    self.spreadsheet_id
+                )
 
             logger.info(f"Matching completed: {stats['matched']} matched, {stats['no_match']} no match")
             return stats
@@ -212,6 +215,7 @@ class MatchingService:
                 valueInputOption="USER_ENTERED",
                 body={"values": data}
             ).execute()
+            self.sheets_client.mark_sheet_dirty(sheet_name)
 
             logger.info(f"Wrote {num_rows} rows to {sheet_name}")
 
