@@ -129,8 +129,11 @@ class SaidasOrchestrator:
                 )
 
         update_result = status.mark_batch_as_sent(transferred_rows)
-        if transferred:
-            transfer.sort_by_date()
+        sort_result = self.sheets_client.ensure_contaordem_sorted(
+            self.spreadsheet_id
+        )
+        if sort_result.get("sorted"):
+            logger.info("CONTAORDEM sorted by DATA MOV. descending")
 
         summary = {
             "valid": valid,
