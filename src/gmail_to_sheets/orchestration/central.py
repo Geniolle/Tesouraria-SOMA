@@ -21,7 +21,12 @@ from .health import (
     utc_now_iso,
 )
 from .models import ProcessContext, ProcessResult, ProcessStatus
-from .processes import (\n    ConciliacaoProcess,\n    DizimosOfertasProcess,\n    ExtratoProcess,\n    SaidasProcess,\n)
+from .processes import (
+    ConciliacaoProcess,
+    DizimosOfertasProcess,
+    ExtratoProcess,
+    SaidasProcess,
+)
 from .registry import ProcessRegistry
 
 logger = logging.getLogger(__name__)
