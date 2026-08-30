@@ -99,7 +99,12 @@ class BatchUpdater:
                 logger.error(f"Error processing row {row_num}: {e}")
                 stats["errors"] += 1
 
-        logger.info(f"Batch update complete: {stats['updated']} cells updated, {stats['errors']} errors")
+        logger.info(
+            f"Batch update complete: {stats['updated']} cells updated, "
+            f"{stats['errors']} errors"
+        )
+        if stats["updated"] > 0:
+            self.sheets_client.mark_sheet_dirty(self.sheet_name)
 
         # Fail if any errors occurred
         if stats["errors"] > 0:
