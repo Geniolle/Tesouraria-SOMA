@@ -22,7 +22,8 @@ from src.gmail_to_sheets.logging_config import setup_logging
 from src.gmail_to_sheets.orchestration import CentralOrchestrator
 from src.gmail_to_sheets.orchestrator import Orchestrator as ExtratoOrchestrator
 from src.gmail_to_sheets.processes.conciliacao.orchestrator import ConciliationOrchestrator
-from src.gmail_to_sheets.processes.entradas.orchestrator import EntradasOrchestrator\nfrom src.gmail_to_sheets.processes.saidas.orchestrator import SaidasOrchestrator
+from src.gmail_to_sheets.processes.entradas.orchestrator import EntradasOrchestrator
+from src.gmail_to_sheets.processes.saidas.orchestrator import SaidasOrchestrator
 
 logger = logging.getLogger(__name__)
 
