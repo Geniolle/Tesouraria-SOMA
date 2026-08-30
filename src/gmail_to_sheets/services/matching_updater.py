@@ -107,6 +107,11 @@ class MatchingUpdater:
             if updates:
                 self._batch_update_rows(updates)
                 stats["updated"] = len(updates)
+                self.sheets_client.mark_sheet_dirty(self.target_sheet)
+                if self.target_sheet.strip().casefold() == "contaordem":
+                    self.sheets_client.ensure_contaordem_sorted(
+                        self.spreadsheet_id
+                    )
 
             return stats
 
