@@ -6,8 +6,8 @@ Reference for the current production server and deployment location.
 
 - SSH host: `opc@servidor-tesouraria`
 - Remote project directory: `/home/opc/AppExtrato`
-- Current deployed commit: `a26c352`
-- Last verified sync date: `2026-08-25`
+- Current deployed commit: `cca933e`
+- Last verified sync date: `2026-08-31`
 - Production runtime: `systemd` service `appextrato.service`
 - Current start command: `/home/opc/AppExtrato/venv/bin/python -m src.gmail_to_sheets.app run-scheduled`
 
