@@ -20,6 +20,11 @@ from src.gmail_to_sheets.processes.entradas.entry_validator import EntryValidato
 from src.gmail_to_sheets.processes.entradas.orchestrator import EntradasOrchestrator
 from src.gmail_to_sheets.processes.saidas.orchestrator import SaidasOrchestrator
 from src.gmail_to_sheets.processes.saidas.validator import SaidaValidator
+from src.gmail_to_sheets.processes.verbo_cafe.config import resolve_phases
+from src.gmail_to_sheets.processes.verbo_cafe.orchestrator import (
+    VerboCafeOrchestrator,
+)
+from src.gmail_to_sheets.processes.verbo_cafe.validator import VerboCafeValidator
 
 from .models import PendingResult, ProcessContext, ProcessResult, ProcessStatus
 
@@ -479,6 +484,105 @@ class ConciliacaoProcess(_BaseManagedProcess):
         except Exception as error:
             logger.error(
                 "Conciliacao process failed during managed execution: %s",
+                error,
+                exc_info=True,
+            )
+            return self._build_failed(self.name, error, started_at)
+
+
+class VerboCafeProcess(_BaseManagedProcess):
+    """Managed Verbo Café process: VC_VENDAS + Financeiro -> CONTAORDEM."""
+
+    name = "VerboCafe"
+    priority = 35
+    target_sheet = "CONTAORDEM"
+
+    def check_pending(self) -> PendingResult:
+        """Find the first actionable non-duplicate row across both phases."""
+        sheets_client = self.context.get_sheets_client()
+        source_id = self.context.settings.verbo_cafe.source_spreadsheet_id
+        target_id = self.context.settings.sheets.spreadsheet_id
+        dedup: EntryDeduplicationService | None = None
+
+        for phase in resolve_phases(self.context.settings):
+            source_headers = self.context.get_sheet_headers(
+                phase.source_sheet,
+                source_id,
+            )
+            validator = VerboCafeValidator(phase, source_headers)
+
+            rows = read_projected_rows(
+                sheets_client,
+                source_id,
+                phase.source_sheet,
+                validator.column_indices,
+                phase.required_headers,
+            )
+
+            for row_number, row in rows:
+                is_valid, _ = validator.is_valid_entry(row, row_number)
+                if not is_valid:
+                    continue
+
+                data = self._row_value(
+                    row,
+                    validator.column_indices,
+                    phase.data_field,
+                )
+                valor = self._row_value(
+                    row,
+                    validator.column_indices,
+                    phase.amount_field,
+                )
+                id_interno = self._row_value(
+                    row,
+                    validator.column_indices,
+                    phase.id_field,
+                )
+                descricao = validator.build_descricao(row)
+
+                if dedup is None:
+                    dedup = EntryDeduplicationService(
+                        sheets_client,
+                        target_id,
+                        headers=self.context.get_sheet_headers(
+                            self.target_sheet
+                        ),
+                    )
+
+                if dedup.is_duplicate(
+                    data,
+                    valor,
+                    descricao,
+                    id_interno=id_interno,
+                ):
+                    continue
+
+                return PendingResult(
+                    has_work=True,
+                    count=1,
+                    reason=f"Verbo Café: {phase.key} row ready for transfer",
+                )
+
+        return PendingResult(
+            has_work=False,
+            count=0,
+            reason="No Verbo Café rows ready for transfer",
+        )
+
+    def run(self) -> ProcessResult:
+        started_at = perf_counter()
+        try:
+            orchestrator = VerboCafeOrchestrator(
+                settings=self.context.settings,
+                sheets_client=self.context.get_sheets_client(),
+            )
+            summary = orchestrator.run() or {}
+            processed = int(summary.get("transferred", 0))
+            return self._build_success(self.name, processed, started_at)
+        except Exception as error:
+            logger.error(
+                "VerboCafe failed during managed execution: %s",
                 error,
                 exc_info=True,
             )

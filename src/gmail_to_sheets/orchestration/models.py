@@ -68,15 +68,26 @@ class ProcessContext:
             )
         return self.sheets_client
 
-    def get_sheet_headers(self, sheet_name: str) -> list[str]:
+    def get_sheet_headers(
+        self,
+        sheet_name: str,
+        spreadsheet_id: str | None = None,
+    ) -> list[str]:
         """Return cached sheet headers.
 
         Headers are metadata and safe to cache for the lifetime of the service.
         A service restart refreshes the cache if the spreadsheet structure changes.
+
+        ``spreadsheet_id`` defaults to the main treasury spreadsheet; pass an
+        explicit id to read headers from another spreadsheet (e.g. the Verbo
+        Café source). The cache key includes the spreadsheet id so sheets with
+        the same name in different spreadsheets stay isolated.
         """
-        if sheet_name not in self.headers_cache:
-            self.headers_cache[sheet_name] = self.get_sheets_client().get_headers(
-                self.settings.sheets.spreadsheet_id,
+        resolved_id = spreadsheet_id or self.settings.sheets.spreadsheet_id
+        cache_key = f"{resolved_id}::{sheet_name}"
+        if cache_key not in self.headers_cache:
+            self.headers_cache[cache_key] = self.get_sheets_client().get_headers(
+                resolved_id,
                 sheet_name,
             )
-        return list(self.headers_cache[sheet_name])
+        return list(self.headers_cache[cache_key])

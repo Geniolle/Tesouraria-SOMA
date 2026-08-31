@@ -45,6 +45,50 @@ class CashBalanceSettings(BaseSettings):
         return offset
 
 
+class VerboCafeSettings(BaseSettings):
+    """Verbo Café process configuration.
+
+    The Verbo Café source sheets (``VC_VENDAS`` and ``Financeiro``) live in a
+    spreadsheet that is separate from the main treasury spreadsheet. The
+    default keeps parity with the legacy Apps Script; override it through the
+    ``VERBO_CAFE_SOURCE_SPREADSHEET_ID`` environment variable if needed.
+    """
+
+    source_spreadsheet_id: str = Field(
+        "11sUHhTzKaV21uX_FpBOEnJxNpFjUn6EHEiU79Pe3jXU",
+        alias="VERBO_CAFE_SOURCE_SPREADSHEET_ID",
+    )
+    vendas_sheet_name: str = Field(
+        "VC_VENDAS",
+        alias="VERBO_CAFE_VENDAS_SHEET_NAME",
+    )
+    pagamentos_sheet_name: str = Field(
+        "Financeiro",
+        alias="VERBO_CAFE_PAGAMENTOS_SHEET_NAME",
+    )
+    service_account_path: Path | None = Field(
+        None,
+        alias="VERBO_CAFE_SERVICE_ACCOUNT_PATH",
+    )
+
+    model_config = {
+        "env_file": ".env",
+        "case_sensitive": False,
+        "extra": "ignore",
+    }
+
+    @field_validator("service_account_path", mode="before")
+    @classmethod
+    def _blank_path_to_none(cls, v):
+        """Treat an empty ``VERBO_CAFE_SERVICE_ACCOUNT_PATH`` as unset.
+
+        When unset, the process reuses the main Sheets service account.
+        """
+        if v is None or str(v).strip() == "":
+            return None
+        return Path(v)
+
+
 class GmailSettings(BaseSettings):
     """Gmail-specific configuration."""
 
@@ -95,6 +139,7 @@ class AppSettings(BaseSettings):
     gmail: GmailSettings
     sheets: SheetsSettings
     cash_balance: CashBalanceSettings
+    verbo_cafe: VerboCafeSettings
     attachment_extension: str = Field(".txt", alias="ATTACHMENT_EXTENSION")
     batch_size: int = Field(100, alias="BATCH_SIZE")
     log_level: str = Field("INFO", alias="LOG_LEVEL")
@@ -127,10 +172,12 @@ def load_settings() -> AppSettings:
         gmail_settings = GmailSettings()
         sheets_settings = SheetsSettings()
         cash_balance_settings = CashBalanceSettings()
+        verbo_cafe_settings = VerboCafeSettings()
         app_settings = AppSettings(
             gmail=gmail_settings,
             sheets=sheets_settings,
-            cash_balance=cash_balance_settings
+            cash_balance=cash_balance_settings,
+            verbo_cafe=verbo_cafe_settings,
         )
         return app_settings
     except Exception as e:

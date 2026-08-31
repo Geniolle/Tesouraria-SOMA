@@ -26,6 +26,7 @@ from .processes import (
     DizimosOfertasProcess,
     ExtratoProcess,
     SaidasProcess,
+    VerboCafeProcess,
 )
 from .registry import ProcessRegistry
 
@@ -60,6 +61,7 @@ class CentralOrchestrator:
                 ExtratoProcess(self.context),
                 DizimosOfertasProcess(self.context),
                 SaidasProcess(self.context),
+                VerboCafeProcess(self.context),
                 ConciliacaoProcess(self.context),
             ]
         )

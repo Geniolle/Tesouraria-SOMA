@@ -35,7 +35,8 @@ Current order:
 1. `Extrato` — priority 10
 2. `DizimosOfertas` — priority 20
 3. `Saidas` — priority 30
-4. `Conciliacao` — priority 40
+4. `VerboCafe` — priority 35
+5. `Conciliacao` — priority 40
 
 ## Read-only pending probes
 
@@ -47,6 +48,10 @@ Pending probes are designed to be cheap and non-destructive.
   stops after the first actionable row
 - `Saidas`: projects the fields required by `SaidaValidator`, checks
   `CONTAORDEM` only after a finance-ready source candidate exists, and stops
+  after the first actionable row
+- `VerboCafe`: projects the fields required by `VerboCafeValidator` from the
+  external source spreadsheet (`VC_VENDAS`, then `Financeiro`), checks
+  `CONTAORDEM` duplicates only after a valid candidate exists, and stops
   after the first actionable row
 - `Conciliacao`: reads only `DOC. SOMA` and `ID_INTERNO` from the source,
   then projects only `ID_INTERNO` and `DOC. SOMA` from `CONTAORDEM`

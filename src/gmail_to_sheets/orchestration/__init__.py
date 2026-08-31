@@ -9,6 +9,7 @@ from .processes import (
     EntradasProcess,
     ExtratoProcess,
     SaidasProcess,
+    VerboCafeProcess,
 )
 from .protocols import ManagedProcess
 from .registry import ProcessRegistry
@@ -29,4 +30,5 @@ __all__ = [
     "ProcessResult",
     "ProcessStatus",
     "SaidasProcess",
+    "VerboCafeProcess",
 ]

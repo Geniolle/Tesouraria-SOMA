@@ -24,6 +24,9 @@ from src.gmail_to_sheets.orchestrator import Orchestrator as ExtratoOrchestrator
 from src.gmail_to_sheets.processes.conciliacao.orchestrator import ConciliationOrchestrator
 from src.gmail_to_sheets.processes.entradas.orchestrator import EntradasOrchestrator
 from src.gmail_to_sheets.processes.saidas.orchestrator import SaidasOrchestrator
+from src.gmail_to_sheets.processes.verbo_cafe.orchestrator import (
+    VerboCafeOrchestrator,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +94,26 @@ class AppRunner:
         except Exception as e:
             logger.error(f"SAÍDAS process failed: {e}", exc_info=True)
 
+    def run_verbo_cafe(self) -> None:
+        """Run Verbo Café process (VC_VENDAS + Financeiro -> CONTAORDEM)."""
+        try:
+            logger.info("=" * 80)
+            logger.info(
+                "Starting Verbo Café process "
+                "(VC_VENDAS + Financeiro -> CONTAORDEM)..."
+            )
+            logger.info("=" * 80)
+
+            orchestrator = VerboCafeOrchestrator(
+                settings=self.settings,
+                sheets_client=self.central_orchestrator.context.get_sheets_client(),
+            )
+            orchestrator.run()
+
+            logger.info("Verbo Café process completed successfully")
+        except Exception as e:
+            logger.error(f"Verbo Café process failed: {e}", exc_info=True)
+
     def run_conciliation(self, source_sheet: str = "T_EXTRATO") -> None:
         """Run Conciliacao process."""
         try:
@@ -143,6 +166,14 @@ class AppRunner:
             self.run_saidas()
         except Exception as e:
             logger.error(f"SAÍDAS execution failed: {e}")
+            sys.exit(1)
+
+    def run_verbo_cafe_once(self) -> None:
+        """Run Verbo Café process once manually."""
+        try:
+            self.run_verbo_cafe()
+        except Exception as e:
+            logger.error(f"Verbo Café execution failed: {e}")
             sys.exit(1)
 
     def run_conciliation_manual(self, source_sheet: str = "T_EXTRATO") -> None:
@@ -285,6 +316,7 @@ Examples:
   python -m src.gmail_to_sheets.app entradas                   # Backward-compatible Dízimos/Ofertas command
   python -m src.gmail_to_sheets.app dizimos-ofertas            # Run Dízimos/Ofertas transfer
   python -m src.gmail_to_sheets.app saidas                     # Run SAÍDAS transfer
+  python -m src.gmail_to_sheets.app verbo-cafe                 # Run Verbo Café transfer (VC_VENDAS + Financeiro)
   python -m src.gmail_to_sheets.app check-inbox                # Validate inbox only, no actions
   python -m src.gmail_to_sheets.app conciliacao T_EXTRATO      # Run Conciliation for T_EXTRATO
   python -m src.gmail_to_sheets.app status                     # Show scheduler status
@@ -300,6 +332,7 @@ Examples:
             "entradas",
             "dizimos-ofertas",
             "saidas",
+            "verbo-cafe",
             "conciliacao",
             "check-inbox",
             "status",
@@ -336,6 +369,9 @@ def run_cli(argv: list[str] | None = None) -> int:
     elif args.command == "saidas":
         logger.info("Running SAÍDAS process once")
         app.run_saidas_once()
+    elif args.command == "verbo-cafe":
+        logger.info("Running Verbo Café process once")
+        app.run_verbo_cafe_once()
     elif args.command == "check-inbox":
         logger.info("Running read-only inbox validation")
         app.check_inbox()

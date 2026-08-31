@@ -28,6 +28,24 @@ the row has a valid `SAI##########` ID.
 
 After a successful transfer, `FINANCE` is marked as `Enviado`.
 
+### VerboCafe
+
+Imports Verbo Café rows from a **separate** spreadsheet
+(`VERBO_CAFE_SOURCE_SPREADSHEET_ID`) into `CONTAORDEM`, in two phases:
+
+- **Vendas** (`VC_VENDAS`): cash sales → `CONTAORDEM` as `Entrada`,
+  `PROCESSO = VC_VENDAS`.
+- **Pagamentos** (`Financeiro`): supplier payments → `CONTAORDEM` as
+  `Saída`, `PROCESSO = FINANCEIRO`.
+
+A source row is ready when `STATUS DA TESOURARIA = EM ABERTO` (and, for
+vendas, `FORMA DE PAGAMENTO = DINHEIRO`), `DATA` is valid, the amount
+(`VALOR A PAGAR` / `MONTANTE`) is positive and `ID_INTERNO` is filled.
+
+`DESCRIÇÃO SOMA` carries a per-day, per-`PROCESSO` sequence
+(`... N001`, `... N002`, …). After a successful append, the source
+`STATUS DA TESOURARIA` is set to `CONCLUÍDO`.
+
 ### Conciliacao
 
 Matches `T_EXTRATO` rows against `CONTAORDEM` and fills `DOC.SOMA` on
@@ -40,7 +58,8 @@ The registry currently runs sequentially in this order:
 1. Extrato — priority 10
 2. DizimosOfertas — priority 20
 3. Saidas — priority 30
-4. Conciliacao — priority 40
+4. VerboCafe — priority 35
+5. Conciliacao — priority 40
 
 Every managed process exposes:
 
@@ -76,3 +95,4 @@ This prevents a row from being appended twice to `CONTAORDEM`.
 - [`DEPLOYMENT.md`](DEPLOYMENT.md)
 - [`PRODUCTION_RUNTIME.md`](PRODUCTION_RUNTIME.md)
 - [`src/gmail_to_sheets/processes/saidas/README.md`](src/gmail_to_sheets/processes/saidas/README.md)
+- [`src/gmail_to_sheets/processes/verbo_cafe/README.md`](src/gmail_to_sheets/processes/verbo_cafe/README.md)
