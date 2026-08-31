@@ -62,8 +62,7 @@ class TransferMatchingRowBuilder:
                     logger.debug(f"Row {row_number}: Match found")
                 else:
                     stats["no_match"] += 1
-                    logger.debug(f"Row {row_number}: No match - setting DOC.SOMA to ANALISAR")
-                    match = {"doc_soma": "ANALISAR"}
+                    logger.debug(f"Row {row_number}: No match - leaving DOC.SOMA blank")
 
                 if id_normalized in self.layout.existing_ids:
                     target_row_num = self.layout.existing_ids[id_normalized]
@@ -100,7 +99,7 @@ class TransferMatchingRowBuilder:
         }
 
     def find_match(self, source_row: list) -> Optional[dict]:
-        desc_norm = self.layout.normalize_text(
+        desc_norm = self.layout.normalize_match_text(
             self.layout.get_cell_value(source_row, "DESCRIÇÃO", self.layout.source_indices)
         )
         tipo = self.layout.get_cell_value(source_row, "TIPO", self.layout.source_indices).upper()
@@ -113,14 +112,12 @@ class TransferMatchingRowBuilder:
             ref_tipo = self.layout.get_cell_value(ref_row, "TIPO", self.layout.ref_indices).upper()
             ref_valor_raw = self.layout.get_cell_value(ref_row, "VALOR", self.layout.ref_indices)
 
-            ref_texto_norm = self.layout.normalize_text(ref_texto)
+            ref_texto_norm = self.layout.normalize_match_text(ref_texto)
             if not ref_texto_norm:
                 continue
 
             text_ok = (desc_norm in ref_texto_norm) or (ref_texto_norm in desc_norm)
-            type_ok = True
-            if ref_tipo and tipo:
-                type_ok = (tipo == ref_tipo)
+            type_ok = (tipo == ref_tipo)
 
             value_ok = True
             if ref_valor_raw and ref_valor_raw.strip():
@@ -167,8 +164,13 @@ class TransferMatchingRowBuilder:
         return row
 
     def generate_sequential_description(self, data_mov: str, desc_soma_base: str) -> str:
-        data_key = data_mov[:5]
-        key = f"{data_key}||{desc_soma_base}"
+        data_key = self.layout.get_day_key(data_mov)
+        if not data_key:
+            raise RuntimeError(f"DATA MOV. inválida para gerar sequencial: {data_mov!r}")
+        desc_base_key = self.layout.normalize_match_text(desc_soma_base)
+        if not desc_base_key:
+            raise RuntimeError(f"Descrição SOMA inválida para gerar sequencial: {desc_soma_base!r}")
+        key = f"{data_key}||{desc_base_key}"
         if key not in self.layout.seq_state:
             self.layout.seq_state[key] = {"max": 0, "base": desc_soma_base}
         self.layout.seq_state[key]["max"] += 1

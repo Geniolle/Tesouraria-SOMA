@@ -65,7 +65,6 @@ class EntryValidator:
 
         Criteria:
         - TIPO must be "DÍZIMOS/OFERTAS" or "DIA VERBO MISSÔES"
-        - DOC.SOMA must be filled (não vazio)
         - FINANCE must be empty
         - VALOR must be > 0
         - DATA must exist and be valid
@@ -73,7 +72,6 @@ class EntryValidator:
         try:
             data = self._get_field(row, "DATA")
             tipo = self._get_field(row, "TIPO")
-            doc_soma = self._get_field(row, "DOC. SOMA")
             finance = self._get_field(row, "FINANCE")
             valor = self._get_field(row, "VALOR")
 
@@ -82,9 +80,6 @@ class EntryValidator:
 
             if tipo not in ["DÍZIMOS/OFERTAS", "DIA VERBO MISSÔES"]:
                 return False, f"TIPO inválido: {tipo}"
-
-            if not doc_soma or not str(doc_soma).strip():
-                return False, "DOC.SOMA está vazio"
 
             if finance and str(finance).strip():
                 return False, "FINANCE não está vazio"
@@ -112,7 +107,6 @@ class EntryValidator:
         try:
             data = self._get_field(row, "DATA")
             tipo = self._get_field(row, "TIPO")
-            doc_soma = self._get_field(row, "DOC. SOMA")
             finance = self._get_field(row, "FINANCE")
             valor = self._get_field(row, "VALOR")
 
@@ -121,9 +115,6 @@ class EntryValidator:
 
             if tipo not in ["DÍZIMOS/OFERTAS", "DIA VERBO MISSÔES"]:
                 errors.append(f"TIPO inválido: {tipo}")
-
-            if not doc_soma or not str(doc_soma).strip():
-                errors.append("DOC.SOMA está vazio")
 
             if finance and str(finance).strip():
                 errors.append("FINANCE não está vazio")

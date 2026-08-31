@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
+import unicodedata
 from dataclasses import dataclass, field
+from datetime import date, datetime
 
 from src.gmail_to_sheets.clients.sheets_client import SheetsClient
 
@@ -118,10 +120,15 @@ class TransferMatchingLayout:
                 parts = desc_soma.rsplit(" ", 1)
                 if len(parts) == 2 and parts[1].startswith("N"):
                     desc_base = parts[0]
+                    desc_base_key = self.normalize_match_text(desc_base)
+                    if not desc_base_key:
+                        continue
                     try:
                         seq_num = int(parts[1][1:])
-                        data_key = data_mov[:5]
-                        key = f"{data_key}||{desc_base}"
+                        data_key = self.get_day_key(data_mov)
+                        if not data_key:
+                            continue
+                        key = f"{data_key}||{desc_base_key}"
                         if key not in self.seq_state:
                             self.seq_state[key] = {"max": 0, "base": desc_base}
                         self.seq_state[key]["max"] = max(self.seq_state[key]["max"], seq_num)
@@ -191,11 +198,61 @@ class TransferMatchingLayout:
     def normalize_text(text: str) -> str:
         if not text:
             return ""
-        import unicodedata
 
         text = str(text).replace(" ", "").upper()
         normalized = unicodedata.normalize("NFD", text)
         return "".join(c for c in normalized if unicodedata.category(c) != "Mn")
+
+    @staticmethod
+    def normalize_match_text(text: str) -> str:
+        if not text:
+            return ""
+
+        text = str(text).strip().upper()
+        normalized = unicodedata.normalize("NFD", text)
+        return "".join(c for c in normalized if unicodedata.category(c) != "Mn")
+
+    @staticmethod
+    def parse_sheet_date(value) -> datetime | None:
+        if value is None or value == "":
+            return None
+
+        if isinstance(value, datetime):
+            return value
+
+        if isinstance(value, date):
+            return datetime(value.year, value.month, value.day)
+
+        if isinstance(value, (int, float)):
+            try:
+                return datetime.fromtimestamp(value)
+            except (OverflowError, OSError, ValueError):
+                return None
+
+        text = str(value).strip()
+        if not text:
+            return None
+
+        for fmt in ("%d/%m/%Y", "%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%Y-%m-%d", "%Y-%m-%d %H:%M:%S"):
+            try:
+                return datetime.strptime(text, fmt)
+            except ValueError:
+                continue
+
+        try:
+            return datetime.fromisoformat(text)
+        except ValueError:
+            return None
+
+    @classmethod
+    def get_day_key(cls, data_str: str) -> str:
+        parsed = cls.parse_sheet_date(data_str)
+        return parsed.strftime("%Y-%m-%d") if parsed else ""
+
+    @classmethod
+    def format_day_display(cls, data_str: str) -> str:
+        parsed = cls.parse_sheet_date(data_str)
+        return parsed.strftime("%d/%m/%Y") if parsed else ""
 
     @staticmethod
     def parse_amount(value: str) -> float:

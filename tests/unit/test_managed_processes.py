@@ -9,6 +9,7 @@ from src.gmail_to_sheets.orchestration.processes import (
     ExtratoProcess,
     SaidasProcess,
 )
+from src.gmail_to_sheets.processes.entradas.entry_validator import EntryValidator
 
 
 def _make_settings():
@@ -243,7 +244,7 @@ class TestDizimosOfertasProcess:
         }
         validator.is_valid_entry.return_value = (
             False,
-            "DOC.SOMA vazio",
+            "VALOR vazio",
         )
         mock_validator_cls.return_value = validator
 
@@ -494,3 +495,26 @@ class TestConciliacaoProcess:
 
         assert pending.has_work is True
         assert pending.count == 1
+
+
+class TestEntryValidator:
+    def test_blank_doc_soma_is_allowed_for_transfer(self):
+        settings = _make_settings()
+        rows_by_range = {
+            "headers": {
+                "DÍZIMOS/OFERTAS": ["DATA", "TIPO", "DOC. SOMA", "FINANCE", "VALOR"],
+            },
+            "values": {
+                "DÍZIMOS/OFERTAS": {"values": []},
+            },
+        }
+        sheet_client = _make_sheet_client(rows_by_range)
+        validator = EntryValidator(sheet_client, settings.sheets.spreadsheet_id)
+
+        is_valid, error = validator.is_valid_entry(
+            ["01/08/2026", "DÍZIMOS/OFERTAS", "", "", "10.00"],
+            2,
+        )
+
+        assert is_valid is True
+        assert error is None
