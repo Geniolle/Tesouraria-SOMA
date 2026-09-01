@@ -50,6 +50,8 @@ class TransferMatchingService:
         self.ref_indices = self.layout.ref_indices
         self.ref_data = self.layout.ref_data
         self.existing_ids = self.layout.existing_ids
+        self.existing_doc_soma = self.layout.existing_doc_soma
+        self.existing_plano_conta = self.layout.existing_plano_conta
         self._sheet_ids_cache = self.layout.sheet_ids_cache
         self._seq_state = self.layout.seq_state
 
@@ -60,6 +62,7 @@ class TransferMatchingService:
                 "transferred": 0,
                 "already_exists": 0,
                 "updated": 0,
+                "skipped_resolved": 0,
                 "empty_id": 0,
                 "with_status": 0,
                 "matched": 0,

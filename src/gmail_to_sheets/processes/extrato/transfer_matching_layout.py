@@ -29,6 +29,8 @@ class TransferMatchingLayout:
     ref_indices: dict[str, int] = field(default_factory=dict)
     ref_data: list[list] = field(default_factory=list)
     existing_ids: dict[str, int] = field(default_factory=dict)
+    existing_doc_soma: dict[str, str] = field(default_factory=dict)
+    existing_plano_conta: dict[str, str] = field(default_factory=dict)
     sheet_ids_cache: dict[str, int] = field(default_factory=dict)
     seq_state: dict[str, dict[str, int | str]] = field(default_factory=dict)
 
@@ -151,11 +153,17 @@ class TransferMatchingLayout:
         if id_idx is None:
             return {}
 
+        doc_soma_idx = self.target_indices.get("DOC. SOMA")
+        plano_conta_idx = self.target_indices.get("PLANO DE CONTA")
         existing: dict[str, int] = {}
         for i, row in enumerate(rows):
             if id_idx < len(row) and row[id_idx]:
                 id_norm = self.normalize_text(str(row[id_idx]))
                 existing[id_norm] = i + 2
+                if doc_soma_idx is not None and doc_soma_idx < len(row):
+                    self.existing_doc_soma[id_norm] = str(row[doc_soma_idx]).strip()
+                if plano_conta_idx is not None and plano_conta_idx < len(row):
+                    self.existing_plano_conta[id_norm] = str(row[plano_conta_idx]).strip()
         logger.info(f"Loaded {len(existing)} existing IDs in target sheet")
         return existing
 
@@ -208,7 +216,11 @@ class TransferMatchingLayout:
         if not text:
             return ""
 
-        text = str(text).strip().upper()
+        # Remove espaços (não só nas pontas): as chaves TEXTO da CONSTANTES são
+        # escritas sem espaços (ex.: "FECHOTPA01433272"), mas o descritivo cru do
+        # banco vem com espaços ("FECHO TPA  01433272 016"). Sem isto o teste de
+        # substring do matching falha.
+        text = str(text).replace(" ", "").upper()
         normalized = unicodedata.normalize("NFD", text)
         return "".join(c for c in normalized if unicodedata.category(c) != "Mn")
 

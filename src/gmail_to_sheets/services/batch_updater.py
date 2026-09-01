@@ -10,6 +10,10 @@ from src.gmail_to_sheets.clients.sheets_client import SheetsClient
 
 logger = logging.getLogger(__name__)
 
+# Valor especial: força a escrita de uma célula vazia (limpar o conteúdo).
+# Sem isto, valores "falsy" são ignorados por update_rows().
+CLEAR_CELL = "\x00__CLEAR_CELL__\x00"
+
 
 class BatchUpdater:
     """Update existing rows with matching data using values API."""
@@ -70,7 +74,10 @@ class BatchUpdater:
                         logger.warning(f"Column '{field_name}' not found")
                         continue
 
-                    if not value:
+                    if value == CLEAR_CELL:
+                        # Limpeza explícita: escreve célula vazia.
+                        value = ""
+                    elif not value:
                         # Skip empty values
                         continue
 

@@ -62,6 +62,46 @@ class TestBatchUpdaterDirect:
         assert result["updated"] == 1
         assert result["errors"] == 0
 
+    def test_batch_updater_clears_cell_with_sentinel(self):
+        """CLEAR_CELL força a escrita de célula vazia em vez de ser ignorado."""
+        from src.gmail_to_sheets.services.batch_updater import CLEAR_CELL
+
+        mock_sheets = Mock()
+        mock_sheets.get_headers = Mock(return_value=["DOC. SOMA", "COL2"])
+        mock_sheets.service = Mock()
+
+        update_mock = Mock(return_value=Mock(
+            execute=Mock(return_value={"updatedCells": 1})
+        ))
+        mock_sheets.service.spreadsheets = Mock(return_value=Mock(
+            values=Mock(return_value=Mock(update=update_mock))
+        ))
+
+        updater = BatchUpdater(mock_sheets, "test_spreadsheet", "TEST_SHEET")
+        result = updater.update_rows({7: {"DOC. SOMA": CLEAR_CELL}})
+
+        assert result["errors"] == 0
+        # A chamada à API escreve string vazia na célula A7.
+        _, kwargs = update_mock.call_args
+        assert kwargs["range"] == "TEST_SHEET!A7"
+        assert kwargs["body"] == {"values": [[""]]}
+
+    def test_batch_updater_skips_plain_empty_value(self):
+        """Valor vazio "normal" continua a ser ignorado (sem chamada à API)."""
+        mock_sheets = Mock()
+        mock_sheets.get_headers = Mock(return_value=["COL1", "COL2"])
+        mock_sheets.service = Mock()
+        update_mock = Mock(return_value=Mock(execute=Mock(return_value={"updatedCells": 1})))
+        mock_sheets.service.spreadsheets = Mock(return_value=Mock(
+            values=Mock(return_value=Mock(update=update_mock))
+        ))
+
+        updater = BatchUpdater(mock_sheets, "test_spreadsheet", "TEST_SHEET")
+        result = updater.update_rows({1: {"COL1": ""}})
+
+        assert result["updated"] == 0
+        update_mock.assert_not_called()
+
     def test_batch_updater_propagates_error(self):
         """Test BatchUpdater propagates API errors."""
         mock_sheets = Mock()

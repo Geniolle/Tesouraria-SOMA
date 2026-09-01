@@ -6,8 +6,29 @@ import logging
 from typing import Any, Optional
 
 from src.gmail_to_sheets.processes.extrato.transfer_matching_layout import TransferMatchingLayout
+from src.gmail_to_sheets.services.batch_updater import CLEAR_CELL
 
 logger = logging.getLogger(__name__)
+
+# Escrito em DOC. SOMA quando não há correspondência na CONSTANTES.
+# Mantém a linha elegível para nova tentativa de matching em execuções futuras.
+NO_MATCH_DOC_SOMA = "ANALISAR"
+
+# Regra de reprocessamento de uma linha de CONTAORDEM já existente:
+# procura-se referência na CONSTANTES apenas quando
+#   - DOC. SOMA está vazio ou com o texto "ANALISAR" (ou "EM ERRO"), E
+#   - PLANO DE CONTA está vazio.
+# Se o PLANO DE CONTA já está preenchido, a linha está classificada e não é
+# tocada (não fazer nada), mesmo que o DOC. SOMA ainda seja "ANALISAR".
+_REPROCESSABLE_DOC_SOMA = {"", NO_MATCH_DOC_SOMA, "EM ERRO"}
+
+
+def should_reprocess_row(doc_soma: str | None, plano_conta: str | None) -> bool:
+    """True se DOC. SOMA está por resolver (vazio/ANALISAR/EM ERRO) e o
+    PLANO DE CONTA está vazio."""
+    doc_por_resolver = str(doc_soma or "").strip().upper() in _REPROCESSABLE_DOC_SOMA
+    plano_vazio = not str(plano_conta or "").strip()
+    return doc_por_resolver and plano_vazio
 
 
 class TransferMatchingRowBuilder:
@@ -24,6 +45,7 @@ class TransferMatchingRowBuilder:
             "transferred": 0,
             "already_exists": 0,
             "updated": 0,
+            "skipped_resolved": 0,
             "empty_id": 0,
             "with_status": 0,
             "matched": 0,
@@ -56,18 +78,40 @@ class TransferMatchingRowBuilder:
                 continue
 
             try:
+                is_existing = id_normalized in self.layout.existing_ids
+                current_doc_soma = ""
+                if is_existing:
+                    current_doc_soma = self.layout.existing_doc_soma.get(
+                        id_normalized, ""
+                    ).strip()
+                    current_plano_conta = self.layout.existing_plano_conta.get(
+                        id_normalized, ""
+                    ).strip()
+                    # Regra: só reprocessa se DOC. SOMA estiver por resolver
+                    # (vazio/ANALISAR/EM ERRO) E PLANO DE CONTA estiver vazio.
+                    # Se já está classificada, não faz nada.
+                    if not should_reprocess_row(current_doc_soma, current_plano_conta):
+                        stats["already_exists"] += 1
+                        stats["skipped_resolved"] += 1
+                        logger.debug(
+                            f"Row {row_number}: DOC. SOMA '{current_doc_soma}' / "
+                            f"PLANO DE CONTA '{current_plano_conta}' - não reprocessa"
+                        )
+                        continue
+
                 match = self.find_match(source_row)
                 if match:
                     stats["matched"] += 1
                     logger.debug(f"Row {row_number}: Match found")
                 else:
                     stats["no_match"] += 1
-                    logger.debug(f"Row {row_number}: No match - leaving DOC.SOMA blank")
+                    logger.debug(f"Row {row_number}: No match - marking DOC.SOMA as {NO_MATCH_DOC_SOMA}")
 
-                if id_normalized in self.layout.existing_ids:
+                if is_existing:
                     target_row_num = self.layout.existing_ids[id_normalized]
+                    stats["already_exists"] += 1
                     if match:
-                        update_rows[target_row_num] = {
+                        row_update = {
                             "PLANO DE CONTA": match.get("plano_conta", ""),
                             "CENTRO DE CUSTO": match.get("centro_custo", ""),
                             "DESCRIÇÃO SOMA": match.get("desc_soma", ""),
@@ -75,14 +119,31 @@ class TransferMatchingRowBuilder:
                             "FORMA DE PAGAMENTO": match.get("forma_pag", ""),
                             "CAIXA": match.get("caixa", ""),
                             "CAIXA SAIDA": match.get("caixa_saida", ""),
-                            "DOC. SOMA": match.get("doc_soma", ""),
                         }
-                    stats["already_exists"] += 1
-                    stats["updated"] += 1
+                        matched_doc_soma = match.get("doc_soma", "")
+                        if matched_doc_soma:
+                            row_update["DOC. SOMA"] = matched_doc_soma
+                        elif current_doc_soma:
+                            # Match sem DOC. SOMA na CONSTANTES: limpa o sentinela
+                            # (ANALISAR/EM ERRO); o documento real é atribuído a
+                            # jusante pelo push do SOMA.
+                            row_update["DOC. SOMA"] = CLEAR_CELL
+                        update_rows[target_row_num] = row_update
+                        stats["updated"] += 1
+                    elif current_doc_soma.upper() != NO_MATCH_DOC_SOMA:
+                        update_rows[target_row_num] = {"DOC. SOMA": NO_MATCH_DOC_SOMA}
+                        stats["updated"] += 1
                 else:
                     target_row = self.build_target_row(source_row)
                     if match:
                         target_row = self.enrich_with_match(target_row, match, source_row)
+                    else:
+                        self.layout.set_cell_value(
+                            target_row,
+                            "DOC. SOMA",
+                            NO_MATCH_DOC_SOMA,
+                            self.layout.target_indices,
+                        )
                     target_rows.append(target_row)
                     self.layout.existing_ids[id_normalized] = len(target_rows)
                     status_updates[row_number] = "Transferido"
