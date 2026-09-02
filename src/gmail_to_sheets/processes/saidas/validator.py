@@ -57,7 +57,7 @@ class SaidaValidator:
         - DATA must be filled
         - TIPO must be PAGAMENTO
         - STATUS DA TESOURARIA must be Concluído
-        - DOC. SOMA must be filled
+        - DOC. SOMA must be empty (never filled)
         - FINANCE must be empty
         - VALOR DA COMPRA must be greater than zero
         """
@@ -82,8 +82,8 @@ class SaidaValidator:
             if (status_tesouraria or "").casefold() != "concluído".casefold():
                 return False, "STATUS DA TESOURARIA não está Concluído"
 
-            if not doc_soma:
-                return False, "DOC.SOMA está vazio"
+            if doc_soma:
+                return False, "DOC.SOMA não está vazio"
 
             if finance:
                 return False, "FINANCE não está vazio"

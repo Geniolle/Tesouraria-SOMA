@@ -306,7 +306,7 @@ class TestSaidasProcess:
             "30/08/2026",
             "",
             "PAGAMENTO",
-            "5459998",
+            "",
             "FT-1",
             "25,00",
             "MATERIAL DE LIMPEZA",
@@ -395,7 +395,7 @@ class TestSaidasProcess:
             "30/08/2026",
             "",
             "PAGAMENTO",
-            "5459998",
+            "",
             "FT-1",
             "25,00",
             "MATERIAL DE LIMPEZA",
@@ -500,15 +500,20 @@ class TestConciliacaoProcess:
 class TestEntryValidator:
     def test_blank_doc_soma_is_allowed_for_transfer(self):
         settings = _make_settings()
-        rows_by_range = {
-            "headers": {
-                "DÍZIMOS/OFERTAS": ["DATA", "TIPO", "DOC. SOMA", "FINANCE", "VALOR"],
+        sheet_client = _make_sheet_client(
+            {
+                "DÍZIMOS/OFERTAS": [
+                    "DATA",
+                    "TIPO",
+                    "DOC. SOMA",
+                    "FINANCE",
+                    "VALOR",
+                ],
             },
-            "values": {
+            {
                 "DÍZIMOS/OFERTAS": {"values": []},
             },
-        }
-        sheet_client = _make_sheet_client(rows_by_range)
+        )
         validator = EntryValidator(sheet_client, settings.sheets.spreadsheet_id)
 
         is_valid, error = validator.is_valid_entry(

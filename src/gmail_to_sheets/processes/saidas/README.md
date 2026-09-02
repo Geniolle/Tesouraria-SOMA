@@ -10,7 +10,7 @@ A row is eligible only when:
 - `DATA` is filled
 - `TIPO = PAGAMENTO`
 - `STATUS DA TESOURARIA = Concluído`
-- `DOC. SOMA` is filled
+- `DOC. SOMA` is empty (never filled)
 - `FINANCE` is empty
 - `VALOR DA COMPRA > 0`
 

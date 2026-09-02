@@ -23,8 +23,8 @@ managed process name exposed by the central orchestrator is
 Transfers finance-ready rows from `SAÍDAS` to `CONTAORDEM`.
 
 A row is considered ready only when the treasury status is `Concluído`,
-`DOC. SOMA` is filled, `FINANCE` is empty, the value is positive, and
-the row has a valid `SAI##########` ID.
+`DOC. SOMA` is empty (never filled), `FINANCE` is empty, the value is
+positive, and the row has a valid `SAI##########` ID.
 
 After a successful transfer, `FINANCE` is marked as `Enviado`.
 

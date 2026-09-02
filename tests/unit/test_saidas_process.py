@@ -71,7 +71,7 @@ def _row(**overrides):
         "DATA": "30/08/2026",
         "DATA VALOR": "29/08/2026",
         "TIPO": "PAGAMENTO",
-        "DOC. SOMA": "5459998",
+        "DOC. SOMA": "",
         "Nº RECIBO": "FT-1",
         "VALOR DA COMPRA": "25,00",
         "DESCRIÇÃO DA COMPRA": "MATERIAL DE LIMPEZA",
@@ -110,7 +110,7 @@ class TestSaidaValidator:
         assert valid is True
         assert error is None
 
-    def test_requires_doc_soma(self):
+    def test_rejects_filled_doc_soma(self):
         validator = SaidaValidator(
             Mock(),
             "sheet-123",
@@ -118,12 +118,12 @@ class TestSaidaValidator:
         )
 
         valid, error = validator.is_valid_entry(
-            _row(**{"DOC. SOMA": ""}),
+            _row(**{"DOC. SOMA": "5459998"}),
             2,
         )
 
         assert valid is False
-        assert error == "DOC.SOMA está vazio"
+        assert error == "DOC.SOMA não está vazio"
 
     def test_requires_concluido_status(self):
         validator = SaidaValidator(
@@ -172,7 +172,7 @@ class TestSaidaTransferService:
         assert mapped["DATA VALOR"] == "29/08/2026"
         assert mapped["DESCRIÇÃO"] == "MATERIAL DE LIMPEZA"
         assert mapped["IMPORTÂNCIA"] == "25,00"
-        assert mapped["DOC. SOMA"] == "5459998"
+        assert mapped["DOC. SOMA"] == ""
         assert mapped["TIPO"] == "Saída"
         assert mapped["PLANO DE CONTA"] == "MATERIAL DE LIMPEZA"
         assert mapped["CENTRO DE CUSTO"] == (
