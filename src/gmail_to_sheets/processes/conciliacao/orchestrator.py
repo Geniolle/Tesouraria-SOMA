@@ -4,7 +4,8 @@ Coordena o pipeline completo de conciliação:
 1. Pesquisar linhas em sheet de origem com DOC.SOMA vazio
 2. Validar ID_INTERNO preenchido
 3. Pesquisar ID_INTERNO em CONTAORDEM
-4. Se DOC.SOMA existe em CONTAORDEM, copiar para sheet de origem
+4. Se o DOC.SOMA da CONTAORDEM existe e é válido (7 dígitos numéricos),
+   copiar para a sheet de origem
 """
 
 import logging
@@ -189,7 +190,8 @@ class ConciliationOrchestrator:
 
                 doc_soma = lookup_result["doc_soma"]
 
-                # Add to batch update (sem validação de formato)
+                # O formato do DOC.SOMA (7 dígitos) já foi validado no lookup;
+                # aqui só resta agendar a escrita na sheet de origem.
                 reconciliation_svc.add_update(row_num, doc_soma)
                 logger.debug(f"Linha {row_num}: Agendada atualização com DOC.SOMA={doc_soma}")
                 reconciled += 1

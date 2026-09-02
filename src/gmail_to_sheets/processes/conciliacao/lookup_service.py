@@ -10,6 +10,18 @@ from src.gmail_to_sheets.clients.sheets_projection import read_projected_rows
 
 logger = logging.getLogger(__name__)
 
+DOC_SOMA_LENGTH = 7
+
+
+def is_valid_doc_soma(value: str | None) -> bool:
+    """Return whether a CONTAORDEM ``DOC. SOMA`` value is conciliável.
+
+    Must be exactly 7 numeric characters, e.g. ``"5470146"``. Anything
+    else (empty, ``ANALISAR``, wrong length, non-digits) is rejected.
+    """
+    text = str(value or "").strip()
+    return len(text) == DOC_SOMA_LENGTH and text.isdigit()
+
 
 class LookupService:
     """Serviço de lookup em CONTAORDEM."""
@@ -137,16 +149,30 @@ class LookupService:
             raise
 
     def lookup_doc_soma(self, id_interno: str) -> dict | None:
-        """Pesquisa DOC.SOMA em CONTAORDEM usando ID_INTERNO."""
+        """Pesquisa DOC.SOMA em CONTAORDEM usando ID_INTERNO.
+
+        Só devolve ``found=True`` quando o ``DOC. SOMA`` da CONTAORDEM
+        passa a validação de formato (7 caracteres numéricos). Valores
+        vazios ou fora do formato (ex. ``ANALISAR``) são tratados como
+        "não encontrado" e podem ser reprocessados num run seguinte.
+        """
         if id_interno in self.contaordem_cache:
             cached = self.contaordem_cache[id_interno]
             doc_soma = cached["doc_soma"]
 
             if doc_soma:
-                return {
-                    "found": True,
-                    "doc_soma": doc_soma,
-                    "row_number": cached["row_number"],
-                }
+                if is_valid_doc_soma(doc_soma):
+                    return {
+                        "found": True,
+                        "doc_soma": doc_soma,
+                        "row_number": cached["row_number"],
+                    }
+                logger.warning(
+                    "DOC.SOMA inválido em CONTAORDEM para %s: %r "
+                    "(esperado %s dígitos numéricos)",
+                    id_interno,
+                    doc_soma,
+                    DOC_SOMA_LENGTH,
+                )
 
         return {"found": False, "doc_soma": None}

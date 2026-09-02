@@ -459,7 +459,7 @@ class TestConciliacaoProcess:
                     "values": [["", "EXT0000000001"]],
                 },
                 "CONTAORDEM": {
-                    "values": [["EXT0000000001", "DOC-1"]],
+                    "values": [["EXT0000000001", "5470146"]],
                 },
             },
         )
@@ -473,6 +473,33 @@ class TestConciliacaoProcess:
 
         assert pending.has_work is True
         assert pending.count == 1
+
+    def test_check_pending_skips_when_doc_soma_format_is_invalid(self):
+        settings = _make_settings()
+        sheet_client = _make_sheet_client(
+            {
+                "T_EXTRATO": ["DOC. SOMA", "ID_INTERNO"],
+                "CONTAORDEM": ["ID_INTERNO", "DOC. SOMA"],
+            },
+            {
+                "T_EXTRATO": {
+                    "values": [["", "EXT0000000001"]],
+                },
+                "CONTAORDEM": {
+                    "values": [["EXT0000000001", "ANALISAR"]],
+                },
+            },
+        )
+        context = ProcessContext(
+            settings=settings,
+            sheets_client=sheet_client,
+            gmail_client=Mock(),
+        )
+
+        pending = ConciliacaoProcess(context).check_pending()
+
+        assert pending.has_work is False
+        assert pending.count == 0
 
 
 class TestEntryValidator:
