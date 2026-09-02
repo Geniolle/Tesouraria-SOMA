@@ -58,7 +58,9 @@ class SaidaValidator:
         - TIPO must be PAGAMENTO
         - STATUS DA TESOURARIA must be Concluído
         - DOC. SOMA must be empty (never filled)
-        - FINANCE must be empty
+        - FINANCE must be empty, or the soft flag ``duplicado`` (which is
+          re-checked every run, so a stale flag can heal); ``Enviado`` and
+          any other value block the row
         - VALOR DA COMPRA must be greater than zero
         """
         try:
@@ -85,8 +87,9 @@ class SaidaValidator:
             if doc_soma:
                 return False, "DOC.SOMA não está vazio"
 
-            if finance:
-                return False, "FINANCE não está vazio"
+            finance_state = (finance or "").strip().casefold()
+            if finance_state and finance_state != "duplicado":
+                return False, "FINANCE já está preenchido"
 
             if not valor:
                 return False, "VALOR DA COMPRA vazio"

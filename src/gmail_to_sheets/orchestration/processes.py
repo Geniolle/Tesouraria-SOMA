@@ -284,11 +284,12 @@ class SaidasProcess(_BaseManagedProcess):
     def check_pending(self) -> PendingResult:
         """Find the first SAÍDAS row that still needs action.
 
-        Any row that passes business validation is actionable: the run
-        phase either transfers it to CONTAORDEM or, when it is already
-        there, marks the source FINANCE as ``duplicado``. Validation
-        already requires an empty FINANCE, so a marked row drops out on
-        the next tick.
+        A row with an empty ``FINANCE`` that passes validation is always
+        work (transfer, or first ``duplicado`` flag). A row already
+        flagged ``duplicado`` is work only when its CONTAORDEM match is
+        gone (stale flag that must now be transferred); that recheck runs
+        only when there is no cheaper pending row, to keep the common
+        "nothing to do" tick from probing CONTAORDEM.
         """
         sheets_client = self.context.get_sheets_client()
         spreadsheet_id = self.context.settings.sheets.spreadsheet_id
@@ -308,23 +309,59 @@ class SaidasProcess(_BaseManagedProcess):
         )
 
         self._pending_entries = []
+        flagged: list[tuple[int, list[str]]] = []
 
         for row_number, row in rows:
             is_valid, _ = validator.is_valid_entry(row, row_number)
             if not is_valid:
                 continue
 
+            finance_state = (
+                validator.get_field(row, "FINANCE") or ""
+            ).strip().casefold()
+            if finance_state == "duplicado":
+                flagged.append((row_number, row))
+                continue
+
             self._pending_entries = [
-                _PendingEntry(
-                    row_number=row_number,
-                    row_data=row,
-                )
+                _PendingEntry(row_number=row_number, row_data=row)
             ]
             return PendingResult(
                 has_work=True,
                 count=1,
-                reason="SAÍDAS row ready for transfer or duplicate mark",
+                reason="SAÍDAS row ready for transfer",
             )
+
+        if flagged:
+            dedup = EntryDeduplicationService(
+                sheets_client,
+                spreadsheet_id,
+                headers=self.context.get_sheet_headers("CONTAORDEM"),
+            )
+            for row_number, row in flagged:
+                data = validator.get_field(row, "DATA") or ""
+                valor = validator.get_field(row, "VALOR DA COMPRA") or ""
+                descricao = validator.get_field(
+                    row,
+                    "DESCRIÇÃO DA COMPRA",
+                ) or ""
+                id_interno = validator.get_field(row, "ID_INTERNO")
+                if not dedup.is_duplicate(
+                    data,
+                    valor,
+                    descricao,
+                    id_interno=id_interno,
+                ):
+                    self._pending_entries = [
+                        _PendingEntry(row_number=row_number, row_data=row)
+                    ]
+                    return PendingResult(
+                        has_work=True,
+                        count=1,
+                        reason=(
+                            "SAÍDAS 'duplicado' row no longer in CONTAORDEM"
+                        ),
+                    )
 
         return PendingResult(
             has_work=False,

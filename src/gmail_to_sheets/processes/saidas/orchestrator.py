@@ -108,6 +108,9 @@ class SaidasOrchestrator:
                 "DESCRIÇÃO DA COMPRA",
             ) or ""
             id_interno = validator.get_field(row, "ID_INTERNO")
+            finance_state = (
+                validator.get_field(row, "FINANCE") or ""
+            ).strip().casefold()
 
             if dedup.is_duplicate(
                 data,
@@ -115,10 +118,14 @@ class SaidasOrchestrator:
                 descricao,
                 id_interno=id_interno,
             ):
-                # Already in CONTAORDEM: do not append again, just flag the
-                # source row so it stops being reprocessed every tick.
+                # Already in CONTAORDEM: never append again. Only write the
+                # "duplicado" flag when it is not already set, so a stale flag
+                # (whose CONTAORDEM row was later removed) is not rewritten
+                # here and gets transferred by the branch below once it stops
+                # matching.
                 duplicates += 1
-                duplicate_rows.append(row_number)
+                if finance_state != "duplicado":
+                    duplicate_rows.append(row_number)
                 continue
 
             try:

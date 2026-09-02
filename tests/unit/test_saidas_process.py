@@ -152,7 +152,22 @@ class TestSaidaValidator:
         )
 
         assert valid is False
-        assert error == "FINANCE não está vazio"
+        assert error == "FINANCE já está preenchido"
+
+    def test_allows_duplicado_finance_for_recheck(self):
+        validator = SaidaValidator(
+            Mock(),
+            "sheet-123",
+            headers=HEADERS,
+        )
+
+        valid, error = validator.is_valid_entry(
+            _row(FINANCE="duplicado"),
+            2,
+        )
+
+        assert valid is True
+        assert error is None
 
 
 class TestSaidaTransferService:

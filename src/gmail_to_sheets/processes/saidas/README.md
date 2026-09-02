@@ -11,7 +11,7 @@ A row is eligible only when:
 - `TIPO = PAGAMENTO`
 - `STATUS DA TESOURARIA = Concluído`
 - `DOC. SOMA` is empty (never filled)
-- `FINANCE` is empty
+- `FINANCE` is empty **or** the soft flag `duplicado` (see below)
 - `VALOR DA COMPRA > 0`
 
 ## Transfer
@@ -38,7 +38,15 @@ Duplicate protection uses both:
 
 When a row is already in `CONTAORDEM`, it is **not** appended again and the
 source `FINANCE` field is set to `duplicado`. After a successful append,
-the source `FINANCE` field is set to `Enviado`.
+`FINANCE` is set to `Enviado`.
 
-The central orchestrator performs a read-only pending probe first. If
-there is no eligible non-duplicate row, the process is skipped.
+`duplicado` is a **soft** flag, not a terminal state: every run re-checks
+those rows against `CONTAORDEM`. If the matching `CONTAORDEM` row is gone
+(e.g. removed by hand), the flag no longer matches, the row is transferred
+normally and `FINANCE` becomes `Enviado`. A row still matching just keeps
+its `duplicado` flag with no extra write. `Enviado` and any other value
+remain terminal and block the row.
+
+The central orchestrator performs a read-only pending probe first. A tick
+with only still-valid `duplicado` rows (nothing to write) is skipped; the
+CONTAORDEM re-check in the probe runs only when no cheaper row is pending.

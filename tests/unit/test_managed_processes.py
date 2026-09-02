@@ -340,63 +340,43 @@ class TestSaidasProcess:
         sheet_client.append_rows.assert_not_called()
         sheet_client.update_cell.assert_not_called()
 
-    def test_finance_ready_row_is_pending_even_when_duplicate(self):
-        # check_pending no longer probes CONTAORDEM: a duplicate row is
-        # still work because the run phase must mark its FINANCE as
-        # "duplicado". Validation already requires an empty FINANCE, so a
-        # marked row stops being pending on the next tick.
-        settings = _make_settings()
-        headers = [
-            "ID_INTERNO",
-            "FORMA DE PAGAMENTO",
-            "DATA",
-            "DATA VALOR",
-            "TIPO",
-            "DOC. SOMA",
-            "Nº RECIBO",
-            "VALOR DA COMPRA",
-            "DESCRIÇÃO DA COMPRA",
-            "NOME RECEBEDOR DO PAGAMENTO",
-            "TELEFONE RECEBEDOR",
-            "EMAIL RECEBEDOR",
-            "NOME DO FORNECEDOR",
-            "TELEFONE FORNECEDOR",
-            "EMAIL FORNECEDOR",
-            "PLANO DE CONTA",
-            "CENTRO DE CUSTO",
-            "CAIXA",
-            "IMAGEM DO RECIBO",
-            "STATUS DA TESOURARIA",
-            "STATUS PROCESSAMENTO",
-            "FINANCE",
+    _SOURCE_HEADERS = [
+        "ID_INTERNO",
+        "FORMA DE PAGAMENTO",
+        "DATA",
+        "DATA VALOR",
+        "TIPO",
+        "DOC. SOMA",
+        "Nº RECIBO",
+        "VALOR DA COMPRA",
+        "DESCRIÇÃO DA COMPRA",
+        "NOME RECEBEDOR DO PAGAMENTO",
+        "TELEFONE RECEBEDOR",
+        "EMAIL RECEBEDOR",
+        "NOME DO FORNECEDOR",
+        "TELEFONE FORNECEDOR",
+        "EMAIL FORNECEDOR",
+        "PLANO DE CONTA",
+        "CENTRO DE CUSTO",
+        "CAIXA",
+        "IMAGEM DO RECIBO",
+        "STATUS DA TESOURARIA",
+        "STATUS PROCESSAMENTO",
+        "FINANCE",
+    ]
+
+    def _source_row(self, finance=""):
+        return [
+            "SAI0000000239", "DINHEIRO", "30/08/2026", "", "PAGAMENTO", "",
+            "FT-1", "25,00", "MATERIAL DE LIMPEZA", "", "", "", "Fornecedor",
+            "", "", "MATERIAL DE LIMPEZA", "30.10.10 - MATERIAL DE LIMPEZA",
+            "CAIXA DIÁRIO", "", "Concluído", "", finance,
         ]
-        row = [
-            "SAI0000000239",
-            "DINHEIRO",
-            "30/08/2026",
-            "",
-            "PAGAMENTO",
-            "",
-            "FT-1",
-            "25,00",
-            "MATERIAL DE LIMPEZA",
-            "",
-            "",
-            "",
-            "Fornecedor",
-            "",
-            "",
-            "MATERIAL DE LIMPEZA",
-            "PADRÃO",
-            "CAIXA DIÁRIO",
-            "",
-            "Concluído",
-            "",
-            "",
-        ]
+
+    def _pending_for(self, source_rows, contaordem_rows=None):
         sheet_client = _make_sheet_client(
             {
-                "SAÍDAS": headers,
+                "SAÍDAS": self._SOURCE_HEADERS,
                 "CONTAORDEM": [
                     "DATA MOV.",
                     "DESCRIÇÃO",
@@ -404,16 +384,36 @@ class TestSaidasProcess:
                     "ID_INTERNO",
                 ],
             },
-            {"SAÍDAS": {"values": [row]}},
+            {
+                "SAÍDAS": {"values": source_rows},
+                "CONTAORDEM": {"values": contaordem_rows or []},
+            },
         )
-
         context = ProcessContext(
-            settings=settings,
+            settings=_make_settings(),
             sheets_client=sheet_client,
             gmail_client=Mock(),
         )
+        return SaidasProcess(context).check_pending(), sheet_client
 
-        pending = SaidasProcess(context).check_pending()
+    def test_duplicado_row_still_in_contaordem_is_not_pending(self):
+        contaordem = [
+            ["30/08/2026", "MATERIAL DE LIMPEZA", "25,00", "SAI0000000239"],
+        ]
+        pending, sheet_client = self._pending_for(
+            [self._source_row(finance="duplicado")],
+            contaordem_rows=contaordem,
+        )
+
+        assert pending.has_work is False
+        sheet_client.append_rows.assert_not_called()
+        sheet_client.update_cell.assert_not_called()
+
+    def test_stale_duplicado_row_no_longer_in_contaordem_is_pending(self):
+        pending, _ = self._pending_for(
+            [self._source_row(finance="duplicado")],
+            contaordem_rows=[],
+        )
 
         assert pending.has_work is True
         assert pending.count == 1
