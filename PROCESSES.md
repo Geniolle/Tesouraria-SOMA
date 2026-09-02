@@ -80,6 +80,17 @@ This is a global invariant, not a process-specific business rule. The shared
 Sheets client tracks mutations and the central orchestrator provides a
 fallback enforcement step after every managed process.
 
+## Mandatory DESCRIÇÃO SOMA sequence
+
+Every row written to `CONTAORDEM` must end its `DESCRIÇÃO SOMA` with an
+`N###` suffix (`N001`, `N002`, ...). The counter restarts at 1 for each
+`DATA MOV.` day and each `PROCESSO` tag.
+
+Shared implementation: `ContaOrdemSequenceService` in
+`src/gmail_to_sheets/services/contaordem_sequence.py` (used by `VerboCafe`
+and `Saidas`). See `AGENTS.md` for the full rule. Any process that writes
+to `CONTAORDEM` must reuse this service, not reimplement it.
+
 ## Duplicate protection
 
 Finance transfers use both:

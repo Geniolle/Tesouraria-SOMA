@@ -30,6 +30,37 @@ Este documento define as regras que orientam qualquer desenvolvimento no projeto
 1. **Escrita idempotente**: Validar antes de escrever; prevenir duplicações.
 2. **Sem apagar**: Apenas append ou update de linhas existentes.
 3. **Formatação segura**: Validar dados antes de escrever.
+4. **Ordenação obrigatória da `CONTAORDEM`**: Após qualquer insert/update na
+   `CONTAORDEM`, a sheet tem de ficar ordenada por `DATA MOV.` descendente
+   (invariante global, reforçada pelo orquestrador central).
+5. **Sequencial obrigatório em `DESCRIÇÃO SOMA` na `CONTAORDEM`**: ver secção
+   abaixo.
+
+### Sequencial de `DESCRIÇÃO SOMA` na `CONTAORDEM`
+
+Regra global e **para todos os processos**: sempre que um registo for escrito
+na sheet `CONTAORDEM`, a coluna `DESCRIÇÃO SOMA` tem de terminar com o sufixo
+sequencial `N###`.
+
+1. **Formato**: `"<texto base> N{n:03d}"` — 3 dígitos com zero à esquerda
+   (`... N001`, `... N002`, ...). O `<texto base>` é a descrição própria do
+   processo; o sufixo é acrescentado, nunca substitui o texto.
+2. **Âmbito do contador**: reinicia em `1` por cada combinação de
+   **dia (`DATA MOV.`, normalizado para `dd/mm/yyyy`)** e **`PROCESSO`**.
+   Dias diferentes ou tags `PROCESSO` diferentes têm contadores independentes.
+3. **Reconstrução do estado**: a cada run, ler a `CONTAORDEM`
+   (`DATA MOV.`, `DESCRIÇÃO SOMA`, `PROCESSO`), extrair o maior `N###` já
+   existente por dia/processo com a regex `N(\d{3})\s*$`, e distribuir
+   `max + 1`. O contador fica em memória durante o lote para manter
+   consistência antes do write-back.
+4. **Implementação partilhada**: `ContaOrdemSequenceService` e os helpers
+   `strip_sequence_suffix` / `build_descricao_soma` em
+   `src/gmail_to_sheets/services/contaordem_sequence.py`. Usada hoje por
+   `VerboCafe` (via alias `DailySequenceService`) e `Saidas`. **Não
+   duplicar** esta lógica noutro processo — reutilizar este serviço.
+5. **Novos processos**: qualquer processo novo que faça append/update na
+   `CONTAORDEM` tem de integrar este sequencial antes de escrever
+   (`sequence.next_for(dia)` → `build_descricao_soma(base, n)`).
 
 ## Gmail
 

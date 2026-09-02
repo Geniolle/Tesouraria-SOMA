@@ -1,90 +1,14 @@
-"""Per-day ``DESCRIÇÃO SOMA`` sequence numbers for a Verbo Café phase.
+"""Backwards-compatible alias for the shared CONTAORDEM sequence service.
 
-The legacy Apps Script numbers each day's rows ``N001``, ``N002``, ... inside
-``DESCRIÇÃO SOMA``, scoped to one ``PROCESSO`` tag and grouped by the
-``DATA MOV.`` day. This service rebuilds that state from CONTAORDEM once per
-run and hands out the next number, keeping the counter in memory so a batch
-stays consistent before it is written back.
+The implementation moved to
+``src.gmail_to_sheets.services.contaordem_sequence`` because the
+``DESCRIÇÃO SOMA`` ``N###`` rule is global to every ``CONTAORDEM`` writer.
 """
 
 from __future__ import annotations
 
-import logging
-import re
+from src.gmail_to_sheets.services.contaordem_sequence import (
+    ContaOrdemSequenceService as DailySequenceService,
+)
 
-from src.gmail_to_sheets.clients.sheets_projection import read_projected_rows
-
-from ._format import format_date_ddmmyyyy
-
-logger = logging.getLogger(__name__)
-
-_SEQ_SUFFIX = re.compile(r"N(\d{3})\s*$")
-
-
-class DailySequenceService:
-    """Track the next ``N###`` per ``DATA MOV.`` day for one PROCESSO tag."""
-
-    target_sheet = "CONTAORDEM"
-
-    def __init__(
-        self,
-        sheets_client,
-        target_spreadsheet_id: str,
-        headers: list[str],
-        processo_tag: str,
-    ) -> None:
-        self.sheets_client = sheets_client
-        self.target_spreadsheet_id = target_spreadsheet_id
-        self.processo_tag = processo_tag
-        self.column_indices = {
-            str(header).upper().strip(): index
-            for index, header in enumerate(headers)
-            if header
-        }
-        self._max_by_day: dict[str, int] = {}
-        self._load()
-
-    def _load(self) -> None:
-        rows = read_projected_rows(
-            self.sheets_client,
-            self.target_spreadsheet_id,
-            self.target_sheet,
-            self.column_indices,
-            ["DATA MOV.", "DESCRIÇÃO SOMA", "PROCESSO"],
-        )
-        data_idx = self.column_indices["DATA MOV."]
-        desc_idx = self.column_indices["DESCRIÇÃO SOMA"]
-        proc_idx = self.column_indices["PROCESSO"]
-
-        target_proc = self.processo_tag.strip().casefold()
-        for _, row in rows:
-            if self._value(row, proc_idx).strip().casefold() != target_proc:
-                continue
-            day = format_date_ddmmyyyy(self._value(row, data_idx)) or self._value(
-                row, data_idx
-            ).strip()
-            if not day:
-                continue
-            match = _SEQ_SUFFIX.search(self._value(row, desc_idx))
-            if not match:
-                continue
-            number = int(match.group(1))
-            self._max_by_day[day] = max(self._max_by_day.get(day, 0), number)
-
-        logger.info(
-            "Verbo Café %s: %s day(s) with existing sequence numbers",
-            self.processo_tag,
-            len(self._max_by_day),
-        )
-
-    def next_for(self, data_ddmmyyyy: str) -> int:
-        """Return (and reserve) the next sequence number for a day."""
-        nxt = self._max_by_day.get(data_ddmmyyyy, 0) + 1
-        self._max_by_day[data_ddmmyyyy] = nxt
-        return nxt
-
-    @staticmethod
-    def _value(row: list, index: int) -> str:
-        if index >= len(row) or row[index] is None:
-            return ""
-        return str(row[index]).strip()
+__all__ = ["DailySequenceService"]
