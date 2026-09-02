@@ -164,7 +164,7 @@ class TestSaidaTransferService:
             target_headers=TARGET_HEADERS,
         )
 
-        target = service.build_target_row(_row())
+        target = service.build_target_row(_row(), 1)
         mapped = dict(zip(TARGET_HEADERS, target))
 
         assert mapped["DATA MOV."] == "30/08/2026"
@@ -204,12 +204,74 @@ class TestSaidaTransferService:
                     "FORMA DE PAGAMENTO": "Dinheiro",
                     "CAIXA": "CAIXA DIÁRIO",
                 }
-            )
+            ),
+            1,
         )
         mapped = dict(zip(TARGET_HEADERS, target))
 
         assert mapped["FORMA DE PAGAMENTO"] == "DINHEIRO"
         assert mapped["CAIXA"] == "CAIXA DIÁRIO"
+
+    def test_non_cash_payment_becomes_bank_transfer(self):
+        service = SaidaTransferService(
+            Mock(),
+            "sheet-123",
+            source_headers=HEADERS,
+            target_headers=TARGET_HEADERS,
+        )
+
+        target = service.build_target_row(
+            _row(
+                **{
+                    "FORMA DE PAGAMENTO": "Multibanco",
+                    "CAIXA": "CAIXA DIÁRIO",
+                }
+            ),
+            1,
+        )
+        mapped = dict(zip(TARGET_HEADERS, target))
+
+        assert mapped["FORMA DE PAGAMENTO"] == "TRANSFERÊNCIA BANCÁRIA"
+
+    def test_blank_payment_stays_blank(self):
+        service = SaidaTransferService(
+            Mock(),
+            "sheet-123",
+            source_headers=HEADERS,
+            target_headers=TARGET_HEADERS,
+        )
+
+        target = service.build_target_row(
+            _row(**{"FORMA DE PAGAMENTO": ""}),
+            1,
+        )
+        mapped = dict(zip(TARGET_HEADERS, target))
+
+        assert mapped["FORMA DE PAGAMENTO"] == ""
+
+    def test_descricao_soma_gets_sequence_suffix(self):
+        service = SaidaTransferService(
+            Mock(),
+            "sheet-123",
+            source_headers=HEADERS,
+            target_headers=TARGET_HEADERS,
+        )
+
+        # source has no suffix -> DESCRIÇÃO DA COMPRA is used as the base
+        target = service.build_target_row(
+            _row(**{"DESCRIÇÃO SOMA": "", "DESCRIÇÃO DA COMPRA": "COMPRA X"}),
+            7,
+        )
+        mapped = dict(zip(TARGET_HEADERS, target))
+        assert mapped["DESCRIÇÃO SOMA"] == "COMPRA X N007"
+
+        # source already carries a suffix -> it is replaced, not duplicated
+        target = service.build_target_row(
+            _row(**{"DESCRIÇÃO SOMA": "COMPRA X N001"}),
+            12,
+        )
+        mapped = dict(zip(TARGET_HEADERS, target))
+        assert mapped["DESCRIÇÃO SOMA"] == "COMPRA X N012"
 
 
 class TestSaidaStatusUpdater:

@@ -6,6 +6,8 @@ import logging
 from datetime import datetime
 from typing import Optional
 
+from src.gmail_to_sheets.services.contaordem_sequence import build_descricao_soma
+
 logger = logging.getLogger(__name__)
 
 
@@ -55,7 +57,11 @@ class SaidaTransferService:
             if header
         }
 
-    def build_target_row(self, source_row: list) -> list:
+    def build_target_row(
+        self,
+        source_row: list,
+        sequence_number: int,
+    ) -> list:
         row = [""] * len(self.target_headers)
 
         data = self._source(source_row, "DATA")
@@ -79,11 +85,11 @@ class SaidaTransferService:
             "TIPO": self.target_type,
             "PLANO DE CONTA": plano_conta,
             "CENTRO DE CUSTO": centro_custo,
-            "DESCRIÇÃO SOMA": descricao_soma or descricao,
-            "FORMA DE PAGAMENTO": self._target_payment_method(
-                forma_pagamento,
-                caixa,
+            "DESCRIÇÃO SOMA": build_descricao_soma(
+                descricao_soma or descricao,
+                sequence_number,
             ),
+            "FORMA DE PAGAMENTO": self._target_payment_method(forma_pagamento),
             "CAIXA": caixa,
             "PERÍODO": self._month(data),
             "PROCESSO": self.process_name,
@@ -139,25 +145,22 @@ class SaidaTransferService:
             return str(value)
 
     @staticmethod
-    def _target_payment_method(
-        source_method: str | None,
-        caixa: str | None,
-    ) -> str:
-        caixa_text = (caixa or "").upper()
-        method = (source_method or "").strip()
+    def _target_payment_method(source_method: str | None) -> str:
+        """Map the source FORMA DE PAGAMENTO to the CONTAORDEM value.
 
-        if "CONTA CORRENTE" in caixa_text:
-            return "TRANSFERÊNCIA BANCÁRIA"
+        - ``DINHEIRO`` (substring, case-insensitive) stays ``DINHEIRO``
+        - empty stays empty
+        - anything else becomes ``TRANSFERÊNCIA BANCÁRIA``
+        """
+        method = (source_method or "").strip()
 
         if not method:
             return ""
 
-        normalized = method.upper()
-        if "DINHEIRO" in normalized:
+        if "DINHEIRO" in method.upper():
             return "DINHEIRO"
-        if "CART" in normalized:
-            return "CARTÃO DE CRÉDITO"
-        return method.upper()
+
+        return "TRANSFERÊNCIA BANCÁRIA"
 
     @staticmethod
     def _month(value: str | None) -> str:

@@ -10,6 +10,10 @@ from src.gmail_to_sheets.logging_config import setup_logging
 from src.gmail_to_sheets.processes.entradas.entry_deduplication import (
     EntryDeduplicationService,
 )
+from src.gmail_to_sheets.services.contaordem_sequence import (
+    ContaOrdemSequenceService,
+)
+from src.gmail_to_sheets.services.pt_format import format_date_ddmmyyyy
 
 from .status_updater import SaidaStatusUpdater
 from .transfer_service import SaidaTransferService
@@ -68,6 +72,12 @@ class SaidasOrchestrator:
             self.spreadsheet_id,
             headers=source_headers,
         )
+        sequence = ContaOrdemSequenceService(
+            self.sheets_client,
+            self.spreadsheet_id,
+            target_headers,
+            transfer.process_name,
+        )
 
         result = self.sheets_client.service.spreadsheets().values().get(
             spreadsheetId=self.spreadsheet_id,
@@ -112,7 +122,9 @@ class SaidasOrchestrator:
                 continue
 
             try:
-                target_row = transfer.build_target_row(row)
+                day = format_date_ddmmyyyy(data) or (data or "")
+                sequence_number = sequence.next_for(day)
+                target_row = transfer.build_target_row(row, sequence_number)
                 if not transfer.append(target_row):
                     failed += 1
                     continue

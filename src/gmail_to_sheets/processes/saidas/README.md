@@ -20,13 +20,25 @@ The process maps the source fields to `CONTAORDEM`, keeps the amount
 positive with target `TIPO = Saída`, sets `PROCESSO = SAÍDAS`, and
 preserves `ID_INTERNO`.
 
+`FORMA DE PAGAMENTO` is normalized on the way in:
+
+- source contains `DINHEIRO` -> `DINHEIRO`
+- source empty -> empty
+- anything else -> `TRANSFERÊNCIA BANCÁRIA`
+
+`DESCRIÇÃO SOMA` gets the global `N###` sequence suffix
+(`ContaOrdemSequenceService`), scoped per `DATA MOV.` day and
+`PROCESSO = SAÍDAS`. Any existing suffix on the source value is replaced,
+not duplicated.
+
 Duplicate protection uses both:
 
 - `ID_INTERNO`
 - business key `DATA + VALOR + DESCRIÇÃO`
 
-After a successful append, the source `FINANCE` field is set to
-`Enviado`.
+When a row is already in `CONTAORDEM`, it is **not** appended again and the
+source `FINANCE` field is set to `duplicado`. After a successful append,
+the source `FINANCE` field is set to `Enviado`.
 
 The central orchestrator performs a read-only pending probe first. If
 there is no eligible non-duplicate row, the process is skipped.
