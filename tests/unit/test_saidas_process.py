@@ -8,7 +8,6 @@ from src.gmail_to_sheets.processes.saidas.transfer_service import (
 )
 from src.gmail_to_sheets.processes.saidas.validator import SaidaValidator
 
-
 HEADERS = [
     "ID_INTERNO",
     "FORMA DE PAGAMENTO",
@@ -233,4 +232,25 @@ class TestSaidaStatusUpdater:
             7,
             finance_index + 1,
             "Enviado",
+        )
+
+    def test_marks_finance_as_duplicado(self):
+        client = Mock()
+        updater = SaidaStatusUpdater(
+            client,
+            "sheet-123",
+            headers=HEADERS,
+        )
+
+        result = updater.mark_batch_as_duplicate([9])
+
+        assert result["updated"] == 1
+        assert result["failed"] == 0
+        finance_index = HEADERS.index("FINANCE")
+        client.update_cell.assert_called_once_with(
+            "sheet-123",
+            "SAÍDAS",
+            9,
+            finance_index + 1,
+            "duplicado",
         )

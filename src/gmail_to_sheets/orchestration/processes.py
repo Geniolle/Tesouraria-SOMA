@@ -282,7 +282,14 @@ class SaidasProcess(_BaseManagedProcess):
         self._pending_entries: list[_PendingEntry] = []
 
     def check_pending(self) -> PendingResult:
-        """Find the first valid non-duplicate SAÍDAS row."""
+        """Find the first SAÍDAS row that still needs action.
+
+        Any row that passes business validation is actionable: the run
+        phase either transfers it to CONTAORDEM or, when it is already
+        there, marks the source FINANCE as ``duplicado``. Validation
+        already requires an empty FINANCE, so a marked row drops out on
+        the next tick.
+        """
         sheets_client = self.context.get_sheets_client()
         spreadsheet_id = self.context.settings.sheets.spreadsheet_id
         headers = self.context.get_sheet_headers(self.source_sheet)
@@ -300,35 +307,11 @@ class SaidasProcess(_BaseManagedProcess):
             self.required_fields,
         )
 
-        dedup: EntryDeduplicationService | None = None
         self._pending_entries = []
 
         for row_number, row in rows:
             is_valid, _ = validator.is_valid_entry(row, row_number)
             if not is_valid:
-                continue
-
-            data = validator.get_field(row, "DATA") or ""
-            valor = validator.get_field(row, "VALOR DA COMPRA") or ""
-            descricao = validator.get_field(
-                row,
-                "DESCRIÇÃO DA COMPRA",
-            ) or ""
-            id_interno = validator.get_field(row, "ID_INTERNO")
-
-            if dedup is None:
-                dedup = EntryDeduplicationService(
-                    sheets_client,
-                    spreadsheet_id,
-                    headers=self.context.get_sheet_headers("CONTAORDEM"),
-                )
-
-            if dedup.is_duplicate(
-                data,
-                valor,
-                descricao,
-                id_interno=id_interno,
-            ):
                 continue
 
             self._pending_entries = [
@@ -340,7 +323,7 @@ class SaidasProcess(_BaseManagedProcess):
             return PendingResult(
                 has_work=True,
                 count=1,
-                reason="SAÍDAS row ready for transfer",
+                reason="SAÍDAS row ready for transfer or duplicate mark",
             )
 
         return PendingResult(

@@ -261,14 +261,7 @@ class TestDizimosOfertasProcess:
 
 
 class TestSaidasProcess:
-    @patch(
-        "src.gmail_to_sheets.orchestration.processes."
-        "EntryDeduplicationService"
-    )
-    def test_pending_requires_finance_ready_non_duplicate_row(
-        self,
-        mock_dedup_cls,
-    ):
+    def test_pending_true_for_finance_ready_row(self):
         settings = _make_settings()
         source_headers = [
             "ID_INTERNO",
@@ -333,9 +326,6 @@ class TestSaidasProcess:
                 "SAÍDAS": {"values": [source_row]},
             },
         )
-        dedup = Mock()
-        dedup.is_duplicate.return_value = False
-        mock_dedup_cls.return_value = dedup
 
         context = ProcessContext(
             settings=settings,
@@ -347,23 +337,14 @@ class TestSaidasProcess:
 
         assert pending.has_work is True
         assert pending.count == 1
-        dedup.is_duplicate.assert_called_once_with(
-            "30/08/2026",
-            "25,00",
-            "MATERIAL DE LIMPEZA",
-            id_interno="SAI0000000239",
-        )
         sheet_client.append_rows.assert_not_called()
         sheet_client.update_cell.assert_not_called()
 
-    @patch(
-        "src.gmail_to_sheets.orchestration.processes."
-        "EntryDeduplicationService"
-    )
-    def test_duplicate_saidas_row_is_not_pending(
-        self,
-        mock_dedup_cls,
-    ):
+    def test_finance_ready_row_is_pending_even_when_duplicate(self):
+        # check_pending no longer probes CONTAORDEM: a duplicate row is
+        # still work because the run phase must mark its FINANCE as
+        # "duplicado". Validation already requires an empty FINANCE, so a
+        # marked row stops being pending on the next tick.
         settings = _make_settings()
         headers = [
             "ID_INTERNO",
@@ -425,9 +406,6 @@ class TestSaidasProcess:
             },
             {"SAÍDAS": {"values": [row]}},
         )
-        dedup = Mock()
-        dedup.is_duplicate.return_value = True
-        mock_dedup_cls.return_value = dedup
 
         context = ProcessContext(
             settings=settings,
@@ -437,8 +415,8 @@ class TestSaidasProcess:
 
         pending = SaidasProcess(context).check_pending()
 
-        assert pending.has_work is False
-        assert pending.count == 0
+        assert pending.has_work is True
+        assert pending.count == 1
 
 
 class TestConciliacaoProcess:

@@ -83,6 +83,7 @@ class SaidasOrchestrator:
         duplicates = 0
         failed = 0
         transferred_rows: list[int] = []
+        duplicate_rows: list[int] = []
 
         for row_number, row in enumerate(rows, start=2):
             is_valid, _ = validator.is_valid_entry(row, row_number)
@@ -104,7 +105,10 @@ class SaidasOrchestrator:
                 descricao,
                 id_interno=id_interno,
             ):
+                # Already in CONTAORDEM: do not append again, just flag the
+                # source row so it stops being reprocessed every tick.
                 duplicates += 1
+                duplicate_rows.append(row_number)
                 continue
 
             try:
@@ -129,6 +133,7 @@ class SaidasOrchestrator:
                 )
 
         update_result = status.mark_batch_as_sent(transferred_rows)
+        duplicate_result = status.mark_batch_as_duplicate(duplicate_rows)
         sort_result = self.sheets_client.ensure_contaordem_sorted(
             self.spreadsheet_id
         )
@@ -139,17 +144,20 @@ class SaidasOrchestrator:
             "valid": valid,
             "transferred": transferred,
             "duplicates": duplicates,
+            "duplicates_marked": duplicate_result["updated"],
             "failed": failed,
             "status_updated": update_result["updated"],
             "status_failed": update_result["failed"],
+            "duplicate_mark_failed": duplicate_result["failed"],
         }
 
         logger.info(
             "SAÍDAS completed valid=%s transferred=%s duplicates=%s "
-            "failed=%s status_updated=%s",
+            "duplicates_marked=%s failed=%s status_updated=%s",
             valid,
             transferred,
             duplicates,
+            duplicate_result["updated"],
             failed,
             update_result["updated"],
         )

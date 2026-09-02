@@ -8,11 +8,12 @@ logger = logging.getLogger(__name__)
 
 
 class SaidaStatusUpdater:
-    """Mark transferred SAÍDAS rows as Enviado."""
+    """Mark processed SAÍDAS rows in the FINANCE column."""
 
     source_sheet = "SAÍDAS"
     status_field = "FINANCE"
     status_value = "Enviado"
+    duplicate_value = "duplicado"
 
     def __init__(
         self,
@@ -38,6 +39,14 @@ class SaidaStatusUpdater:
         )
 
     def mark_batch_as_sent(self, row_numbers: list[int]) -> dict:
+        """Mark transferred rows as ``Enviado``."""
+        return self._mark_batch(row_numbers, self.status_value)
+
+    def mark_batch_as_duplicate(self, row_numbers: list[int]) -> dict:
+        """Mark rows already present in CONTAORDEM as ``duplicado``."""
+        return self._mark_batch(row_numbers, self.duplicate_value)
+
+    def _mark_batch(self, row_numbers: list[int], value: str) -> dict:
         if not row_numbers:
             return {"updated": 0, "failed": 0, "errors": []}
 
@@ -59,7 +68,7 @@ class SaidaStatusUpdater:
                     self.source_sheet,
                     row_number,
                     column_number,
-                    self.status_value,
+                    value,
                 )
                 updated += 1
             except Exception as error:
