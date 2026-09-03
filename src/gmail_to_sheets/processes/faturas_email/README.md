@@ -37,10 +37,15 @@ Per route, once per run:
 ## Auth
 
 Drive uploads use the **Gmail OAuth account** (not the Sheets service
-account, which has no Drive storage quota). The token therefore needs the
+account, which has no Drive storage quota). The token needs the
 `https://www.googleapis.com/auth/drive.file` scope in addition to
 `gmail.modify`; adding it requires re-running the OAuth consent once. The
-folder must be owned by, or shared as Editor with, that account.
+folder must be writable by that account.
+
+`drive.file` is per-file: the app can upload into the folder, but it only
+*sees* files it created there. Duplicate detection therefore compares
+against the app's own past uploads (a file a person dropped in by hand is
+invisible and never causes a `(1)` rename).
 
 ## Notes
 

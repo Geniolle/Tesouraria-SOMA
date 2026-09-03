@@ -26,20 +26,13 @@ class DriveClient:
         self.credentials = credentials
         self.service = build("drive", "v3", credentials=credentials)
 
-    def get_folder(self, folder_id: str) -> dict[str, Any]:
-        """Return folder metadata (id, name, capabilities)."""
-        try:
-            return self.service.files().get(
-                fileId=folder_id,
-                fields="id,name,mimeType,capabilities(canAddChildren)",
-                supportsAllDrives=True,
-            ).execute()
-        except HttpError as error:
-            logger.error("Failed to read Drive folder %s: %s", folder_id, error)
-            raise
-
     def list_child_names(self, folder_id: str) -> set[str]:
-        """Return the names of the non-trashed files directly in a folder."""
+        """Return the names of the non-trashed files this app put in a folder.
+
+        With the ``drive.file`` scope this only lists files the app itself
+        created (which is exactly what duplicate detection needs); files a
+        person added by hand are invisible and never clash.
+        """
         names: set[str] = set()
         page_token: str | None = None
         try:
