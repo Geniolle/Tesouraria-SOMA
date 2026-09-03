@@ -18,7 +18,15 @@ logger = logging.getLogger(__name__)
 class GmailAuthenticator:
     """Manages Gmail OAuth authentication."""
 
-    SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
+    # gmail.modify: read messages, add labels, archive.
+    # drive.file: create/manage only files this app creates (Faturas Email
+    # process uploads attachments to a Drive folder). Adding this scope
+    # requires a fresh OAuth consent; the existing token keeps working for
+    # Gmail until it is re-consented.
+    SCOPES = [
+        "https://www.googleapis.com/auth/gmail.modify",
+        "https://www.googleapis.com/auth/drive.file",
+    ]
 
     def __init__(self, client_secrets_path: Path, credentials_path: Path) -> None:
         """
@@ -53,8 +61,13 @@ class GmailAuthenticator:
 
         if self.credentials_path.exists():
             logger.info(f"Loading cached credentials from {self.credentials_path}")
+            # Load without forcing SCOPES: the token file carries whatever
+            # scopes were actually granted. Forcing a superset here would make
+            # refresh fail ("Scope has changed") for an older token that has
+            # only gmail.modify. A fresh consent (_get_new_credentials) still
+            # requests the full SCOPES list.
             credentials = Credentials.from_authorized_user_file(
-                str(self.credentials_path), self.SCOPES
+                str(self.credentials_path)
             )
 
         if not credentials or not credentials.valid:

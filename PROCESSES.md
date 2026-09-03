@@ -49,7 +49,17 @@ vendas, `FORMA DE PAGAMENTO = DINHEIRO`), `DATA` is valid, the amount
 ### Conciliacao
 
 Matches `T_EXTRATO` rows against `CONTAORDEM` and fills `DOC.SOMA` on
-the source sheet when the target already contains an actionable value.
+the source sheet when the target already contains an actionable value
+(the target `DOC.SOMA` must be 7 numeric characters).
+
+### FaturasEmail
+
+Opt-in (`FATURAS_EMAIL_ENABLED`). For each configured route (one per
+sender), saves the oldest matching inbox message's attachments to a
+Google Drive folder, then applies the route's Gmail label and archives
+the message. Never touches any spreadsheet. Drive uploads use the Gmail
+OAuth account (needs the `drive.file` scope). See
+`src/gmail_to_sheets/processes/faturas_email/README.md`.
 
 ## Central execution order
 
@@ -60,6 +70,7 @@ The registry currently runs sequentially in this order:
 3. Saidas — priority 30
 4. VerboCafe — priority 35
 5. Conciliacao — priority 40
+6. FaturasEmail — priority 50 *(only when `FATURAS_EMAIL_ENABLED` and a route is set)*
 
 Every managed process exposes:
 
@@ -107,3 +118,4 @@ This prevents a row from being appended twice to `CONTAORDEM`.
 - [`PRODUCTION_RUNTIME.md`](PRODUCTION_RUNTIME.md)
 - [`src/gmail_to_sheets/processes/saidas/README.md`](src/gmail_to_sheets/processes/saidas/README.md)
 - [`src/gmail_to_sheets/processes/verbo_cafe/README.md`](src/gmail_to_sheets/processes/verbo_cafe/README.md)
+- [`src/gmail_to_sheets/processes/faturas_email/README.md`](src/gmail_to_sheets/processes/faturas_email/README.md)

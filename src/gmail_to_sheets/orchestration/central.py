@@ -11,7 +11,10 @@ from time import perf_counter
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
-from src.gmail_to_sheets.config.settings import load_settings
+from src.gmail_to_sheets.config.settings import (
+    FaturasEmailSettings,
+    load_settings,
+)
 from src.gmail_to_sheets.logging_config import setup_logging
 
 from .health import (
@@ -25,6 +28,7 @@ from .processes import (
     ConciliacaoProcess,
     DizimosOfertasProcess,
     ExtratoProcess,
+    FaturasEmailProcess,
     SaidasProcess,
     VerboCafeProcess,
 )
@@ -57,13 +61,7 @@ class CentralOrchestrator:
         setup_logging(self.settings.log_file, self.settings.log_level)
         self.context = ProcessContext(settings=self.settings)
         self.registry = registry or ProcessRegistry(
-            [
-                ExtratoProcess(self.context),
-                DizimosOfertasProcess(self.context),
-                SaidasProcess(self.context),
-                VerboCafeProcess(self.context),
-                ConciliacaoProcess(self.context),
-            ]
+            self._default_processes()
         )
         self.scheduler = BackgroundScheduler()
         self.is_running = False
@@ -74,6 +72,29 @@ class CentralOrchestrator:
                 process.name,
                 ProcessHealth(process_name=process.name),
             )
+
+    def _default_processes(self) -> list:
+        """Managed processes in priority order.
+
+        FaturasEmail is registered only when ``FATURAS_EMAIL_ENABLED`` is set
+        and at least one route is configured; otherwise it stays out of the
+        run loop entirely.
+        """
+        processes = [
+            ExtratoProcess(self.context),
+            DizimosOfertasProcess(self.context),
+            SaidasProcess(self.context),
+            VerboCafeProcess(self.context),
+            ConciliacaoProcess(self.context),
+        ]
+        faturas = getattr(self.settings, "faturas_email", None)
+        if (
+            isinstance(faturas, FaturasEmailSettings)
+            and faturas.enabled
+            and faturas.routes
+        ):
+            processes.append(FaturasEmailProcess(self.context))
+        return processes
 
     def _health_for(self, process_name: str) -> ProcessHealth:
         return self.health.setdefault(

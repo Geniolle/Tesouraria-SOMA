@@ -18,6 +18,9 @@ from src.gmail_to_sheets.processes.entradas.entry_deduplication import (
 )
 from src.gmail_to_sheets.processes.entradas.entry_validator import EntryValidator
 from src.gmail_to_sheets.processes.entradas.orchestrator import EntradasOrchestrator
+from src.gmail_to_sheets.processes.faturas_email.orchestrator import (
+    FaturasEmailOrchestrator,
+)
 from src.gmail_to_sheets.processes.saidas.orchestrator import SaidasOrchestrator
 from src.gmail_to_sheets.processes.saidas.validator import SaidaValidator
 from src.gmail_to_sheets.processes.verbo_cafe.config import resolve_phases
@@ -603,6 +606,61 @@ class VerboCafeProcess(_BaseManagedProcess):
         except Exception as error:
             logger.error(
                 "VerboCafe failed during managed execution: %s",
+                error,
+                exc_info=True,
+            )
+            return self._build_failed(self.name, error, started_at)
+
+
+class FaturasEmailProcess(_BaseManagedProcess):
+    """Managed process: save email attachments to a Google Drive folder."""
+
+    name = "FaturasEmail"
+    priority = 50
+
+    def check_pending(self) -> PendingResult:
+        """Cheap Gmail probe across every configured route."""
+        cfg = self.context.settings.faturas_email
+        if not cfg.routes:
+            return PendingResult(
+                has_work=False,
+                count=0,
+                reason="No Faturas Email routes configured",
+            )
+
+        gmail_client = self.context.get_gmail_client()
+        for route in cfg.routes:
+            message_ids = gmail_client.search_messages(
+                query=route.gmail_query(),
+                max_results=1,
+            )
+            if message_ids:
+                return PendingResult(
+                    has_work=True,
+                    count=1,
+                    reason=f"Matching email for {route.sender}",
+                )
+
+        return PendingResult(
+            has_work=False,
+            count=0,
+            reason="No matching Faturas emails",
+        )
+
+    def run(self) -> ProcessResult:
+        started_at = perf_counter()
+        try:
+            orchestrator = FaturasEmailOrchestrator(
+                settings=self.context.settings,
+                gmail_client=self.context.get_gmail_client(),
+                drive_client=self.context.get_drive_client(),
+            )
+            summary = orchestrator.run() or {}
+            processed = int(summary.get("processed", 0))
+            return self._build_success(self.name, processed, started_at)
+        except Exception as error:
+            logger.error(
+                "FaturasEmail failed during managed execution: %s",
                 error,
                 exc_info=True,
             )

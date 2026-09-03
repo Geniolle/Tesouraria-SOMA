@@ -7,6 +7,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from src.gmail_to_sheets.clients.drive_client import DriveClient
 from src.gmail_to_sheets.clients.gmail_auth import GmailAuthenticator
 from src.gmail_to_sheets.clients.gmail_client import GmailClient
 from src.gmail_to_sheets.clients.sheets_client import SheetsClient
@@ -47,18 +48,28 @@ class ProcessContext:
     settings: Any
     gmail_client: GmailClient | None = None
     sheets_client: SheetsClient | None = None
+    drive_client: DriveClient | None = None
     headers_cache: dict[str, list[str]] = field(default_factory=dict)
 
     def get_gmail_client(self) -> GmailClient:
         """Return a shared Gmail client, creating it on first use."""
         if self.gmail_client is None:
-            authenticator = GmailAuthenticator(
-                client_secrets_path=self.settings.gmail.client_secrets_path,
-                credentials_path=self.settings.gmail.credentials_path,
-            )
-            credentials = authenticator.get_credentials()
+            credentials = self._gmail_credentials()
             self.gmail_client = GmailClient(credentials)
         return self.gmail_client
+
+    def get_drive_client(self) -> DriveClient:
+        """Return a shared Drive client (reuses the Gmail OAuth account)."""
+        if self.drive_client is None:
+            self.drive_client = DriveClient(self._gmail_credentials())
+        return self.drive_client
+
+    def _gmail_credentials(self):
+        authenticator = GmailAuthenticator(
+            client_secrets_path=self.settings.gmail.client_secrets_path,
+            credentials_path=self.settings.gmail.credentials_path,
+        )
+        return authenticator.get_credentials()
 
     def get_sheets_client(self) -> SheetsClient:
         """Return a shared Sheets client, creating it on first use."""
