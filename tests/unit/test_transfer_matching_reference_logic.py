@@ -456,3 +456,68 @@ def test_existing_row_no_match_keeps_analisar_without_redundant_write():
     assert prepared["stats"]["no_match"] == 1
     assert prepared["stats"]["skipped_resolved"] == 0
     assert prepared["update_rows"] == {}
+
+
+def test_matching_prioritizes_specific_rule_over_generic_prefix():
+    # TR- is defined BEFORE TR-IPS in the sheet rows, but TR-IPS must match first for TR-IPS-CLAYTON
+    source_rows = [
+        ["04/08/2026", "TR-IPS-CLAYTON", "100,00", "ENTRADA", "EXT0000000030", ""],
+    ]
+    target_rows = []
+    ref_rows = [
+        [
+            "TR-",
+            "ENTRADA",
+            "",
+            "DOC_GENERIC",
+            "Dizimos Generico",
+            "PC_GENERIC",
+            "CC_GENERIC",
+            "FP",
+            "CX",
+            "CXS",
+            "",
+        ],
+        [
+            "TR-IPS",
+            "ENTRADA",
+            "",
+            "DOC_SPECIFIC",
+            "Dizimos Especifico",
+            "PC_SPECIFIC",
+            "CC_SPECIFIC",
+            "FP",
+            "CX",
+            "CXS",
+            "",
+        ],
+    ]
+
+    mock_sheets = _make_mock_sheets(source_rows, target_rows, ref_rows)
+
+    with patch("src.gmail_to_sheets.services.transfer_matching_service.BatchWriter") as mock_batch_writer:
+        mock_batch = Mock()
+        mock_batch.batch_write_with_updates.return_value = {
+            "target_rows_written": 1,
+            "status_updates_applied": 1,
+            "errors": [],
+        }
+        mock_batch_writer.return_value = mock_batch
+
+        service = TransferMatchingService(
+            mock_sheets,
+            "spreadsheet",
+            "T_EXTRATO",
+            "CONTAORDEM",
+            "CONSTANTES",
+        )
+
+        result = service.process_with_matching(["EXT0000000030"])
+
+    assert result["matched"] == 1
+    target_row = mock_batch.batch_write_with_updates.call_args.kwargs["target_data"][0]
+    headers = service.target_headers
+    assert target_row[_target_row_index(headers, "DOC. SOMA")] == "DOC_SPECIFIC"
+    assert target_row[_target_row_index(headers, "PLANO DE CONTA")] == "PC_SPECIFIC"
+    assert target_row[_target_row_index(headers, "CENTRO DE CUSTO")] == "CC_SPECIFIC"
+

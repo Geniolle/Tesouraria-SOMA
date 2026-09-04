@@ -45,6 +45,7 @@ class TransferMatchingLayout:
 
         self._validate_columns()
         self.ref_data = self._load_reference_data()
+        self._sort_reference_data()
         self.existing_ids = self._load_existing_ids()
         self._init_sequential_state()
 
@@ -95,6 +96,22 @@ class TransferMatchingLayout:
         rows = result.get("values", [])
         logger.info(f"Loaded {len(rows)} reference rows")
         return rows
+
+    def _sort_reference_data(self) -> None:
+        """Sort reference rows by length of normalized TEXTO descending.
+
+        Ensures that more specific rules (e.g. 'TR-IPS' or 'TRF.FERNANDO...')
+        are evaluated before shorter generic prefixes (e.g. 'TR-' or 'TRF.').
+        """
+        texto_idx = self.ref_indices.get("TEXTO")
+        if texto_idx is None:
+            return
+
+        self.ref_data.sort(
+            key=lambda row: len(self.normalize_match_text(str(row[texto_idx]))) if texto_idx < len(row) else 0,
+            reverse=True,
+        )
+        logger.info(f"Sorted {len(self.ref_data)} reference rows by TEXTO length descending")
 
     def _init_sequential_state(self) -> None:
         try:

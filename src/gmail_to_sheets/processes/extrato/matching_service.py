@@ -351,7 +351,15 @@ class MatchingService:
         valor = self._parse_amount(self._get_cell_by_idx(source_row, valor_idx))
         data_mov = self._get_cell_by_idx(source_row, data_mov_idx)
 
-        for ref_idx, ref_row in enumerate(ref_data):
+        # Sort reference rows by normalized TEXTO length descending so that more specific
+        # rules match before shorter generic prefixes, while preserving original ref_idx.
+        sorted_ref = sorted(
+            enumerate(ref_data),
+            key=lambda item: len(self._normalize_text(self._get_cell_by_idx(item[1], ref_texto_idx))),
+            reverse=True,
+        )
+
+        for ref_idx, ref_row in sorted_ref:
             ref_texto = self._get_cell_by_idx(ref_row, ref_texto_idx)
             ref_tipo = self._get_cell_by_idx(ref_row, ref_tipo_idx).upper()
             ref_valor_raw = self._get_cell_by_idx(ref_row, ref_valor_idx)
