@@ -220,6 +220,59 @@ def test_matching_ignores_spaces_between_bank_text_and_constants_key():
     assert target_row[_target_row_index(headers, "DESCRIÇÃO SOMA")] == "Venda de Livros N001"
 
 
+def test_matching_transferencia_accent_insensitive():
+    # Source row has Transferência from parser; CONSTANTES has TRANSFERENCIA (unaccented)
+    source_rows = [
+        ["04/08/2026", "ENT.NUMERARIO  CH24 0006774253", "500,00", "Transferência", "EXT0000000015", ""],
+    ]
+    target_rows = []
+    ref_rows = [
+        [
+            "ENT.NUMERARIO",
+            "TRANSFERENCIA",
+            "",
+            "DOC888",
+            "Depósito Numerário",
+            "PC20",
+            "CC20",
+            "Numerario",
+            "Caixa Geral",
+            "Banco",
+            "",
+        ]
+    ]
+
+    mock_sheets = _make_mock_sheets(source_rows, target_rows, ref_rows)
+
+    with patch("src.gmail_to_sheets.services.transfer_matching_service.BatchWriter") as mock_batch_writer:
+        mock_batch = Mock()
+        mock_batch.batch_write_with_updates.return_value = {
+            "target_rows_written": 1,
+            "status_updates_applied": 1,
+            "errors": [],
+        }
+        mock_batch_writer.return_value = mock_batch
+
+        service = TransferMatchingService(
+            mock_sheets,
+            "spreadsheet",
+            "T_EXTRATO",
+            "CONTAORDEM",
+            "CONSTANTES",
+        )
+
+        result = service.process_with_matching(["EXT0000000015"])
+
+    assert result["matched"] == 1
+    assert result["no_match"] == 0
+
+    target_row = mock_batch.batch_write_with_updates.call_args.kwargs["target_data"][0]
+    headers = service.target_headers
+    assert target_row[_target_row_index(headers, "DOC. SOMA")] == "DOC888"
+    assert target_row[_target_row_index(headers, "TIPO")] == "TRANSFERENCIA"
+    assert target_row[_target_row_index(headers, "DESCRIÇÃO SOMA")] == "Depósito Numerário N001"
+
+
 def test_sequential_description_resets_by_full_date_not_day_month_only():
     source_rows = [
         ["04/08/2026", "Pagamento Ano Novo", "75,00", "SAIDA", "EXT0000000003", ""],

@@ -364,7 +364,9 @@ class MatchingService:
             text_ok = (desc_norm in ref_texto_norm) or (ref_texto_norm in desc_norm)
 
             # Type matching
-            type_ok = tipo == ref_tipo
+            type_ok = (tipo == ref_tipo) or (
+                self._normalize_text(tipo) == self._normalize_text(ref_tipo)
+            )
 
             # Value matching (if specified in reference)
             value_ok = True

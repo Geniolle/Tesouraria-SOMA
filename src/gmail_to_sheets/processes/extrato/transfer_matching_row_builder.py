@@ -178,7 +178,9 @@ class TransferMatchingRowBuilder:
                 continue
 
             text_ok = (desc_norm in ref_texto_norm) or (ref_texto_norm in desc_norm)
-            type_ok = (tipo == ref_tipo)
+            type_ok = (tipo == ref_tipo) or (
+                self.layout.normalize_text(tipo) == self.layout.normalize_text(ref_tipo)
+            )
 
             value_ok = True
             if ref_valor_raw and ref_valor_raw.strip():

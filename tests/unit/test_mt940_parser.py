@@ -1,4 +1,4 @@
-﻿"""
+"""
 Unit tests for MT940 parser.
 
 Tests cover:
@@ -268,6 +268,29 @@ class TestMT940ParserDescriptions:
         result = parser.parse(content)
 
         assert result.transactions[0].tipo == "Cartão"
+
+    def test_parse_ent_numerario_sets_tipo_transferencia(self):
+        """Test special MT940 description ENT.NUMERARIO maps TIPO to Transferência."""
+        content = """:20:STARTUMSEITE
+:25:MT940_ACCOUNT
+:28C:0/1
+:60F:C260804EUR1000,00
+:61:2608050805C500,NMSCENT.NUMERARIO  CH24 0006774253
+:61:2608050805C200,NMSCENT. NUMERARIO DEPOSITO
+:61:2608050805C300,NMSCENT.NUMERÁRIO BALCAO
+:62F:C260804EUR2000,00
+:20:ENDUMSEITE
+"""
+        parser = MT940Parser("test_ent_numerario.txt")
+        result = parser.parse(content)
+
+        assert len(result.transactions) == 3
+        assert result.transactions[0].tipo == "Transferência"
+        assert result.transactions[0].descricao == "ENT.NUMERARIO  CH24 0006774253"
+        assert result.transactions[0].valor == Decimal("500.00")
+
+        assert result.transactions[1].tipo == "Transferência"
+        assert result.transactions[2].tipo == "Transferência"
 
     def test_parse_empty_description(self):
         """Test handling of transactions with minimal/empty description."""

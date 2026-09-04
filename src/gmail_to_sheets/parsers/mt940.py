@@ -6,6 +6,7 @@ Handles multiple SWIFT blocks and various date formats.
 """
 
 import logging
+import unicodedata
 from decimal import Decimal
 from typing import Optional
 
@@ -207,6 +208,15 @@ class MT940Parser:
         descricao_norm = descricao.replace("/", "").strip().upper()
         if descricao_norm == "PAG.CARTAOBUSTRADE":
             return "Cartão"
+
+        # Cash/cheque deposits ("ENT.NUMERARIO") represent internal transfers
+        # e.g.: "ENT.NUMERARIO  CH24 0006774253"
+        normalized = unicodedata.normalize("NFD", descricao_norm)
+        ascii_text = "".join(c for c in normalized if unicodedata.category(c) != "Mn")
+        compact = "".join(ascii_text.split())
+        if "ENT.NUMERARIO" in compact or "ENTNUMERARIO" in compact:
+            return "Transferência"
+
         return "Entrada" if is_credit else "Saída"
 
     def _parse_footer(self, lines: list[str]) -> MT940Footer:
