@@ -380,7 +380,7 @@ class MatchingService:
             value_ok = True
             if ref_valor_raw and ref_valor_raw.strip():
                 ref_valor = self._parse_amount(ref_valor_raw)
-                value_ok = abs(valor - ref_valor) < 0.01
+                value_ok = abs(abs(valor) - abs(ref_valor)) < 0.01
 
             if text_ok and type_ok and value_ok:
                 # Found a match!

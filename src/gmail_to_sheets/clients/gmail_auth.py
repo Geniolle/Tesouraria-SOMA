@@ -71,10 +71,16 @@ class GmailAuthenticator:
             )
 
         if not credentials or not credentials.valid:
+            refreshed = False
             if credentials and credentials.expired and credentials.refresh_token:
                 logger.info("Refreshing expired credentials")
-                credentials.refresh(Request())
-            else:
+                try:
+                    credentials.refresh(Request())
+                    refreshed = True
+                except Exception as e:
+                    logger.warning(f"Failed to refresh credentials ({e}), initiating new OAuth flow")
+
+            if not refreshed:
                 logger.info("Initiating new OAuth flow")
                 credentials = self._get_new_credentials()
 
