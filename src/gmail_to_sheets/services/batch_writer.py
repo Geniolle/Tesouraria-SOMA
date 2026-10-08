@@ -6,6 +6,7 @@ Prepares data in memory before writing in a single batch request.
 """
 
 import logging
+import time
 from typing import Any
 
 from src.gmail_to_sheets.clients.sheets_client import SheetsClient
@@ -26,6 +27,79 @@ class BatchWriter:
         """
         self.sheets_client = sheets_client
         self.spreadsheet_id = spreadsheet_id
+
+    @staticmethod
+    def _is_quota_error(exc: Exception) -> bool:
+        text = str(exc).lower()
+        return (
+            "429" in text
+            or "quota" in text
+            or "rate limit" in text
+            or "rate_limit" in text
+            or "resource_exhausted" in text
+        )
+
+    def _with_quota_retry(self, operation, *, label: str, attempts: int = 5):
+        """Retry Google Sheets quota/rate-limit failures with exponential backoff."""
+        for attempt in range(attempts):
+            try:
+                return operation()
+            except Exception as exc:
+                if not self._is_quota_error(exc) or attempt == attempts - 1:
+                    raise
+                delay = min(2 ** attempt, 16)
+                logger.warning(
+                    "%s hit Google Sheets quota/rate limit; retry %s/%s in %ss",
+                    label,
+                    attempt + 1,
+                    attempts - 1,
+                    delay,
+                )
+                time.sleep(delay)
+
+    def _confirm_target_ids(self, target_sheet: str, target_data: list[list]) -> None:
+        """Confirm every appended ID_INTERNO exists in target before touching source status."""
+        if not target_data:
+            return
+
+        headers = self.sheets_client.get_headers(self.spreadsheet_id, target_sheet)
+        id_idx = next(
+            (idx for idx, header in enumerate(headers) if str(header).strip().upper() == "ID_INTERNO"),
+            None,
+        )
+        if id_idx is None:
+            raise RuntimeError(f"ID_INTERNO column not found in {target_sheet}")
+
+        expected_ids = {
+            str(row[id_idx]).strip()
+            for row in target_data
+            if id_idx < len(row) and str(row[id_idx]).strip()
+        }
+        if not expected_ids:
+            raise RuntimeError("Target write has no ID_INTERNO values to verify")
+
+        range_name = self.sheets_client.get_data_range(self.spreadsheet_id, target_sheet)
+        if not isinstance(range_name, str) or not range_name:
+            range_name = f"{target_sheet}!A2:ZZ99999"
+
+        result = self._with_quota_retry(
+            lambda: self.sheets_client.service.spreadsheets().values().get(
+                spreadsheetId=self.spreadsheet_id,
+                range=range_name,
+            ).execute(),
+            label=f"confirm {target_sheet}",
+        )
+        rows = result.get("values", [])
+        actual_ids = {
+            str(row[id_idx]).strip()
+            for row in rows
+            if id_idx < len(row) and str(row[id_idx]).strip()
+        }
+        missing = sorted(expected_ids - actual_ids)
+        if missing:
+            raise RuntimeError(
+                f"Target verification failed in {target_sheet}; missing ID_INTERNO: {', '.join(missing)}"
+            )
 
     def batch_write_with_updates(
         self,
@@ -56,20 +130,28 @@ class BatchWriter:
                 "errors": []
             }
 
-            # Step 1: Append new rows to target sheet
+            # Step 1: Append new rows to target sheet.
+            # Fail immediately on target errors: source status must never advance
+            # unless CONTAORDEM has been written and verified.
             if target_data:
-                try:
-                    logger.info(f"Batch writing {len(target_data)} rows to {target_sheet}")
-                    self.sheets_client.append_rows(
+                logger.info(f"Batch writing {len(target_data)} rows to {target_sheet}")
+                self._with_quota_retry(
+                    lambda: self.sheets_client.append_rows(
                         self.spreadsheet_id,
                         target_sheet,
-                        target_data
-                    )
-                    stats["target_rows_written"] = len(target_data)
-                    logger.info(f"Wrote {len(target_data)} rows to {target_sheet}")
-                except Exception as e:
-                    logger.error(f"Failed to write to {target_sheet}: {e}")
-                    stats["errors"].append(f"Target write failed: {e}")
+                        target_data,
+                    ),
+                    label=f"append {target_sheet}",
+                )
+                stats["target_rows_written"] = len(target_data)
+                logger.info(f"Wrote {len(target_data)} rows to {target_sheet}")
+
+                self._confirm_target_ids(target_sheet, target_data)
+                logger.info(
+                    "Confirmed %s appended ID_INTERNO value(s) in %s before source update",
+                    len(target_data),
+                    target_sheet,
+                )
 
             # Step 2: Update source sheet rows
             if source_data:
@@ -89,17 +171,16 @@ class BatchWriter:
                     logger.error(f"Failed to update {source_sheet}: {e}")
                     stats["errors"].append(f"Source update failed: {e}")
 
-            # Step 3: Apply status updates as batch
+            # Step 3: Apply source status only after target write/verification succeeded.
             if status_updates:
-                try:
-                    logger.info(f"Batch updating status for {len(status_updates)} rows")
-                    self._batch_update_status(source_sheet, status_updates)
-                    stats["status_updates_applied"] = len(status_updates)
-                    self.sheets_client.mark_sheet_dirty(source_sheet)
-                    logger.info(f"Updated status for {len(status_updates)} rows")
-                except Exception as e:
-                    logger.error(f"Failed to update status: {e}")
-                    stats["errors"].append(f"Status update failed: {e}")
+                logger.info(f"Batch updating status for {len(status_updates)} rows")
+                self._with_quota_retry(
+                    lambda: self._batch_update_status(source_sheet, status_updates),
+                    label=f"status update {source_sheet}",
+                )
+                stats["status_updates_applied"] = len(status_updates)
+                self.sheets_client.mark_sheet_dirty(source_sheet)
+                logger.info(f"Updated status for {len(status_updates)} rows")
 
             # Validate all operations completed successfully
             if stats["errors"]:
