@@ -285,12 +285,25 @@ class TransferMatchingLayout:
 
     @staticmethod
     def parse_amount(value: str) -> float:
-        if not value:
+        """Parse financial values without losing Portuguese thousands separators."""
+        if value is None or str(value).strip() == "":
             return 0.0
+
+        text = str(value).strip().replace("\u00a0", "").replace(" ", "")
+        text = text.replace("€", "").replace("EUR", "").replace("eur", "")
+
+        if "," in text and "." in text:
+            if text.rfind(",") > text.rfind("."):
+                text = text.replace(".", "").replace(",", ".")
+            else:
+                text = text.replace(",", "")
+        elif "," in text:
+            text = text.replace(",", ".")
+
         try:
-            return float(str(value).strip().replace(",", "."))
-        except (ValueError, AttributeError):
-            return 0.0
+            return float(text)
+        except (ValueError, TypeError, AttributeError) as exc:
+            raise ValueError(f"Valor financeiro inválido: {value!r}") from exc
 
     @staticmethod
     def format_number(value: float) -> str:
