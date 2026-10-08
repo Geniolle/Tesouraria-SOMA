@@ -1,8 +1,8 @@
+import json
 import os
 import sys
-import json
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 # Add scripts directory to path for send_ntfy import
@@ -54,7 +54,7 @@ def check_health(health_path: Path = HEALTH_FILE, state_path: Path = STATE_FILE,
     last_error = extrato.get("last_error") or ""
     last_success_at = extrato.get("last_success_at") or "N/A"
     last_check_at_str = extrato.get("last_check_at") or ""
-    
+
     now = time.time()
     last_check_ts = parse_iso_to_timestamp(last_check_at_str)
     seconds_since_check = now - last_check_ts if last_check_ts > 0 else 0

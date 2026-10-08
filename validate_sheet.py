@@ -5,6 +5,7 @@ Shows statistics and list of entries ready for processing.
 """
 
 import logging
+
 from src.gmail_to_sheets.clients.sheets_client import SheetsClient
 from src.gmail_to_sheets.config.settings import load_settings
 from src.gmail_to_sheets.processes.entradas.entry_validator import EntryValidator
@@ -70,7 +71,7 @@ def validate_sheet():
         tipo_idx = headers_upper.index("TIPO") if "TIPO" in headers_upper else -1
         valor_idx = headers_upper.index("VALOR") if "VALOR" in headers_upper else -1
         finance_idx = headers_upper.index("FINANCE") if "FINANCE" in headers_upper else -1
-        doc_soma_idx = headers_upper.index("DOC. SOMA") if "DOC. SOMA" in headers_upper else -1
+        _doc_soma_idx = headers_upper.index("DOC. SOMA") if "DOC. SOMA" in headers_upper else -1
         id_idx = headers_upper.index("ID_INTERNO") if "ID_INTERNO" in headers_upper else -1
 
         # Display results
@@ -127,25 +128,25 @@ def validate_sheet():
 
         if valid_entries:
             print(f"\n✓ PRONTOS PARA ENVIAR: {len(valid_entries)} registros")
-            print(f"\n  Ação: Executar")
-            print(f"  $ python -m src.gmail_to_sheets.app run-once")
-            print(f"\n  Resultado esperado:")
+            print("\n  Ação: Executar")
+            print("  $ python -m src.gmail_to_sheets.app run-once")
+            print("\n  Resultado esperado:")
             print(f"  - {len(valid_entries)} transferidos para CONTAORDEM")
             print(f"  - {len(valid_entries)} FINANCE marcados como 'Transferido'")
 
         else:
-            print(f"\n✗ NENHUM REGISTRO PRONTO")
+            print("\n✗ NENHUM REGISTRO PRONTO")
             print(f"\n  Motivo: Todos os {len(invalid_entries)} registros têm problemas")
-            print(f"  Ação: Corrigir registros inválidos em DÍZIMOS/OFERTAS")
+            print("  Ação: Corrigir registros inválidos em DÍZIMOS/OFERTAS")
 
         if invalid_entries:
             print(f"\n✗ COM PROBLEMAS: {len(invalid_entries)} registros")
-            print(f"\n  Motivos mais comuns:")
+            print("\n  Motivos mais comuns:")
             if len(invalid_entries) > 0:
-                print(f"  - DOC.SOMA não está vazio")
-                print(f"  - FINANCE não está vazio (já processado)")
-                print(f"  - VALOR <= 0 ou vazio")
-                print(f"  - DATA vazia ou inválida")
+                print("  - DOC.SOMA não está vazio")
+                print("  - FINANCE não está vazio (já processado)")
+                print("  - VALOR <= 0 ou vazio")
+                print("  - DATA vazia ou inválida")
 
         print("\n" + "=" * 80 + "\n")
 

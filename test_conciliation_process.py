@@ -10,6 +10,7 @@ Valida:
 """
 
 import logging
+
 from src.gmail_to_sheets.processes.conciliacao.orchestrator import ConciliationOrchestrator
 
 logging.basicConfig(level=logging.DEBUG)

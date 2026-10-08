@@ -1,7 +1,8 @@
 import os
 import sys
-import urllib.request
 import urllib.error
+import urllib.request
+
 
 def load_env(env_path="/etc/appextrato/ntfy.env"):
     env = {}
@@ -18,7 +19,7 @@ def send_ntfy(title: str, message: str, priority: str = "default", tags: list = 
     env = load_env(env_path)
     server = env.get("NTFY_SERVER", os.getenv("NTFY_SERVER", "https://ntfy.sh")).rstrip("/")
     topic = env.get("NTFY_TOPIC", os.getenv("NTFY_TOPIC", ""))
-    
+
     if not topic:
         print("Error: NTFY_TOPIC not defined", file=sys.stderr)
         return False
