@@ -16,13 +16,35 @@ def normalize_text(text: str) -> str:
 
 
 def parse_amount(value: str) -> float:
-    """Parse a number that may use comma as decimal separator."""
-    if not value:
+    """Parse financial values safely, including Portuguese thousands/decimal separators.
+
+    Examples:
+    - "1.180,00" -> 1180.0
+    - "1180,00"  -> 1180.0
+    - "1180.00"  -> 1180.0
+
+    Invalid non-empty values raise ValueError instead of silently becoming zero.
+    """
+    if value is None or str(value).strip() == "":
         return 0.0
+
+    text = str(value).strip().replace("\u00a0", "").replace(" ", "")
+    text = text.replace("€", "").replace("EUR", "").replace("eur", "")
+
+    if "," in text and "." in text:
+        # Portuguese format: last separator is comma => dots are thousands.
+        if text.rfind(",") > text.rfind("."):
+            text = text.replace(".", "").replace(",", ".")
+        else:
+            # International format: commas are thousands.
+            text = text.replace(",", "")
+    elif "," in text:
+        text = text.replace(",", ".")
+
     try:
-        return float(str(value).strip().replace(",", "."))
-    except (ValueError, AttributeError):
-        return 0.0
+        return float(text)
+    except (ValueError, TypeError, AttributeError) as exc:
+        raise ValueError(f"Valor financeiro inválido: {value!r}") from exc
 
 
 def format_number(value: float) -> str:
