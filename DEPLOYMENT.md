@@ -1,46 +1,62 @@
 # Deployment Guide
 
-This project currently runs in production through `systemd`, not Docker.
+This project runs in production through `systemd` (`appextrato.service`) managed automatically via **GitHub Actions Self-hosted Runner**.
+
+## Official Deployment Flow
+
+```
+Pull Request
+    ↓
+CI (GitHub-hosted runner: unit tests & ruff check)
+    ↓
+Merge master
+    ↓
+GitHub Actions (Deploy Production workflow)
+    ↓
+Self-hosted runner (servidor-tesouraria-v2)
+    ↓
+Testes no servidor (pytest & compileall)
+    ↓
+Restart appextrato.service (via minimal sudo)
+    ↓
+Health check (status & service check)
+    ↓
+Produção (Active & Healthy)
+```
 
 ## Active Production Runtime
 
-- Host: `opc@servidor-tesouraria`
+- Host: `opc@servidor-tesouraria-v2`
 - Project directory: `/home/opc/AppExtrato`
 - Service: `appextrato.service`
+- Runner Directory: `/home/github-runner/actions-runner-tesouraria`
+- Runner User: `github-runner` (dedicated user with minimal sudo permissions)
+- Runner Service: `actions.runner.Geniolle-Tesouraria-SOMA.servidor-tesouraria-runner.service`
 - Start command: `/home/opc/AppExtrato/venv/bin/python -m src.gmail_to_sheets.app run-scheduled`
 
-## Production Checklist
+## Automatic CI/CD Pipeline
 
-- `.env` is present and populated with production values
-- Gmail credentials exist under `credentials/`
-- Sheets service account exists under `credentials/`
-- `venv` is created and dependencies are installed
-- Logs directory exists and is writable
-- The service starts and remains `active (running)`
-- Logs do not show tracebacks
+1. **CI Workflow (`.github/workflows/ci.yml`)**:
+   - Executes on every Pull Request and Push to `master`.
+   - Runs `ruff check .` and `pytest` on `ubuntu-latest`.
+   - Has no access to production credentials.
 
-## Remote Update Steps
+2. **Deploy Workflow (`.github/workflows/deploy-production.yml`)**:
+   - Executes automatically after `CI` succeeds on `master`.
+   - Environment: `production`.
+   - Concurrency group: `tesouraria-production` (prevents concurrent deploys).
+   - Runs on self-hosted runner `[self-hosted, linux, tesouraria, production]`.
+   - Executes git pull `--ff-only`, virtualenv test suite, `systemctl restart appextrato`, and post-restart health check.
+   - Automatically rolls back to the previous good commit if health check fails.
 
-1. SSH into the server.
-2. Go to `/home/opc/AppExtrato`.
-3. Pull the desired branch or commit.
-4. Activate the virtual environment.
-5. Install updated dependencies if needed.
-6. Run a quick validation command.
-7. Restart `appextrato.service`.
-8. Check `journalctl` for errors.
-
-Example:
+## Manual Emergency Operations & Health Checks
 
 ```bash
-ssh opc@servidor-tesouraria
+ssh opc@servidor-tesouraria-v2
 cd /home/opc/AppExtrato
-git pull origin master
 source venv/bin/activate
-pip install -r requirements.txt
-python -m src.gmail_to_sheets.app run-once
-sudo systemctl restart appextrato
-sudo systemctl status appextrato --no-pager
+python -m src.gmail_to_sheets.app status
+sudo systemctl status appextrato --no-pager -l
 sudo journalctl -u appextrato -n 50 --no-pager
 ```
 
@@ -53,14 +69,3 @@ sudo systemctl stop appextrato
 sudo systemctl start appextrato
 sudo journalctl -u appextrato -f
 ```
-
-## Docker
-
-Docker is supported in the repository as a helper for local or future container-based work.
-It is not the current production runtime.
-
-See:
-
-- [`DOCKER.md`](DOCKER.md)
-- [`PRODUCTION_RUNTIME.md`](PRODUCTION_RUNTIME.md)
-
