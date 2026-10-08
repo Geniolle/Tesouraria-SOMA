@@ -49,6 +49,18 @@ Produção (Active & Healthy)
    - Executes git pull `--ff-only`, virtualenv test suite, `systemctl restart appextrato`, and post-restart health check.
    - Automatically rolls back to the previous good commit if health check fails.
 
+3. **Remote Health Check (`.github/workflows/server-health-check.yml`)**:
+   - Executed on-demand via `workflow_dispatch`.
+   - Runs `scripts/server_diagnostics.py` on the self-hosted runner.
+   - Generates GitHub Step Summary and uploads `server-diagnostics` JSON artifact.
+   - Read-only: does not modify production state.
+
+4. **Continuous Local Watchdog (`appextrato-monitor.timer`)**:
+   - Executed every 1 minute locally on `servidor-tesouraria-v2`.
+   - Monitors service, scheduler, system resources, and runner offline status.
+   - Sends instant deduplicated NTFY notifications.
+   - See [`SERVER_MONITORING.md`](SERVER_MONITORING.md).
+
 ## Manual Emergency Operations & Health Checks
 
 ```bash
