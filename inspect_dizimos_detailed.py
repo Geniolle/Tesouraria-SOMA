@@ -4,6 +4,7 @@ Detailed inspection of DÍZIMOS/OFERTAS sheet with sample data.
 """
 
 import logging
+
 from src.gmail_to_sheets.clients.sheets_client import SheetsClient
 from src.gmail_to_sheets.config.settings import load_settings
 

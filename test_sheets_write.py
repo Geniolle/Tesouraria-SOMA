@@ -18,6 +18,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from dotenv import load_dotenv
+
 from src.gmail_to_sheets.clients.gmail_auth import GmailAuthenticator
 from src.gmail_to_sheets.clients.gmail_client import GmailClient
 from src.gmail_to_sheets.clients.sheets_client import SheetsClient
@@ -119,7 +120,7 @@ def main() -> None:
             dedup_service=dedup,
         )
 
-        print(f"   [OK] Write completed!")
+        print("   [OK] Write completed!")
         print(f"       - Written: {result['written']}")
         print(f"       - Skipped (duplicates): {result['skipped']}")
         print(f"       - Total processed: {result['total']}\n")

@@ -1,0 +1,108 @@
+name: Deploy Production
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+    branches:
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: tesouraria-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to Production Server
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'master') }}
+    runs-on: [self-hosted, linux, tesouraria, production]
+    environment: production
+
+    steps:
+      - name: Deploy and Verify Production Service
+        run: |
+          set -e
+          echo "=========================================================================="
+          echo "STARTING PRODUCTION DEPLOYMENT"
+          echo "=========================================================================="
+          
+          PROD_DIR="/home/opc/AppExtrato"
+          cd "$PROD_DIR"
+          
+          # 1. Verify working directory cleanliness (ignore untracked .env.bak_* files)
+          UNCOMMITTED=$(git status --porcelain | grep -v '\.env\.bak' || true)
+          if [ -n "$UNCOMMITTED" ]; then
+            echo "ERROR: Working directory has unexpected uncommitted modifications:"
+            echo "$UNCOMMITTED"
+            exit 1
+          fi
+          
+          PREVIOUS_COMMIT=$(git rev-parse HEAD)
+          echo "Current SHA before deploy: $PREVIOUS_COMMIT"
+          
+          # 2. Fetch and pull master
+          git fetch origin master
+          git checkout master
+          git pull --ff-only origin master
+          
+          CURRENT_COMMIT=$(git rev-parse HEAD)
+          echo "Updated SHA after pull:    $CURRENT_COMMIT"
+          
+          # 3. Activate Python virtualenv
+          source venv/bin/activate
+          
+          # Install dependencies if requirements.txt changed
+          if git diff --name-only "$PREVIOUS_COMMIT" "$CURRENT_COMMIT" | grep -q "^requirements.txt$"; then
+            echo "requirements.txt modified. Installing dependencies..."
+            pip install -r requirements.txt
+          fi
+          
+          # 4. Run tests and compilation on updated codebase
+          echo "Running pre-restart tests..."
+          python -m pytest tests/unit/test_extrato_atomicity.py -v
+          python -m pytest
+          python -m compileall src
+          
+          if command -v ruff >/dev/null 2>&1; then
+            python -m ruff check .
+          fi
+          
+          # 5. Restart production service via minimal sudo
+          echo "Restarting appextrato.service..."
+          sudo /usr/bin/systemctl restart appextrato
+          
+          # 6. Post-restart Health Check and Automatic Rollback
+          sleep 2
+          IS_ACTIVE=$(sudo /usr/bin/systemctl is-active appextrato || echo "inactive")
+          
+          ROLLBACK_NEEDED=false
+          if [ "$IS_ACTIVE" != "active" ]; then
+            echo "ERROR: Service appextrato failed to reach active state (state: $IS_ACTIVE)"
+            ROLLBACK_NEEDED=true
+          else
+            echo "Service is active. Checking application orchestrator health..."
+            if ! python -m src.gmail_to_sheets.app status; then
+              echo "ERROR: Application status command failed!"
+              ROLLBACK_NEEDED=true
+            fi
+          fi
+          
+          if [ "$ROLLBACK_NEEDED" = "true" ]; then
+            echo "=========================================================================="
+            echo "HEALTH CHECK FAILED — INITIATING AUTOMATIC ROLLBACK TO $PREVIOUS_COMMIT"
+            echo "=========================================================================="
+            git checkout "$PREVIOUS_COMMIT"
+            sudo /usr/bin/systemctl restart appextrato
+            sudo /usr/bin/systemctl status appextrato --no-pager -l
+            sudo /usr/bin/journalctl -u appextrato -n 50 --no-pager
+            exit 1
+          fi
+          
+          echo "=========================================================================="
+          echo "PRODUCTION DEPLOYMENT SUCCESSFUL"
+          echo "Deploy SHA: $CURRENT_COMMIT"
+          echo "=========================================================================="
+          sudo /usr/bin/systemctl status appextrato --no-pager -l
+          sudo /usr/bin/journalctl -u appextrato -n 20 --no-pager

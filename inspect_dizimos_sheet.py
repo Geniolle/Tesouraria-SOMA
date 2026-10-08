@@ -4,6 +4,7 @@ Inspect DÍZIMOS/OFERTAS sheet to discover column structure.
 """
 
 import logging
+
 from src.gmail_to_sheets.clients.sheets_client import SheetsClient
 from src.gmail_to_sheets.config.settings import load_settings
 

@@ -15,17 +15,16 @@ from datetime import datetime
 
 from src.gmail_to_sheets.clients.sheets_client import SheetsClient
 from src.gmail_to_sheets.config.settings import load_settings
-from src.gmail_to_sheets.logging_config import setup_logging
-from src.gmail_to_sheets.processes.entradas.entry_validator import EntryValidator
 from src.gmail_to_sheets.processes.entradas.entry_deduplication import (
     EntryDeduplicationService,
-)
-from src.gmail_to_sheets.processes.entradas.entry_transfer_service import (
-    EntryTransferService,
 )
 from src.gmail_to_sheets.processes.entradas.entry_status_updater import (
     EntryStatusUpdater,
 )
+from src.gmail_to_sheets.processes.entradas.entry_transfer_service import (
+    EntryTransferService,
+)
+from src.gmail_to_sheets.processes.entradas.entry_validator import EntryValidator
 
 logging.basicConfig(
     level=logging.INFO,
@@ -128,7 +127,7 @@ class EntradasTestSuite:
                 "status": "PASS"
             }
 
-            print(f"\nValidation Summary:")
+            print("\nValidation Summary:")
             print(f"  Total rows: {len(rows)}")
             print(f"  Valid: {valid}")
             print(f"  Invalid: {invalid}")
@@ -179,7 +178,7 @@ class EntradasTestSuite:
                 "status": "PASS"
             }
 
-            print(f"\nDeduplication Summary:")
+            print("\nDeduplication Summary:")
             print(f"  Tested: {len(test_entries)}")
             print(f"  Unique: {unique}")
             print(f"  Duplicates: {duplicates}\n")
@@ -231,7 +230,7 @@ class EntradasTestSuite:
                     "status": "PASS"
                 }
 
-                print(f"\nTransfer Summary:")
+                print("\nTransfer Summary:")
                 print(f"  Columns built: {len(target_row)}")
                 print(f"  Fields filled: {len([v for v in target_row if v])}\n")
             else:
@@ -271,8 +270,8 @@ class EntradasTestSuite:
                 "status": "PASS"
             }
 
-            print(f"\nStatus Updater Summary:")
-            print(f"  FINANCE column: Found")
+            print("\nStatus Updater Summary:")
+            print("  FINANCE column: Found")
             print(f"  Ready to mark entries as: '{updater.STATUS_VALUE}'\n")
 
         except Exception as e:
