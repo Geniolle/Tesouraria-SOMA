@@ -1,0 +1,92 @@
+name: Server Health Check
+
+on:
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    name: Server Health Diagnostics
+    runs-on: [self-hosted, linux, tesouraria, production]
+
+    steps:
+      - name: Run Server Diagnostics Script
+        id: diagnostics
+        continue-on-error: true
+        run: |
+          cd /home/opc/AppExtrato
+          source venv/bin/activate
+          python scripts/server_diagnostics.py --repo-dir /home/opc/AppExtrato --health-file /home/opc/AppExtrato/data/orchestrator-health.json --output-json /home/opc/AppExtrato/data/server-diagnostics.json
+
+      - name: Upload Diagnostics Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-diagnostics
+          path: /home/opc/AppExtrato/data/server-diagnostics.json
+          retention-days: 7
+
+      - name: Generate GitHub Step Summary
+        run: |
+          JSON_FILE="/home/opc/AppExtrato/data/server-diagnostics.json"
+          if [ ! -f "$JSON_FILE" ]; then
+            echo "# Tesouraria Server Health" >> $GITHUB_STEP_SUMMARY
+            echo "::error::Diagnostics output JSON file not found." >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+          python -c '
+          import json, sys
+
+          with open("/home/opc/AppExtrato/data/server-diagnostics.json", "r", encoding="utf-8") as f:
+              d = json.load(f)
+
+          overall = d.get("overall_status", "UNKNOWN")
+          overall_icon = "✅ OK" if overall == "OK" else ("⚠️ WARNING" if overall == "WARNING" else "❌ ERROR")
+
+          svcs = d.get("services", {})
+          app_st = svcs.get("appextrato", {}).get("active_state", "unknown")
+          app_icon = "✅ active" if app_st == "active" else f"❌ {app_st}"
+
+          runner_st = svcs.get("github_runner", {}).get("active_state", "unknown")
+          runner_icon = "✅ active" if runner_st == "active" else f"❌ {runner_st}"
+
+          sched = d.get("scheduler", {})
+          sec_tick = sched.get("seconds_since_last_tick", -1)
+          sched_st = sched.get("status", "UNKNOWN")
+          if sec_tick >= 0:
+              sched_icon = f"✅ last tick {int(sec_tick)}s ago" if sched_st == "OK" else f"❌ last tick {int(sec_tick // 60)}m ago"
+          else:
+              sched_icon = "❌ no tick data"
+
+          sys_info = d.get("system", {})
+          disk_pct = sys_info.get("disk", {}).get("percent", 0)
+          disk_st = sys_info.get("disk", {}).get("status", "OK")
+          disk_icon = f"✅ {disk_pct}%" if disk_st == "OK" else f"⚠️ {disk_pct}%"
+
+          mem_pct = sys_info.get("memory", {}).get("percent", 0)
+          mem_st = sys_info.get("memory", {}).get("status", "OK")
+          mem_icon = f"✅ {mem_pct}%" if mem_st == "OK" else f"⚠️ {mem_pct}%"
+
+          git = d.get("git", {})
+          git_sync = git.get("sync_state", "unknown")
+          git_clean = git.get("clean", True)
+          git_icon = f"✅ synced with master" if git_sync == "synced" and git_clean else f"⚠️ {git_sync} (clean={git_clean})"
+
+          err_count = len(d.get("logs", {}).get("errors_found", []))
+          err_icon = f"✅ 0" if err_count == 0 else f"⚠️ {err_count}"
+
+          summary = f"""# Tesouraria Server Health
+
+          **Overall**: {overall_icon}
+
+          - **AppExtrato**: {app_icon}
+          - **Scheduler**: {sched_icon}
+          - **GitHub Runner**: {runner_icon}
+          - **Disk**: {disk_icon}
+          - **Memory**: {mem_icon}
+          - **Git**: {git_icon}
+          - **Errors last 200 logs**: {err_icon}
+          """
+
+          with open(sys.argv[1], "a", encoding="utf-8") as out:
+              out.write(summary.strip() + "\n")
+          ' "$GITHUB_STEP_SUMMARY"
