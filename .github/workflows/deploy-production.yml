@@ -95,8 +95,8 @@ jobs:
             echo "=========================================================================="
             git checkout "$PREVIOUS_COMMIT"
             sudo /usr/bin/systemctl restart appextrato
-            sudo /usr/bin/systemctl status appextrato --no-pager -l
-            sudo /usr/bin/journalctl -u appextrato -n 50 --no-pager
+            sudo /usr/bin/systemctl status appextrato
+            journalctl -u appextrato -n 50 --no-pager
             exit 1
           fi
           
@@ -104,5 +104,5 @@ jobs:
           echo "PRODUCTION DEPLOYMENT SUCCESSFUL"
           echo "Deploy SHA: $CURRENT_COMMIT"
           echo "=========================================================================="
-          sudo /usr/bin/systemctl status appextrato --no-pager -l
-          sudo /usr/bin/journalctl -u appextrato -n 20 --no-pager
+          sudo /usr/bin/systemctl status appextrato
+          journalctl -u appextrato -n 20 --no-pager
