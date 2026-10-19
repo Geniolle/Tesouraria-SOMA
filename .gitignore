@@ -64,6 +64,9 @@ __pycache__/
 data/
 !data/.gitkeep
 
+# Generated Graphify index and visualizations
+graphify-out/
+
 # Logs
 logs/
 !logs/.gitkeep
