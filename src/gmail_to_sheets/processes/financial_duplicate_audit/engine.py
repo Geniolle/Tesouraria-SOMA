@@ -23,6 +23,16 @@ def normalize_amount(value: object) -> Decimal:
         raise ValueError(f"invalid amount: {value!r}") from exc
 
 
+def normalize_target_amount(value: object, movement_type: object) -> Decimal:
+    amount = abs(normalize_amount(value))
+    normalized_type = str(movement_type or "").strip().lower()
+    if normalized_type == "entrada":
+        return amount
+    if normalized_type in {"saída", "saida"}:
+        return -amount
+    raise ValueError(f"unknown movement type: {movement_type!r}")
+
+
 def parse_sheet_date(value: object) -> date:
     if isinstance(value, datetime):
         return value.date()
@@ -123,7 +133,9 @@ def audit_group(
         canonical = canonicalize_source(spec, source_row)
         differences: dict[str, dict[str, Any]] = {}
         try:
-            target_amount = normalize_amount(occurrence.row.get("IMPORTÂNCIA"))
+            target_amount = normalize_target_amount(
+                occurrence.row.get("IMPORTÂNCIA"), occurrence.row.get("TIPO")
+            )
         except ValueError:
             target_amount = None
         if target_amount != canonical["IMPORTÂNCIA"]:

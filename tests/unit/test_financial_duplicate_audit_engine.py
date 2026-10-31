@@ -6,6 +6,7 @@ from src.gmail_to_sheets.processes.financial_duplicate_audit.engine import (
     audit_group,
     group_repeated_amounts,
     normalize_amount,
+    normalize_target_amount,
     select_period_rows,
 )
 from src.gmail_to_sheets.processes.financial_duplicate_audit.models import Classification
@@ -18,6 +19,13 @@ from src.gmail_to_sheets.processes.financial_duplicate_audit.origins import (
 def test_normalize_amount_accepts_portuguese_money() -> None:
     assert normalize_amount("1.234,56 €") == Decimal("1234.56")
     assert normalize_amount("-42,10") == Decimal("-42.10")
+
+
+def test_normalize_target_amount_applies_type_sign() -> None:
+    assert normalize_target_amount("10,00", "Entrada") == Decimal("10.00")
+    assert normalize_target_amount("10,00", "Saída") == Decimal("-10.00")
+    with pytest.raises(ValueError, match="unknown movement type"):
+        normalize_target_amount("10,00", "Transferência")
 
 
 @pytest.mark.parametrize("value", ["", None, "abc"])
@@ -92,7 +100,7 @@ def test_classifications_are_stable_report_values() -> None:
         (
             "SAÍDAS",
             {"ID_INTERNO": "SAI1", "DATA": "04/10/2026", "DATA VALOR": "05/10/2026", "DESCRIÇÃO DA COMPRA": "Água", "VALOR DA COMPRA": "30,00"},
-            ("04/10/2026", "Água", Decimal("30.00")),
+            ("04/10/2026", "Água", Decimal("-30.00")),
         ),
         (
             "VC_VENDAS",
@@ -102,7 +110,7 @@ def test_classifications_are_stable_report_values() -> None:
         (
             "FINANCEIRO",
             {"ID_INTERNO": "FIN1", "DATA": "06/10/2026", "TIPO": "Fornecedor", "MONTANTE": "50,00"},
-            ("06/10/2026", "Fornecedor FIN1", Decimal("50.00")),
+            ("06/10/2026", "Fornecedor FIN1", Decimal("-50.00")),
         ),
     ],
 )
@@ -131,6 +139,24 @@ def test_audit_group_validates_unique_matching_occurrences() -> None:
         "T_EXTRATO": [
             (20, {**_group_row(2)[1]}),
             (21, {**_group_row(3)[1]}),
+        ]
+    }
+    assert [item.classification for item in audit_group(groups[0], sources)] == [
+        Classification.VALIDATED,
+        Classification.VALIDATED,
+    ]
+
+
+def test_audit_group_treats_positive_target_saida_as_negative_source_amount() -> None:
+    rows = [
+        _group_row(2, TIPO="Saída", IMPORTÂNCIA="1,00"),
+        _group_row(3, TIPO="Saída", IMPORTÂNCIA="1,00"),
+    ]
+    groups, _ = group_repeated_amounts(rows)
+    sources = {
+        "T_EXTRATO": [
+            (20, {**rows[0][1], "IMPORTÂNCIA": "-1,00"}),
+            (21, {**rows[1][1], "IMPORTÂNCIA": "-1,00"}),
         ]
     }
     assert [item.classification for item in audit_group(groups[0], sources)] == [
