@@ -134,6 +134,8 @@ def audit_group(
             classification = Classification.AMOUNT_DIVERGENCE
             reason = "valor divergente"
         else:
+            target_date: date | None
+            source_date: date | None
             try:
                 target_date = parse_sheet_date(occurrence.row.get("DATA MOV."))
                 source_date = parse_sheet_date(canonical["DATA MOV."])
