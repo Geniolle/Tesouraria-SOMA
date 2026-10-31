@@ -3,11 +3,16 @@ from decimal import Decimal
 import pytest
 
 from src.gmail_to_sheets.processes.financial_duplicate_audit.engine import (
+    audit_group,
     group_repeated_amounts,
     normalize_amount,
     select_period_rows,
 )
 from src.gmail_to_sheets.processes.financial_duplicate_audit.models import Classification
+from src.gmail_to_sheets.processes.financial_duplicate_audit.origins import (
+    ORIGIN_SPECS,
+    canonicalize_source,
+)
 
 
 def test_normalize_amount_accepts_portuguese_money() -> None:
@@ -68,4 +73,117 @@ def test_classifications_are_stable_report_values() -> None:
         "DIVERGÊNCIA DE VALOR",
         "EM FALTA",
         "INCONCLUSIVO",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("process", "row", "expected"),
+    [
+        (
+            "T_EXTRATO",
+            {"ID_INTERNO": "EXT1", "DATA MOV.": "02/10/2026", "DESCRIÇÃO": "Depósito", "IMPORTÂNCIA": "10,00"},
+            ("02/10/2026", "Depósito", Decimal("10.00")),
+        ),
+        (
+            "DÍZIMOS/OFERTAS",
+            {"ID_INTERNO": "ENT1", "DATA": "03/10/2026", "NÚMERO DOCUMENTO": "42", "VALOR": "20,00"},
+            ("03/10/2026", "42 - DÍZIMOS E OFERTAS (CULTO)", Decimal("20.00")),
+        ),
+        (
+            "SAÍDAS",
+            {"ID_INTERNO": "SAI1", "DATA": "04/10/2026", "DATA VALOR": "05/10/2026", "DESCRIÇÃO DA COMPRA": "Água", "VALOR DA COMPRA": "30,00"},
+            ("04/10/2026", "Água", Decimal("30.00")),
+        ),
+        (
+            "VC_VENDAS",
+            {"ID_INTERNO": "VC1", "DATA": "05/10/2026", "TIPO": "Venda", "VALOR A PAGAR": "40,00"},
+            ("05/10/2026", "Venda VC1", Decimal("40.00")),
+        ),
+        (
+            "FINANCEIRO",
+            {"ID_INTERNO": "FIN1", "DATA": "06/10/2026", "TIPO": "Fornecedor", "MONTANTE": "50,00"},
+            ("06/10/2026", "Fornecedor FIN1", Decimal("50.00")),
+        ),
+    ],
+)
+def test_origin_specs_reuse_real_source_mappings(process, row, expected) -> None:
+    canonical = canonicalize_source(ORIGIN_SPECS[process], row)
+    assert (canonical["DATA MOV."], canonical["DESCRIÇÃO"], canonical["IMPORTÂNCIA"]) == expected
+
+
+def _group_row(row_number: int, **changes: object):
+    row = {
+        "TIPO": "Entrada",
+        "IMPORTÂNCIA": "10,00",
+        "DATA MOV.": "02/10/2026",
+        "DESCRIÇÃO": "Depósito",
+        "PROCESSO": "T_EXTRATO",
+        "ID_INTERNO": f"EXT{row_number}",
+        "DOC. SOMA": "1234567",
+    }
+    row.update(changes)
+    return row_number, row
+
+
+def test_audit_group_validates_unique_matching_occurrences() -> None:
+    groups, _ = group_repeated_amounts([_group_row(2), _group_row(3)])
+    sources = {
+        "T_EXTRATO": [
+            (20, {**_group_row(2)[1]}),
+            (21, {**_group_row(3)[1]}),
+        ]
+    }
+    assert [item.classification for item in audit_group(groups[0], sources)] == [
+        Classification.VALIDATED,
+        Classification.VALIDATED,
+    ]
+
+
+def test_audit_group_marks_two_target_rows_for_one_source_as_possible_duplicate() -> None:
+    rows = [_group_row(2, ID_INTERNO="EXT1"), _group_row(3, ID_INTERNO="EXT1")]
+    groups, _ = group_repeated_amounts(rows)
+    sources = {"T_EXTRATO": [(20, {**rows[0][1]})]}
+    assert {item.classification for item in audit_group(groups[0], sources)} == {
+        Classification.POSSIBLE_DUPLICATE
+    }
+
+
+@pytest.mark.parametrize(
+    ("target_change", "source_change", "expected"),
+    [
+        ({"DATA MOV.": "02/10/2026"}, {"DATA MOV.": "30/09/2026", "DATA VALOR": "02/10/2026"}, Classification.PERIOD_DIVERGENCE),
+        ({"DATA MOV.": "02/10/2026"}, {"DATA MOV.": "30/09/2026", "PERÍODO EXTRATO": "09/2026"}, Classification.PERIOD_DIVERGENCE),
+        ({"IMPORTÂNCIA": "10,00"}, {"IMPORTÂNCIA": "11,00"}, Classification.AMOUNT_DIVERGENCE),
+        ({"DESCRIÇÃO": "Depósito"}, {"DESCRIÇÃO": "Outra"}, Classification.INCONCLUSIVE),
+    ],
+)
+def test_audit_group_classifies_field_divergences(target_change, source_change, expected) -> None:
+    rows = [_group_row(2, **target_change), _group_row(3, ID_INTERNO="EXT3")]
+    groups, _ = group_repeated_amounts(rows)
+    source = {**rows[0][1], **source_change}
+    sources = {"T_EXTRATO": [(20, source), (21, {**rows[1][1]})]}
+    findings = audit_group(groups[0], sources)
+    assert findings[0].classification == expected
+
+
+def test_audit_group_reports_missing_ambiguous_unknown_and_empty_identifiers() -> None:
+    rows = [
+        _group_row(2, ID_INTERNO="MISSING"),
+        _group_row(3, ID_INTERNO="AMB"),
+        _group_row(4, PROCESSO="UNKNOWN"),
+        _group_row(5, ID_INTERNO=""),
+    ]
+    groups, _ = group_repeated_amounts(rows)
+    sources = {
+        "T_EXTRATO": [
+            (20, {**rows[1][1]}),
+            (21, {**rows[1][1]}),
+        ]
+    }
+    findings = audit_group(groups[0], sources)
+    assert [item.classification for item in findings] == [
+        Classification.MISSING,
+        Classification.INCONCLUSIVE,
+        Classification.INCONCLUSIVE,
+        Classification.INCONCLUSIVE,
     ]

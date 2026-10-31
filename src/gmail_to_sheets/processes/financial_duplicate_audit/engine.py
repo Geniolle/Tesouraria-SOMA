@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import replace
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-from .models import Occurrence, RepeatedAmountGroup
+from .models import AuditFinding, Classification, Occurrence, RepeatedAmountGroup
 
 
 def normalize_amount(value: object) -> Decimal:
@@ -74,3 +75,116 @@ def group_repeated_amounts(
     ]
     groups.sort(key=lambda item: (item.movement_type, -item.amount))
     return groups, invalid
+
+
+def _fold(value: object) -> str:
+    return " ".join(str(value or "").strip().upper().split())
+
+
+def audit_group(
+    group: RepeatedAmountGroup,
+    sources: dict[str, list[tuple[int, dict[str, Any]]]],
+) -> list[AuditFinding]:
+    from .origins import ORIGIN_SPECS, canonicalize_source
+
+    findings: list[AuditFinding] = []
+    for occurrence in group.occurrences:
+        process = str(occurrence.row.get("PROCESSO") or "").strip().upper()
+        identifier = str(occurrence.row.get("ID_INTERNO") or "").strip()
+        spec = ORIGIN_SPECS.get(process)
+        if spec is None:
+            findings.append(AuditFinding(occurrence, Classification.INCONCLUSIVE, "processo desconhecido"))
+            continue
+        if not identifier:
+            findings.append(AuditFinding(occurrence, Classification.INCONCLUSIVE, "ID_INTERNO vazio", spec.source_sheet))
+            continue
+
+        candidates = [
+            (row_number, row)
+            for row_number, row in sources.get(process, [])
+            if str(row.get("ID_INTERNO") or "").strip() == identifier
+        ]
+        if not candidates:
+            findings.append(AuditFinding(occurrence, Classification.MISSING, "origem não encontrada", spec.source_sheet))
+            continue
+        if len(candidates) != 1:
+            findings.append(
+                AuditFinding(
+                    occurrence,
+                    Classification.INCONCLUSIVE,
+                    "origem ambígua",
+                    spec.source_sheet,
+                    tuple(row_number for row_number, _ in candidates),
+                )
+            )
+            continue
+
+        source_row_number, source_row = candidates[0]
+        canonical = canonicalize_source(spec, source_row)
+        differences: dict[str, dict[str, Any]] = {}
+        try:
+            target_amount = normalize_amount(occurrence.row.get("IMPORTÂNCIA"))
+        except ValueError:
+            target_amount = None
+        if target_amount != canonical["IMPORTÂNCIA"]:
+            differences["IMPORTÂNCIA"] = {
+                "CONTAORDEM": occurrence.row.get("IMPORTÂNCIA"),
+                "ORIGEM": canonical["IMPORTÂNCIA"],
+            }
+            classification = Classification.AMOUNT_DIVERGENCE
+            reason = "valor divergente"
+        else:
+            try:
+                target_date = parse_sheet_date(occurrence.row.get("DATA MOV."))
+                source_date = parse_sheet_date(canonical["DATA MOV."])
+            except ValueError:
+                target_date = source_date = None
+            if target_date is None or source_date is None:
+                classification = Classification.INCONCLUSIVE
+                reason = "data inválida"
+            elif target_date != source_date:
+                differences["DATA MOV."] = {
+                    "CONTAORDEM": occurrence.row.get("DATA MOV."),
+                    "ORIGEM": canonical["DATA MOV."],
+                }
+                classification = Classification.PERIOD_DIVERGENCE
+                reason = "data ou período divergente"
+            elif _fold(occurrence.row.get("DESCRIÇÃO")) != _fold(canonical["DESCRIÇÃO"]):
+                differences["DESCRIÇÃO"] = {
+                    "CONTAORDEM": occurrence.row.get("DESCRIÇÃO"),
+                    "ORIGEM": canonical["DESCRIÇÃO"],
+                }
+                classification = Classification.INCONCLUSIVE
+                reason = "descrição divergente"
+            else:
+                classification = Classification.VALIDATED
+                reason = "origem única e campos coerentes"
+        findings.append(
+            AuditFinding(
+                occurrence,
+                classification,
+                reason,
+                spec.source_sheet,
+                (source_row_number,),
+                differences,
+                {
+                    "DATA VALOR": canonical.get("DATA VALOR"),
+                    "PERÍODO EXTRATO": canonical.get("PERÍODO EXTRATO"),
+                    "NÚMERO EXTRATO": canonical.get("NÚMERO EXTRATO"),
+                },
+            )
+        )
+
+    identities: dict[tuple[str | None, tuple[int, ...]], list[int]] = defaultdict(list)
+    for index, finding in enumerate(findings):
+        if finding.classification is Classification.VALIDATED:
+            identities[(finding.source_sheet, finding.source_rows)].append(index)
+    for indexes in identities.values():
+        if len(indexes) > 1:
+            for index in indexes:
+                findings[index] = replace(
+                    findings[index],
+                    classification=Classification.POSSIBLE_DUPLICATE,
+                    reason="várias linhas CONTAORDEM apontam para a mesma origem",
+                )
+    return findings
