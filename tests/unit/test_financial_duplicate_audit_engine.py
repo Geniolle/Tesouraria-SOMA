@@ -181,6 +181,7 @@ def test_audit_group_marks_two_target_rows_for_one_source_as_possible_duplicate(
         ({"DATA MOV.": "02/10/2026"}, {"DATA MOV.": "30/09/2026", "PERÍODO EXTRATO": "09/2026"}, Classification.PERIOD_DIVERGENCE),
         ({"IMPORTÂNCIA": "10,00"}, {"IMPORTÂNCIA": "11,00"}, Classification.AMOUNT_DIVERGENCE),
         ({"DESCRIÇÃO": "Depósito"}, {"DESCRIÇÃO": "Outra"}, Classification.INCONCLUSIVE),
+        ({"DOC. SOMA": "1234567"}, {"DOC. SOMA": "7654321"}, Classification.INCONCLUSIVE),
     ],
 )
 def test_audit_group_classifies_field_divergences(target_change, source_change, expected) -> None:

@@ -170,6 +170,18 @@ def audit_group(
                 }
                 classification = Classification.INCONCLUSIVE
                 reason = "descrição divergente"
+            elif (
+                str(occurrence.row.get("DOC. SOMA") or "").strip()
+                and canonical["DOC. SOMA"]
+                and str(occurrence.row.get("DOC. SOMA") or "").strip()
+                != canonical["DOC. SOMA"]
+            ):
+                differences["DOC. SOMA"] = {
+                    "CONTAORDEM": occurrence.row.get("DOC. SOMA"),
+                    "ORIGEM": canonical["DOC. SOMA"],
+                }
+                classification = Classification.INCONCLUSIVE
+                reason = "DOC. SOMA divergente"
             else:
                 classification = Classification.VALIDATED
                 reason = "origem única e campos coerentes"
