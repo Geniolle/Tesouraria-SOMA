@@ -50,6 +50,7 @@ build/
 *.bak
 *.swp~
 *~
+.worktrees/
 
 # Docker (local builds)
 __pycache__/
