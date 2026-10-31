@@ -40,3 +40,16 @@ class AuditFinding:
     differences: dict[str, dict[str, Any]] = field(default_factory=dict)
     evidence: dict[str, Any] = field(default_factory=dict)
 
+
+@dataclass(frozen=True)
+class AuditRun:
+    year: int
+    month: int
+    total_rows: int
+    period_rows: int
+    groups: tuple[RepeatedAmountGroup, ...]
+    findings: tuple[AuditFinding, ...]
+    invalid_dates: tuple[tuple[int, object], ...] = ()
+    invalid_amounts: tuple[tuple[int, object], ...] = ()
+    source_sheets: tuple[str, ...] = ()
+
