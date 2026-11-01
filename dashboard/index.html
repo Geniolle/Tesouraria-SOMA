@@ -3,6 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#ffffff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Tesouraria">
 <title>Dashboard CONTAORDEM</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
@@ -55,6 +58,30 @@ button{cursor:pointer}
 div:has(> #toggleRows),div:has(> #toggleWeek){justify-content:flex-start !important}
 #search{margin-left:auto}
 select[aria-label="Medida"]{margin-left:auto}
+/* Wide tables scroll inside their card instead of stretching the page. */
+#app{grid-template-columns:minmax(0,1fr)}
+.card,.grid2>*{min-width:0}
+@media(max-width:640px){
+  header{padding:12px 16px;position:sticky;top:0;z-index:5}
+  header>div:last-child{width:100%}
+  header select{flex:1;min-width:0}
+  main{padding:12px}
+  .card{padding:12px}
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .kpis>.card:first-child{grid-column:1/-1}
+  .kpi .v{font-size:18px}
+  #search{min-width:0 !important;width:100%;margin-left:0}
+  #origins{grid-template-columns:minmax(0,1fr) !important}
+  #weekChart>div{grid-template-columns:96px minmax(0,1fr) !important;gap:8px !important}
+  #weekChart .num{min-width:84px !important;font-size:12px}
+  .row{grid-template-columns:minmax(80px,1fr) 1.2fr auto}
+  table{font-size:12px}
+  th,td{padding:5px 6px}
+  td,th{white-space:nowrap}
+  #rows td:nth-child(2){white-space:normal;min-width:160px}
+  .scroll{max-height:60vh}
+  select,input,button{font-size:16px}
+}
 </style>
 </head>
 <body>
