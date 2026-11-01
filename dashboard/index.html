@@ -46,11 +46,13 @@ th{color:var(--muted);font-weight:600;position:sticky;top:0;background:#fff}
 select,input,button{font:inherit;padding:6px 10px;border:1px solid #cbd5e1;border-radius:6px;background:#fff}
 button{cursor:pointer}
 .hidden{display:none}
-#app > .card:has(#search){order:1}
-#app > .card, #app > .grid2{order:4}
+/* Card order (CSS order only accepts integers). */
+#app > .card, #app > .grid2{order:6}
 #app > #originsCard{order:0}
-#app > #origemPlano{order:0.5}
 #app > .card:has(#weekChart){order:2}
+#app > #origemPlano{order:3}
+#app > .card:has(#monthly){order:4}
+#app > .card:has(#search){order:5}
 #weekTable{display:none}
 #sub{display:none}
 .card:has(#monthly) > h2:first-child,.card:has(#monthly) > div:nth-child(2),.card:has(#monthly) > #monthly{display:none}
