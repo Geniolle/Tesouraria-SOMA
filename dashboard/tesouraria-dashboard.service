@@ -1,0 +1,19 @@
+[Unit]
+Description=Tesouraria CONTAORDEM dashboard (read-only backend)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=opc
+WorkingDirectory=/home/opc/AppExtrato
+EnvironmentFile=/home/opc/AppExtrato/.env
+ExecStart=/home/opc/AppExtrato/venv/bin/python -W ignore dashboard/server.py
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

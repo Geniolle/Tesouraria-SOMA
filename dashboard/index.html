@@ -1,0 +1,1138 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dashboard CONTAORDEM</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#1d2433;--muted:#6b7280;--line:#e5e7eb;--in:#16a34a;--out:#dc2626;--acc:#2563eb}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+header{padding:18px 24px;background:var(--card);border-bottom:1px solid var(--line);display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+h1{font-size:18px;margin:0}
+h2{font-size:14px;margin:0 0 12px}
+main{padding:20px 24px;display:grid;gap:16px;width:100%}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
+.muted{color:var(--muted)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+.kpi .l{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+.kpi .v{font-size:22px;font-weight:600;margin-top:4px;font-variant-numeric:tabular-nums}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:820px){.grid2{grid-template-columns:1fr}}
+.monthchart{display:flex;align-items:flex-end;gap:6px;height:230px;padding-top:8px;border-bottom:1px solid var(--line);overflow-x:auto}
+.mcol{flex:1;min-width:44px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;cursor:pointer}
+.bars{display:flex;gap:3px;align-items:flex-end;height:190px;width:100%;justify-content:center}
+.bar{width:42%;max-width:26px;border-radius:4px 4px 0 0}
+.bar.in{background:var(--in)}
+.bar.out{background:var(--out)}
+.mlabel{font-size:11px;color:var(--muted);margin-top:6px;white-space:nowrap}
+.row{display:grid;grid-template-columns:minmax(110px,1.2fr) 2fr auto;gap:10px;align-items:center;padding:5px 0;font-size:13px}
+.track{background:#eef2f7;border-radius:4px;height:10px;overflow:hidden}
+.fill{height:100%;background:var(--acc)}
+.num{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.qrow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px}
+.pill{display:inline-block;padding:1px 9px;border-radius:999px;font-size:12px;background:#eef2f7;white-space:nowrap}
+.ok{background:#dcfce7;color:#166534}
+.wa{background:#fef3c7;color:#92400e}
+.bad{background:#fee2e2;color:#991b1b}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{color:var(--muted);font-weight:600;position:sticky;top:0;background:#fff}
+.scroll{max-height:420px;overflow:auto}
+select,input,button{font:inherit;padding:6px 10px;border:1px solid #cbd5e1;border-radius:6px;background:#fff}
+button{cursor:pointer}
+.hidden{display:none}
+#app > .card:has(#search){order:1}
+#app > .card, #app > .grid2{order:4}
+#app > #originsCard{order:0}
+#app > #origemPlano{order:0.5}
+#app > .card:has(#weekChart){order:2}
+#weekTable{display:none}
+#sub{display:none}
+.card:has(#monthly) > h2:first-child,.card:has(#monthly) > div:nth-child(2),.card:has(#monthly) > #monthly{display:none}
+#toggleRows,#toggleWeek{order:-1;margin-left:0 !important;margin-right:4px}
+div:has(> #toggleRows),div:has(> #toggleWeek){justify-content:flex-start !important}
+#search{margin-left:auto}
+select[aria-label="Medida"]{margin-left:auto}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Dashboard · CONTAORDEM</h1>
+    <div class="muted" id="sub">A carregar dados do Google Drive…</div>
+    <div class="muted" id="status" style="font-size:12px;margin-top:4px"></div>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <select id="year" aria-label="Ano"></select>
+    <select id="month" aria-label="Mês"></select>
+    <button id="refresh" type="button">Atualizar</button>
+  </div>
+</header>
+
+<main>
+  <div id="app" class="hidden" style="display:grid;gap:16px">
+    <div class="kpis" id="kpis"></div>
+
+    <div id="origemPlano" class="card" style="order:0.5">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><button type="button" id="toggleOrigemPlano" title="Ocultar" aria-label="Ocultar" style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;color:var(--muted)"><svg id="toggleOrigemPlanoIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .2s ease"><polyline points="6 9 12 15 18 9"></polyline></svg></button><h2 style="margin:0">Origem das receitas e despesas por plano de contas</h2></div>
+      <div id="origemPlanoBody" style="overflow-x:auto"></div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px">
+        <h2 style="margin:0">Análise por semana do mês </h2>
+        <button type="button" id="toggleWeek" title="Ocultar" aria-label="Ocultar" style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;color:var(--muted);margin-left:auto"><svg id="toggleWeekIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .2s ease"><polyline points="6 9 12 15 18 9"></polyline></svg></button>
+        <select onchange="WEEK_MODE=this.value;renderWeeks()" aria-label="Medida">
+          <option value="total">Total do período</option>
+          <option value="media">Média por mês</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:12px;font-size:12px;color:var(--muted);margin-bottom:6px">
+        <span><span style="display:inline-block;width:10px;height:10px;background:var(--in);border-radius:2px;margin-right:4px"></span>Entradas</span>
+        <span><span style="display:inline-block;width:10px;height:10px;background:var(--out);border-radius:2px;margin-right:4px"></span>Saídas</span>
+      </div>
+      
+      <div id="weekChart" class="monthchart" style="height:300px"></div>
+      <div id="weekInsight" class="muted" style="font-size:12px;margin-top:10px"></div>
+      <div id="weekTable" style="margin-top:12px;overflow-x:auto"></div>
+    </div>
+
+    <div class="card" style="order:0.6">
+      <h2>Entradas vs saídas por mês <span class="muted" style="font-weight:400">(clique numa coluna para filtrar)</span></h2>
+      <div style="display:none;gap:12px;font-size:12px;color:var(--muted);margin-bottom:8px">
+        <span><span style="display:inline-block;width:10px;height:10px;background:var(--in);border-radius:2px;margin-right:4px"></span>Entradas</span>
+        <span><span style="display:inline-block;width:10px;height:10px;background:var(--out);border-radius:2px;margin-right:4px"></span>Saídas</span>
+      </div>
+      <div id="monthly" class="monthchart"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:18px;margin-bottom:8px">
+        <button type="button" id="toggleProg" title="Ocultar" aria-label="Ocultar" style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;color:var(--muted)"><svg id="toggleProgIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .2s ease"><polyline points="6 9 12 15 18 9"></polyline></svg></button><div style="margin-right:auto"><h2 style="margin:0">Progressão dos meses</h2><div style="display:flex;gap:12px;font-size:12px;color:var(--muted);margin-top:4px"><span><span style="display:inline-block;width:10px;height:10px;background:var(--in);border-radius:2px;margin-right:4px"></span>Entradas</span><span><span style="display:inline-block;width:10px;height:10px;background:var(--out);border-radius:2px;margin-right:4px"></span>Saídas</span></div></div>
+        <select onchange="PROG_MODE=this.value;renderProgression()" aria-label="Tipo de progressão">
+          <option value="mensal">Mensal (valores)</option>
+          <option value="acumulado">Acumulado</option>
+          <option value="variacao">Variação % face ao mês anterior</option>
+        </select>
+      </div>
+      <div id="prog" style="overflow-x:auto"></div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+        <button type="button" id="toggleCC" title="Ocultar" aria-label="Ocultar" style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;color:var(--muted)"><svg id="toggleCCIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .2s ease"><polyline points="6 9 12 15 18 9"></polyline></svg></button><h2 style="margin:0">Progressão Centro de Custo</h2>
+      </div>
+      <div id="ccProg" style="overflow-x:auto"></div>
+    </div>
+
+    <div class="grid2">
+      <div class="card"><h2>Top 8 planos de conta (volume)</h2><div id="byPlano"></div></div>
+      <div class="card">
+        <h2>Forma de pagamento</h2><div id="byForma"></div>
+        <h2 style="margin-top:18px">Caixa</h2><div id="byCaixa"></div>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="card"><h2>Estado dos lançamentos</h2><div id="status-box"></div></div>
+      <div class="card"><h2>Controlos de qualidade</h2><div id="quality"></div></div>
+    </div>
+
+    <div id="originsCard" class="card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><button type="button" id="toggleOrig" title="Ocultar" aria-label="Ocultar" style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;color:var(--muted)"><svg id="toggleOrigIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .2s ease"><polyline points="6 9 12 15 18 9"></polyline></svg></button><h2 style="margin:0">Validação das origens</h2></div>
+      <div id="origins" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px"></div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+        <h2 style="margin:0">Lançamentos <span id="count" class="muted" style="font-weight:400"></span></h2>
+        <button type="button" id="toggleRows" title="Ocultar linhas" aria-label="Ocultar linhas" style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;color:var(--muted)"><svg id="toggleIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .2s ease"><polyline points="6 9 12 15 18 9"></polyline></svg></button>
+        <input id="search" placeholder="Pesquisar descrição, plano, ID…" style="min-width:260px">
+      </div>
+      <div class="scroll" id="rowsWrap">
+        <table>
+          <thead><tr><th>Data mov.</th><th>Descrição</th><th>Tipo</th><th>Plano de conta</th><th>Caixa</th><th class="num">Valor</th><th>ID</th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <div class="muted" id="more" style="margin-top:6px;font-size:12px"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+const FILE_ID = '1poVWJGSBb13_2S1YKEzvFmkB9Ru0ZVzfQ0OEcMkfOZw';
+const SHEET_NAME = 'CONTAORDEM';
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const eur = n => n.toLocaleString('pt-PT', {style:'currency', currency:'EUR'});
+const MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+
+let RECS = [];
+let MONTH = 'all';
+let YEAR = 'all';
+
+function setStatus(msg) { $('status').textContent = msg; }
+
+function num(s) {
+  s = String(s ?? '').trim().replace(/[€\s ]/g, '');
+  if (!s) return 0;
+  if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+  const v = parseFloat(s);
+  return isNaN(v) ? 0 : v;
+}
+
+function toDate(s) {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})(?:[ T]+(\d{2}):(\d{2})(?::(\d{2}))?)?/.exec(String(s ?? '').trim());
+  if (!m) return null;
+  return new Date(+m[3], +m[2]-1, +m[1], +(m[4]||0), +(m[5]||0), +(m[6]||0));
+}
+
+function regDate(rec) {
+  const m = /Registrado\(a\) em:\s*(\d{2}\/\d{2}\/\d{4})\s*(?:às\s*)?(\d{2}:\d{2}:\d{2})/.exec(rec['DADOS DOC'] || '');
+  return m ? toDate(m[1] + ' ' + m[2]) : null;
+}
+
+function monthKey(d) {
+  return d ? d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') : '';
+}
+
+// Procura a string base64 do ficheiro no payload devolvido pelo conector (formato não verificado).
+function extractB64(payload) {
+  if (typeof payload === 'string') return payload.replace(/^data:[^,]*,/, '');
+  let best = '';
+  const walk = v => {
+    if (typeof v === 'string') { if (v.length > best.length && /^[A-Za-z0-9+/=\s]+$/.test(v.slice(0, 200))) best = v; }
+    else if (v && typeof v === 'object') Object.values(v).forEach(walk);
+  };
+  walk(payload);
+  if (best.length < 1000) throw new Error('Formato de resposta do conector não reconhecido');
+  return best.replace(/\s/g, '');
+}
+
+function buildRecords(rows, wb) {
+  const origemExt = {};
+  const wsE = wb && wb.Sheets['T_EXTRATO'];
+  if (wsE) {
+    const ex = XLSX.utils.sheet_to_json(wsE, { header: 1, raw: false, defval: '' });
+    const hE = ex[0].map(h => String(h).trim());
+    const iId = hE.indexOf('ID_INTERNO'), iImp = hE.indexOf('IMPORTÂNCIA');
+    ex.slice(1).forEach(r => { if (r[iId]) origemExt[String(r[iId]).trim()] = num(r[iImp]); });
+  }
+  const head = rows.shift().map(h => String(h).trim());
+  RECS = rows.filter(r => r.some(x => x !== '' && x != null)).map(r => {
+    const o = {};
+    head.forEach((h, i) => o[h] = String(r[i] ?? '').trim());
+    return o;
+  });
+  RECS.forEach(rec => {
+    rec._d = toDate(rec['DATA MOV.']);
+    rec._m = monthKey(rec._d);
+    rec._y = rec._d ? String(rec._d.getFullYear()) : '';
+    rec._v = Math.abs(num(rec['IMPORTÂNCIA']));
+    rec._in = /^entrada/i.test((rec.TIPO || '').trim());
+    if (/^MVV$/i.test((rec.TIPO || '').trim())) {
+      const imp = origemExt[rec.ID_INTERNO];
+      rec._in = !!imp && imp > 0;
+      rec._v = imp ? Math.abs(imp) : 0;
+    } else if (!rec._in && !/^sa.da/i.test((rec.TIPO || '').trim())) rec._v = 0;
+  });
+}
+
+async function loadFromDrive() {
+  setStatus('A ligar ao Google Drive…');
+  $('refresh').disabled = true;
+  try {
+    const getXlsx = async url => {
+      const r = await fetch(url, { cache: 'no-store' });
+      if (!r.ok) throw new Error('Servidor respondeu ' + r.status + ' em ' + url);
+      return XLSX.read(await r.arrayBuffer(), { type: 'array' });
+    };
+    if (typeof XLSX === 'undefined') throw new Error('Biblioteca XLSX não carregou');
+    const wb = await getXlsx('api/main.xlsx');
+    WB = wb;
+    try { WB2 = await getXlsx('api/vc.xlsx'); } catch (e) { WB2 = null; }
+    const ws = wb.Sheets[SHEET_NAME];
+    if (!ws) throw new Error('Separador ' + SHEET_NAME + ' não encontrado');
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
+    buildRecords(rows, wb);
+    const now = new Date();
+    const curYear = String(now.getFullYear());
+    const curMonth = curYear + '-' + String(now.getMonth() + 1).padStart(2, '0');
+    YEAR = curYear;
+    MONTH = curMonth;
+    render();
+    setStatus('Atualizado às ' + new Date().toLocaleTimeString('pt-PT'));
+  } catch (e) {
+    setStatus('Erro ao carregar: ' + (e && e.message ? e.message : e));
+  } finally {
+    $('refresh').disabled = false;
+  }
+}
+
+$('refresh').addEventListener('click', loadFromDrive);
+$('month').addEventListener('change', e => { MONTH = e.target.value; render(); });
+$('year').addEventListener('change', e => { YEAR = e.target.value; MONTH = 'all'; render(); });
+$('search').addEventListener('input', renderTable);
+
+let ORIG_OPEN = true;
+$('toggleOrig').addEventListener('click', () => {
+  ORIG_OPEN = !ORIG_OPEN;
+  $('origins').style.display = ORIG_OPEN ? 'grid' : 'none';
+  $('toggleOrigIcon').style.transform = ORIG_OPEN ? 'rotate(0deg)' : 'rotate(-90deg)';
+  $('toggleOrig').title = ORIG_OPEN ? 'Ocultar' : 'Mostrar';
+  $('toggleOrig').setAttribute('aria-label', $('toggleOrig').title);
+});
+
+let WEEK_OPEN = true;
+$('toggleWeek').addEventListener('click', () => {
+  WEEK_OPEN = !WEEK_OPEN;
+  const legend = $('weekChart').previousElementSibling;
+  legend.style.display = WEEK_OPEN ? 'flex' : 'none';
+  $('weekChart').style.display = WEEK_OPEN ? 'block' : 'none';
+  $('weekInsight').style.display = WEEK_OPEN ? 'block' : 'none';
+  $('toggleWeekIcon').style.transform = WEEK_OPEN ? 'rotate(0deg)' : 'rotate(-90deg)';
+  $('toggleWeek').title = WEEK_OPEN ? 'Ocultar' : 'Mostrar';
+  $('toggleWeek').setAttribute('aria-label', $('toggleWeek').title);
+});
+
+let ROWS_OPEN = true;
+$('toggleRows').addEventListener('click', () => {
+  ROWS_OPEN = !ROWS_OPEN;
+  $('rowsWrap').classList.toggle('hidden', !ROWS_OPEN);
+  $('more').classList.toggle('hidden', !ROWS_OPEN);
+  $('toggleIcon').style.transform = ROWS_OPEN ? 'rotate(0deg)' : 'rotate(-90deg)';
+  $('toggleRows').title = ROWS_OPEN ? 'Ocultar linhas' : 'Mostrar linhas';
+  $('toggleRows').setAttribute('aria-label', $('toggleRows').title);
+});
+
+function filtered() {
+  return RECS.filter(r => (YEAR === 'all' || r._y === YEAR) && (MONTH === 'all' || r._m === MONTH));
+}
+
+function groupSum(arr, keyFn, valFn) {
+  const map = {};
+  arr.forEach(r => { const k = keyFn(r) || '(vazio)'; map[k] = (map[k] || 0) + valFn(r); });
+  return Object.entries(map).sort((a, b) => b[1] - a[1]);
+}
+
+function renderBars(id, entries) {
+  if (!entries.length) { $(id).innerHTML = '<span class="muted">Sem dados</span>'; return; }
+  const max = entries[0][1] || 1;
+  $(id).innerHTML = entries.map(([k, v]) =>
+    `<div class="row"><div>${esc(k)}</div><div class="track"><div class="fill" style="width:${(v/max*100).toFixed(1)}%"></div></div><div class="num">${eur(v)}</div></div>`
+  ).join('');
+}
+
+function render() {
+  if (!RECS.length) return;
+  $('app').classList.remove('hidden');
+  const months = [...new Set(RECS.map(r => r._m).filter(Boolean))].sort();
+  const sel = $('month');
+  const ysel = $('year');
+  const yearsList = [...new Set([...RECS.map(r => r._y).filter(Boolean), ...(YEAR !== 'all' ? [YEAR] : [])])].sort();
+  ysel.innerHTML = '<option value="all">Todos os anos</option>' +
+    yearsList.map(y => `<option value="${y}">${y}</option>`).join('');
+  ysel.value = YEAR;
+  const monthsOfYear = [...new Set([...RECS.filter(r => YEAR === 'all' || r._y === YEAR).map(r => r._m).filter(Boolean), ...(MONTH !== 'all' ? [MONTH] : [])])].sort();
+  sel.innerHTML = '<option value="all">Todos os meses</option>' +
+    monthsOfYear.map(m => `<option value="${m}">${MESES[+m.slice(5)-1]} ${m.slice(0,4)}</option>`).join('');
+  sel.value = MONTH;
+  const f = filtered();
+  $('sub').textContent = `${RECS.length} lançamentos · ${months.length} meses · ${f.length} no filtro atual`;
+  kpis(f);
+  monthly(months);
+  renderProgression();
+  renderWeeks();
+  renderOrigins();
+  renderVerbo();
+  renderOrigemPlano();
+  renderCC();
+  breakdown(f);
+  statusAndQuality(f);
+  renderTable();
+}
+
+function kpis(f) {
+  const ent = f.filter(r => r._in).reduce((s, r) => s + r._v, 0);
+  const sai = f.filter(r => !r._in).reduce((s, r) => s + r._v, 0);
+  const val = f.filter(r => r.STATUS === 'VALIDADO').length;
+  const pct = f.length ? val / f.length * 100 : 0;
+  const card = (l, v, color='') => `<div class="card kpi"><div class="l">${l}</div><div class="v" style="${color}">${v}</div></div>`;
+  $('kpis').innerHTML =
+    card('Lançamentos', f.filter(r => r._in || /^sa.da/i.test((r.TIPO || '').trim())).length) +
+    card('Entradas', eur(ent), 'color:var(--in)') +
+    card('Saídas', eur(sai), 'color:var(--out)') +
+    card('Saldo', eur(ent - sai)) +
+    card('% validado', pct.toFixed(1) + '%');
+}
+
+function monthly(months) {
+  if (!months.length) { $('monthly').innerHTML = '<span class="muted">Sem datas válidas</span>'; return; }
+  const agg = {};
+  months.forEach(m => agg[m] = {in: 0, out: 0});
+  RECS.forEach(r => { if (agg[r._m]) agg[r._m][r._in ? 'in' : 'out'] += r._v; });
+  const max = Math.max(1, ...months.flatMap(m => [agg[m].in, agg[m].out]));
+  $('monthly').innerHTML = months.map(m => {
+    const a = agg[m];
+    const hi = (a.in / max * 190).toFixed(1), ho = (a.out / max * 190).toFixed(1);
+    return `<div class="mcol" data-m="${m}" title="${eur(a.in)} entradas · ${eur(a.out)} saídas">
+      <div class="bars"><div class="bar in" style="height:${hi}px"></div><div class="bar out" style="height:${ho}px"></div></div>
+      <div class="mlabel">${MESES[+m.slice(5)-1]} ${m.slice(2,4)}</div></div>`;
+  }).join('');
+  document.querySelectorAll('#monthly .mcol').forEach(el => el.addEventListener('click', () => {
+    MONTH = el.dataset.m; YEAR = MONTH.slice(0, 4); render();
+  }));
+}
+
+let PROG_MODE = 'mensal';
+
+function progAgg() {
+  const scope = RECS.filter(r => YEAR === 'all' || r._y === YEAR);
+  const months = YEAR === 'all'
+    ? [...new Set(scope.map(r => r._m).filter(Boolean))].sort()
+    : Array.from({ length: 12 }, (_, i) => `${YEAR}-${String(i + 1).padStart(2, '0')}`);
+  const agg = months.map(m => ({ m, in: 0, out: 0 }));
+  const idx = Object.fromEntries(months.map((m, i) => [m, i]));
+  scope.forEach(r => { const i = idx[r._m]; if (i !== undefined) agg[i][r._in ? 'in' : 'out'] += r._v; });
+  return agg;
+}
+
+function renderProgression() {
+  const el = $('prog');
+  const agg = progAgg().filter(a => (YEAR === 'all' || a.m.slice(0, 4) === YEAR));
+  if (!agg.length) { el.innerHTML = '<span class="muted">Sem dados</span>'; return; }
+  let cumIn = 0, cumOut = 0, prev = null;
+  const rows = agg.map(a => {
+    cumIn += a.in; cumOut += a.out;
+    const saldo = a.in - a.out;
+    const row = {
+      m: a.m, in: a.in, out: a.out, saldo,
+      cumIn, cumOut, cumSaldo: cumIn - cumOut,
+      vIn: prev && prev.in ? (a.in - prev.in) / prev.in * 100 : null,
+      vOut: prev && prev.out ? (a.out - prev.out) / prev.out * 100 : null,
+      vSaldo: prev && prev.saldo ? (saldo - prev.saldo) / Math.abs(prev.saldo) * 100 : null
+    };
+    prev = { in: a.in, out: a.out, saldo };
+    return row;
+  });
+  const pct = v => v === null ? '—' : (v > 0 ? '+' : '') + v.toFixed(1) + '%';
+  const metrics = PROG_MODE === 'acumulado'
+    ? [['Entradas acum.', r => r.cumIn, 'var(--in)', eur], ['Saídas acum.', r => r.cumOut, 'var(--out)', eur], ['Saldo acum.', r => r.cumSaldo, null, eur]]
+    : PROG_MODE === 'variacao'
+      ? [['Var. entradas', r => r.vIn, null, pct], ['Var. saídas', r => r.vOut, null, pct], ['Var. saldo', r => r.vSaldo, null, pct]]
+      : [['Entradas', r => r.in, 'var(--in)', eur], ['Saídas', r => r.out, 'var(--out)', eur], ['Saldo', r => r.saldo, null, eur]];
+  const hl = m => m === MONTH ? 'background:#eff6ff;' : '';
+  el.innerHTML = `<table><thead><tr><th>Indicador</th>${rows.map(r =>
+    `<th class="num" style="${hl(r.m)}white-space:nowrap">${MESES[+r.m.slice(5) - 1]} ${r.m.slice(0, 4)}</th>`
+  ).join('')}</tr></thead><tbody>${metrics.map(([label, fn, color, f]) =>
+    `<tr><td style="white-space:nowrap${color ? ';color:' + color : ''}">${label}</td>${rows.map(r =>
+      `<td class="num" style="${label.startsWith('Saldo') ? 'color:' + (fn(r) < 0 ? 'var(--out)' : 'var(--in)') + ';' : ''}${hl(r.m)}">${f(fn(r))}</td>`
+    ).join('')}</tr>`
+  ).join('')}</tbody></table>`;
+}
+
+let WEEK_MODE = 'total';
+
+function weekOf(d) { return Math.min(5, Math.floor((d.getDate() - 1) / 7) + 1); }
+
+function renderWeeks() {
+  const f = filtered().filter(r => r._d);
+  const tot = {}, meses = {};
+  [1, 2, 3, 4, 5].forEach(w => { tot[w] = { in: 0, out: 0 }; meses[w] = new Set(); });
+  f.forEach(r => { const w = weekOf(r._d); tot[w][r._in ? 'in' : 'out'] += r._v; meses[w].add(r._m); });
+  const isMedia = WEEK_MODE === 'media';
+  const val = (w, k) => isMedia ? (meses[w].size ? tot[w][k] / meses[w].size : 0) : tot[w][k];
+  const saldo = w => val(w, 'in') - val(w, 'out');
+  const names = { 1: '1.ª semana', 2: '2.ª semana', 3: '3.ª semana', 4: '4.ª semana', 5: '5.ª semana' };
+  const diasLbl = { 1: '1–7', 2: '8–14', 3: '15–21', 4: '22–28', 5: '29–31' };
+  const W = [1, 2, 3, 4, 5];
+  const active = W.filter(w => meses[w].size > 0);
+  if (!active.length) {
+    $('weekChart').innerHTML = '<span class="muted">Sem dados</span>';
+    $('weekTable').innerHTML = '';
+    $('weekInsight').textContent = '';
+    return;
+  }
+  const max = Math.max(1, ...active.flatMap(w => [val(w, 'in'), val(w, 'out')]));
+  const topIn = active.reduce((a, b) => val(b, 'in') > val(a, 'in') ? b : a);
+  const topOut = active.reduce((a, b) => val(b, 'out') > val(a, 'out') ? b : a);
+  $('weekInsight').textContent = `Semana com mais entradas: ${names[topIn]} (${eur(val(topIn, 'in'))}) · Semana com mais saídas: ${names[topOut]} (${eur(val(topOut, 'out'))}) · ${isMedia ? 'média por mês' : 'total do período'}`;
+  const c = $('weekChart');
+  c.style.cssText = 'display:' + (WEEK_OPEN ? 'block' : 'none') + ';height:auto;border-bottom:none;overflow:visible';
+  const bar = (v, color) => `<div style="display:flex;align-items:center;gap:8px"><div style="flex:1;height:14px;background:#eef2f7;border-radius:4px;overflow:hidden"><div style="height:100%;width:${(v / max * 100).toFixed(1)}%;background:${color}"></div></div><span class="num" style="min-width:110px;color:${color}">${eur(v)}</span></div>`;
+  c.innerHTML = W.map(w => {
+    const n = meses[w].size;
+    const left = `<div><div style="font-weight:600">${names[w]}</div><div class="muted" style="font-size:12px">${diasLbl[w]} · ${n ? n + (n === 1 ? ' mês' : ' meses') : 'sem ocorrências'}</div></div>`;
+    const right = n ? `<div style="display:grid;gap:6px">${bar(val(w, 'in'), 'var(--in)')}${bar(val(w, 'out'), 'var(--out)')}</div>` : '<div></div>';
+    return `<div style="display:grid;grid-template-columns:150px 1fr;gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)">${left}${right}</div>`;
+  }).join('');
+  const sfx = isMedia ? ' (média)' : '';
+  $('weekTable').innerHTML = `<table><thead><tr><th>Semana</th><th>Dias</th><th class="num">Meses</th><th class="num">Entradas${sfx}</th><th class="num">Saídas${sfx}</th><th class="num">Saldo${sfx}</th></tr></thead><tbody>${W.map(w => meses[w].size ?
+    `<tr><td>${names[w]}</td><td>${diasLbl[w]}</td><td class="num">${meses[w].size}</td><td class="num" style="color:var(--in)">${eur(val(w, 'in'))}</td><td class="num" style="color:var(--out)">${eur(val(w, 'out'))}</td><td class="num">${eur(saldo(w))}</td></tr>` :
+    `<tr><td>${names[w]}</td><td>${diasLbl[w]}</td><td class="num muted" colspan="4">Sem ocorrências</td></tr>`
+  ).join('')}</tbody></table>`;
+}
+
+function renderWeeksOld() {
+  const f = filtered().filter(r => r._d);
+  const tot = {}, meses = {};
+  [1, 2, 3, 4, 5].forEach(w => { tot[w] = { in: 0, out: 0 }; meses[w] = new Set(); });
+  f.forEach(r => { const w = weekOf(r._d); tot[w][r._in ? 'in' : 'out'] += r._v; meses[w].add(r._m); });
+  const isMedia = WEEK_MODE === 'media';
+  const val = (w, k) => isMedia ? (meses[w].size ? tot[w][k] / meses[w].size : 0) : tot[w][k];
+  const saldo = w => val(w, 'in') - val(w, 'out');
+  const names = { 1: '1.ª semana', 2: '2.ª semana', 3: '3.ª semana', 4: '4.ª semana', 5: '5.ª semana' };
+  const diasLbl = { 1: '1–7', 2: '8–14', 3: '15–21', 4: '22–28', 5: '29–31' };
+  const W = [1, 2, 3, 4, 5];
+  const active = W.filter(w => meses[w].size > 0);
+  if (!active.length) {
+    $('weekChart').innerHTML = '<span class="muted">Sem dados</span>';
+    $('weekTable').innerHTML = '';
+    $('weekInsight').textContent = '';
+    return;
+  }
+  const max = Math.max(1, ...active.flatMap(w => [val(w, 'in'), val(w, 'out')]));
+  const topIn = active.reduce((a, b) => val(b, 'in') > val(a, 'in') ? b : a);
+  const topOut = active.reduce((a, b) => val(b, 'out') > val(a, 'out') ? b : a);
+  $('weekInsight').textContent = `Semana com mais entradas: ${names[topIn]} (${eur(val(topIn, 'in'))}) · Semana com mais saídas: ${names[topOut]} (${eur(val(topOut, 'out'))}) · ${isMedia ? 'média por mês' : 'total do período'}`;
+  $('weekChart').innerHTML = W.map(w => {
+    const n = meses[w].size;
+    if (!n) return `<div class="mcol"><div class="bars"></div><div class="mlabel">${names[w]}</div><div class="mlabel">sem dados</div></div>`;
+    const hi = (val(w, 'in') / max * 190).toFixed(1), ho = (val(w, 'out') / max * 190).toFixed(1);
+    return `<div class="mcol" title="Entradas ${eur(val(w, 'in'))} · Saídas ${eur(val(w, 'out'))}">
+      <div style="display:flex;gap:3px;width:100%;justify-content:center;font-size:11px;font-variant-numeric:tabular-nums;margin-bottom:4px"><span style="flex:1;text-align:center;color:var(--in);white-space:nowrap">${Math.round(val(w, 'in')).toLocaleString('pt-PT')} €</span><span style="flex:1;text-align:center;color:var(--out);white-space:nowrap">${Math.round(val(w, 'out')).toLocaleString('pt-PT')} €</span></div>
+      <div class="bars"><div class="bar in" style="height:${hi}px"></div><div class="bar out" style="height:${ho}px"></div></div>
+      <div class="mlabel" style="color:var(--ink);font-weight:600;font-size:12px;margin-top:8px">${names[w]} · ${diasLbl[w]}</div><div class="mlabel">${n} ${n === 1 ? 'mês' : 'meses'}</div></div>`;
+  }).join('');
+  const sfx = isMedia ? ' (média)' : '';
+  $('weekTable').innerHTML = `<table><thead><tr><th>Semana</th><th>Dias</th><th class="num">Meses</th><th class="num">Entradas${sfx}</th><th class="num">Saídas${sfx}</th><th class="num">Saldo${sfx}</th></tr></thead><tbody>${W.map(w => meses[w].size ?
+    `<tr><td>${names[w]}</td><td>${diasLbl[w]}</td><td class="num">${meses[w].size}</td><td class="num" style="color:var(--in)">${eur(val(w, 'in'))}</td><td class="num" style="color:var(--out)">${eur(val(w, 'out'))}</td><td class="num">${eur(saldo(w))}</td></tr>` :
+    `<tr><td>${names[w]}</td><td>${diasLbl[w]}</td><td class="num muted" colspan="4">Sem ocorrências</td></tr>`
+  ).join('')}</tbody></table>`;
+}
+
+let WB = null;
+
+const ORIGENS = [
+  { sheet: 'T_EXTRATO', idHeader: 'ID_INTERNO', label: 'Extratos bancários' },
+  { sheet: 'DÍZIMOS/OFERTAS', idHeader: 'ID_INTERNO', label: 'Dízimos e ofertas' },
+  { sheet: 'SAÍDAS', idHeader: 'ID_INTERNO', label: 'Saídas' },
+  { sheet: 'CARTÃO', idHeader: 'faça isso', label: 'Cartão' }
+];
+
+function readSheetIds(name, idHeader) {
+  const ws = WB ? WB.Sheets[name] : null;
+  if (!ws) return null;
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
+  if (!rows.length) return [];
+  let i = rows[0].map(h => String(h).trim()).indexOf(idHeader);
+  if (i < 0) i = 0;
+  return rows.slice(1).map(r => String(r[i] ?? '').trim()).filter(Boolean);
+}
+
+const normS = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().trim();
+
+function findSheet(name) {
+  if (!WB) return null;
+  const t = normS(name).replace(/[^A-Z0-9]/g, '');
+  const k = WB.SheetNames.find(n => normS(n).replace(/[^A-Z0-9]/g, '') === t);
+  return k ? WB.Sheets[k] : null;
+}
+
+function colIndex(head, names) {
+  const H = head.map(normS);
+  for (const n of names) { const i = H.indexOf(normS(n)); if (i >= 0) return i; }
+  return -1;
+}
+
+function readSheetRecords(name, idNames, dateNames) {
+  const ws = findSheet(name);
+  if (!ws) return null;
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
+  if (!rows.length) return [];
+  const head = rows[0].map(h => String(h));
+  let ci = colIndex(head, idNames);
+  if (ci < 0) ci = 0;
+  const di = colIndex(head, dateNames);
+  const ti = colIndex(head, ['TIPO']);
+  return rows.slice(1)
+    .map(r => ({ id: String(r[ci] ?? '').trim(), d: di >= 0 ? toDate(r[di]) : null, tipo: ti >= 0 ? String(r[ti] ?? '').trim() : '' }))
+    .filter(x => x.id);
+}
+
+function readTable(name) {
+  const ws = findSheet(name);
+  if (!ws) return null;
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
+  if (!rows.length) return [];
+  const head = rows[0].map(h => normS(h));
+  return rows.slice(1).map(r => {
+    const o = {};
+    head.forEach((h, i) => { if (h && !(h in o)) o[h] = String(r[i] ?? '').trim(); });
+    return o;
+  });
+}
+
+const dkey = d => d ? `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}` : '';
+
+function renderOrigins() {
+  const box = $('origins');
+  if (!WB || !RECS.length) { box.innerHTML = ''; return; }
+  const inPeriod = d => !d
+    ? (YEAR === 'all' && MONTH === 'all')
+    : (YEAR === 'all' || String(d.getFullYear()) === YEAR) && (MONTH === 'all' || monthKey(d) === MONTH);
+  const periodLabel = MONTH !== 'all'
+    ? `${MESES[+MONTH.slice(5) - 1]} ${MONTH.slice(0, 4)}`
+    : (YEAR !== 'all' ? `Ano ${YEAR}` : 'Todos os períodos');
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const elegivel = x => x.d && x.d < today && !x.tipo;
+  const contaIds = new Set(RECS.map(r => r.ID_INTERNO).filter(Boolean));
+  const contaPeriod = RECS.filter(r => inPeriod(r._d));
+  const pill = (n, bad) => `<span class="pill ${n === 0 ? 'ok' : bad}">${n}</span>`;
+  const head = (label, sheet, ok) => `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px"><h2 style="margin:0">${esc(label)}</h2><span class="pill ${ok ? 'ok' : 'bad'}">${ok ? 'OK' : 'Verificar'}</span></div>`;
+  const row = (label, value) => `<div class="qrow"><span>${label}</span><span class="num">${value}</span></div>`;
+  const list = (label, ids) => ids.length ? `<div class="muted" style="font-size:12px;margin-top:8px">${label} ${ids.map(x => esc(x)).join(', ')}</div>` : '';
+  const missingSheet = (label, sheet) => `<div class="card"><h2>${esc(label)}</h2><div class="muted">Separador ${esc(sheet)} não encontrado</div></div>`;
+
+  box.innerHTML = ORIGENS.map(o => {
+    if (o.sheet === 'CARTÃO') {
+      const cart = readTable(o.sheet);
+      const sai = readTable('SAÍDAS');
+      if (cart === null) return missingSheet(o.label, o.sheet);
+      if (sai === null) return missingSheet(o.label, 'SAÍDAS');
+      const idx = {};
+      sai.forEach(s => {
+        const k = dkey(toDate(s[normS('DATA')])) + '|' + Math.abs(num(s[normS('VALOR DA COMPRA')])).toFixed(2);
+        (idx[k] = idx[k] || []).push(s[normS('ID_INTERNO')]);
+      });
+      const src = cart
+        .map(c => ({ id: c[normS(o.idHeader)], d: toDate(c[normS('DATA MOV.')]), v: Math.abs(num(c[normS('DÉBITO EUR (+)')]) || num(c[normS('CRÉDITO EUR (-)')])) }))
+        .filter(x => x.id && inPeriod(x.d));
+      const pares = [], naoEnc = [];
+      src.forEach(x => {
+        const lst = idx[dkey(x.d) + '|' + x.v.toFixed(2)];
+        if (lst && lst.length) pares.push({ sid: lst.shift(), x }); else naoEnc.push(x.id);
+      });
+      const presentes = pares.filter(p => contaIds.has(p.sid)).length;
+      const faltam = pares.filter(p => !contaIds.has(p.sid) && elegivel(p.x)).map(p => p.sid);
+      const ok = naoEnc.length === 0 && faltam.length === 0;
+      return `<div class="card">${head(o.label, o.sheet, ok)}${row('Registos na origem', src.length)}${row('Presentes em CONTAORDEM', presentes)}${row('Em falta em CONTAORDEM', pill(faltam.length, 'bad'))}${row('Não encontrados em SAÍDAS', pill(naoEnc.length, 'bad'))}${list('Não encontrados em SAÍDAS -', naoEnc)}${list('ID em falta -', faltam)}</div>`;
+    }
+    const all = readSheetRecords(o.sheet, [o.idHeader, 'ID_INTERNO'], ['DATA MOV.', 'DATA MOV', 'DATA']);
+    if (all === null) return missingSheet(o.label, o.sheet);
+    const srcAll = new Set(all.map(x => x.id));
+    const ehDizimos = normS(o.sheet).includes('DIZIMOS');
+    const src = all.filter(x => inPeriod(x.d) && (!ehDizimos || !x.tipo || normS(x.tipo) === 'DIZIMOS/OFERTAS'));
+    const faltamRec = src.filter(x => !contaIds.has(x.id) && elegivel(x));
+    const faltam = faltamRec.map(x => x.id);
+    const faltamLabels = ehDizimos ? faltamRec.map(x => x.d.toLocaleDateString('pt-PT')) : faltam;
+    const presentes = src.filter(x => contaIds.has(x.id)).length;
+    const prefix = all.length ? all[0].id.replace(/\d+$/, '') : '';
+    const extra = prefix ? contaPeriod.filter(r => r.ID_INTERNO && r.ID_INTERNO.startsWith(prefix) && !srcAll.has(r.ID_INTERNO)) : [];
+    const ok = faltam.length === 0 && extra.length === 0;
+    return `<div class="card">${head(o.label, o.sheet, ok)}${row('Registos na origem', src.length)}${row('Presentes em CONTAORDEM', presentes)}${row('Em falta em CONTAORDEM', pill(faltam.length, 'bad'))}${row('Pendentes (não contam como falta)', `<span class="pill">${src.filter(x => !contaIds.has(x.id) && !elegivel(x)).length}</span>`)}${row('Extra em CONTAORDEM (sem origem)', pill(extra.length, 'wa'))}${list(ehDizimos ? 'Data em falta -' : 'ID em falta -', faltamLabels)}${list('Pendentes (não contam como falta) -', src.filter(x => !contaIds.has(x.id) && !elegivel(x)).map(x => x.id + (x.d ? ' (' + x.d.toLocaleDateString('pt-PT') + ')' : '')))}</div>`;
+  }).join('');
+}
+
+function renderOriginsPrev() {
+  const box = $('origins');
+  if (!WB || !RECS.length) { box.innerHTML = ''; return; }
+  const inPeriod = d => !d
+    ? (YEAR === 'all' && MONTH === 'all')
+    : (YEAR === 'all' || String(d.getFullYear()) === YEAR) && (MONTH === 'all' || monthKey(d) === MONTH);
+  const periodLabel = MONTH !== 'all'
+    ? `${MESES[+MONTH.slice(5) - 1]} ${MONTH.slice(0, 4)}`
+    : (YEAR !== 'all' ? `Ano ${YEAR}` : 'Todos os períodos');
+  const contaIds = new Set(RECS.map(r => r.ID_INTERNO).filter(Boolean));
+  const contaPeriod = RECS.filter(r => inPeriod(r._d));
+  box.innerHTML = ORIGENS.map(o => {
+    const all = readSheetRecords(o.sheet, [o.idHeader, 'ID_INTERNO'], ['DATA MOV.', 'DATA MOV', 'DATA']);
+    if (all === null) return `<div class="card"><h2>${esc(o.label)}</h2><div class="muted">Separador ${esc(o.sheet)} não encontrado</div></div>`;
+    const srcAll = new Set(all.map(x => x.id));
+    const src = all.filter(x => inPeriod(x.d));
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const elegivel = x => x.d && x.d < today && !x.tipo;
+    const faltam = src.filter(x => !contaIds.has(x.id) && elegivel(x)).map(x => x.id);
+    const presentes = src.length - faltam.length;
+    const prefix = all.length ? all[0].id.replace(/\d+$/, '') : '';
+    const extra = prefix ? contaPeriod.filter(r => r.ID_INTERNO && r.ID_INTERNO.startsWith(prefix) && !srcAll.has(r.ID_INTERNO)) : [];
+    const ok = faltam.length === 0 && extra.length === 0;
+    return `<div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px">
+        <h2 style="margin:0">${esc(o.label)}</h2>
+        <span class="pill ${ok ? 'ok' : 'bad'}">${ok ? 'OK' : 'Verificar'}</span>
+      </div>
+      <div class="muted" style="font-size:12px;margin-bottom:6px">Separador ${esc(o.sheet)} · ${esc(periodLabel)}</div>
+      <div class="qrow"><span>Registos na origem</span><span class="num">${src.length}</span></div>
+      <div class="qrow"><span>Presentes em CONTAORDEM</span><span class="num" style="color:var(--in)">${presentes}</span></div>
+      <div class="qrow"><span>Em falta em CONTAORDEM</span><span class="pill ${faltam.length ? 'bad' : 'ok'}">${faltam.length}</span></div>
+      <div class="qrow"><span>Extra em CONTAORDEM (sem origem)</span><span class="pill ${extra.length ? 'wa' : 'ok'}">${extra.length}</span></div>
+      ${faltam.length ? `<div class="muted" style="font-size:12px;margin-top:8px">ID em falta - ${faltam.map(x => esc(x)).join(', ')}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function renderOriginsOld() {
+  const box = $('origins');
+  if (!WB || !RECS.length) { box.innerHTML = ''; return; }
+  const contaIds = new Set(RECS.map(r => r.ID_INTERNO).filter(Boolean));
+  box.innerHTML = ORIGENS.map(o => {
+    const src = readSheetIds(o.sheet, o.idHeader);
+    if (src === null) return `<div class="card"><h2>${esc(o.label)}</h2><div class="muted">Separador ${esc(o.sheet)} não encontrado</div></div>`;
+    const srcSet = new Set(src);
+    const faltam = src.filter(id => !contaIds.has(id));
+    const presentes = src.length - faltam.length;
+    const prefix = src.length ? src[0].replace(/\d+$/, '') : '';
+    const extra = prefix ? RECS.filter(r => r.ID_INTERNO && r.ID_INTERNO.startsWith(prefix) && !srcSet.has(r.ID_INTERNO)) : [];
+    const ok = faltam.length === 0 && extra.length === 0;
+    return `<div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px">
+        <h2 style="margin:0">${esc(o.label)}</h2>
+        <span class="pill ${ok ? 'ok' : 'bad'}">${ok ? 'OK' : 'Verificar'}</span>
+      </div>
+      <div class="muted" style="font-size:12px;margin-bottom:6px">Separador ${esc(o.sheet)}</div>
+      <div class="qrow"><span>Registos na origem</span><span class="num">${src.length}</span></div>
+      <div class="qrow"><span>Presentes em CONTAORDEM</span><span class="num" style="color:var(--in)">${presentes}</span></div>
+      <div class="qrow"><span>Em falta em CONTAORDEM</span><span class="pill ${faltam.length ? 'bad' : 'ok'}">${faltam.length}</span></div>
+      <div class="qrow"><span>Extra em CONTAORDEM (sem origem)</span><span class="pill ${extra.length ? 'wa' : 'ok'}">${extra.length}</span></div>
+      ${faltam.length ? `<div class="muted" style="font-size:12px;margin-top:8px">Ex.: ${faltam.slice(0, 5).map(x => esc(x)).join(', ')}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+let CC_SEL = null;
+$('ccProg').addEventListener('click', e => {
+  if (e.target.closest('.cc-label')) { CC_SEL = null; renderCC(); return; }
+  const td = e.target.closest('.cc-cell');
+  if (!td) return;
+  const sel = { c: td.dataset.c, m: td.dataset.m };
+  CC_SEL = (CC_SEL && CC_SEL.c === sel.c && CC_SEL.m === sel.m) ? null : sel;
+  renderCC();
+});
+
+function ccDet(c, n) {
+  const recs = RECS.filter(r => r._m === CC_SEL.m && (YEAR === 'all' || r._y === YEAR) && !['CARTAO', 'TRANSFERENCIA'].includes(normS(r.TIPO)) && (r['CENTRO DE CUSTO'] || '(vazio)') === c).sort((a, b) => (a._d || 0) - (b._d || 0));
+  const soma = recs.reduce((s, r) => s + (r._in ? r._v : -r._v), 0);
+  const linhas = recs.map(x => `<tr><td>${esc(x['DATA MOV.'])}</td><td>${esc(x['DESCRIÇÃO'])}</td><td>${esc(x.TIPO)}</td><td>${esc(x.ID_INTERNO)}</td><td>${esc(x.PROCESSO)}</td><td class="num" style="color:${x._in ? 'var(--in)' : 'var(--out)'}">${x._in ? '+' : '−'}${eur(x._v)}</td><td>${esc(x.STATUS)}</td></tr>`).join('');
+  return `<tr class="cc-det"><td colspan="${n}" style="padding:8px 16px;background:#fbfcfd"><div class="muted" style="font-size:12px;margin-bottom:6px">${MESES[+CC_SEL.m.slice(5) - 1]} ${CC_SEL.m.slice(0, 4)} · ${recs.length} lançamentos · soma ${eur(soma)}</div>${recs.length ? `<div style="overflow-x:auto"><table style="font-size:12px"><thead><tr><th>Data mov.</th><th>Descrição</th><th>Tipo</th><th>ID</th><th>Processo</th><th class="num">Valor</th><th>Status</th></tr></thead><tbody>${linhas}</tbody></table></div>` : '<span class="muted">Sem lançamentos</span>'}</td></tr>`;
+}
+
+function renderCC() {
+  const el = $('ccProg');
+  const scope = RECS.filter(r => r._m && (YEAR === 'all' || r._y === YEAR) && !['CARTAO', 'TRANSFERENCIA'].includes(normS(r.TIPO)));
+  const months = YEAR === 'all'
+    ? [...new Set(scope.map(r => r._m))].sort()
+    : Array.from({ length: 12 }, (_, i) => `${YEAR}-${String(i + 1).padStart(2, '0')}`);
+  if (!months.length) { el.innerHTML = '<span class="muted">Sem dados</span>'; return; }
+  const cc = {};
+  scope.forEach(r => {
+    const c = r['CENTRO DE CUSTO'] || '(vazio)';
+    cc[c] = cc[c] || {};
+    cc[c][r._m] = (cc[c][r._m] || 0) + (r._in ? r._v : -r._v);
+  });
+  const tot = c => months.reduce((s, m) => s + (cc[c][m] || 0), 0);
+  const centros = Object.keys(cc).sort((a, b) => tot(b) - tot(a));
+  const hl = m => m === MONTH ? 'background:#eff6ff;' : '';
+  const cor = v => v >= 0 ? 'var(--in)' : 'var(--out)';
+  const cel = (v, m, c) => v === undefined
+    ? `<td class="num muted" style="${hl(m)}">—</td>`
+    : `<td class="num cc-cell" data-c="${esc(c)}" data-m="${m}" style="color:${cor(v)};cursor:pointer;${hl(m)}">${eur(v)}</td>`;
+  const totMes = m => centros.reduce((s, c) => s + (cc[c][m] || 0), 0);
+  const totGeral = centros.reduce((s, c) => s + tot(c), 0);
+  el.innerHTML = `<table><thead><tr><th>Centro de custo</th>${months.map(m => `<th class="num" style="${hl(m)}white-space:nowrap">${MESES[+m.slice(5) - 1]} ${m.slice(0, 4)}</th>`).join('')}<th class="num">Total</th></tr></thead><tbody>${centros.map(c => `<tr><td class="cc-label" style="white-space:nowrap;cursor:pointer">${esc(c)}</td>${months.map(m => cel(cc[c][m], m, c)).join('')}<td class="num" style="font-weight:700;color:${cor(tot(c))}">${eur(tot(c))}</td></tr>${CC_SEL && CC_SEL.c === c ? ccDet(c, months.length + 2) : ''}`).join('')}<tr style="font-weight:700;background:#f5f7fa"><td>Total</td>${months.map(m => `<td class="num" style="color:${cor(totMes(m))};${hl(m)}">${eur(totMes(m))}</td>`).join('')}<td class="num" style="color:${cor(totGeral)}">${eur(totGeral)}</td></tr></tbody></table>`;
+}
+
+function yearly() {
+  const years = [...new Set(RECS.map(r => r._y).filter(Boolean))].sort();
+  if (!years.length) { $('yearly').innerHTML = '<span class="muted">Sem datas válidas</span>'; $('yearRows').innerHTML = ''; return; }
+  const agg = {};
+  years.forEach(y => agg[y] = {in: 0, out: 0, n: 0});
+  RECS.forEach(r => { if (agg[r._y]) { agg[r._y][r._in ? 'in' : 'out'] += r._v; agg[r._y].n++; } });
+  const max = Math.max(1, ...years.flatMap(y => [agg[y].in, agg[y].out]));
+  $('yearly').innerHTML = years.map(y => {
+    const a = agg[y];
+    const sel = YEAR === y ? 'outline:2px solid var(--acc);outline-offset:4px;border-radius:6px;' : '';
+    return `<div class="mcol" data-y="${y}" style="${sel}" title="${eur(a.in)} entradas · ${eur(a.out)} saídas">
+      <div class="bars" style="height:150px"><div class="bar in" style="height:${(a.in/max*150).toFixed(1)}px"></div><div class="bar out" style="height:${(a.out/max*150).toFixed(1)}px"></div></div>
+      <div class="mlabel">${y}</div></div>`;
+  }).join('');
+  document.querySelectorAll('#yearly .mcol').forEach(el => el.addEventListener('click', () => {
+    YEAR = YEAR === el.dataset.y ? 'all' : el.dataset.y; MONTH = 'all'; render();
+  }));
+  let prev = null;
+  $('yearRows').innerHTML = years.map(y => {
+    const a = agg[y], saldo = a.in - a.out;
+    const v = (cur, old) => (prev && old) ? ((cur - old) / Math.abs(old) * 100).toFixed(1) + '%' : '—';
+    const row = `<tr><td>${y}</td><td class="num" style="color:var(--in)">${eur(a.in)}</td><td class="num">${v(a.in, prev && prev.in)}</td><td class="num" style="color:var(--out)">${eur(a.out)}</td><td class="num">${v(a.out, prev && prev.out)}</td><td class="num">${eur(saldo)}</td><td class="num">${a.n}</td></tr>`;
+    prev = a;
+    return row;
+  }).join('');
+}
+
+function matrix() {
+  const years = [...new Set(RECS.map(r => r._y).filter(Boolean))].sort();
+  if (!years.length) { $('matrix').innerHTML = ''; return; }
+  const cell = {};
+  RECS.forEach(r => { if (!r._y) return; const k = r._y + '|' + (r._d.getMonth() + 1); cell[k] = (cell[k] || 0) + (r._in ? r._v : -r._v); });
+  const head = '<tr><th>Mês</th>' + years.map(y => `<th class="num">${y}</th>`).join('') + '</tr>';
+  const body = MESES.map((mn, i) => `<tr><td>${mn}</td>` + years.map(y => {
+    const k = y + '|' + (i + 1);
+    if (!(k in cell)) return '<td class="num muted">—</td>';
+    const v = cell[k];
+    return `<td class="num" style="color:${v >= 0 ? 'var(--in)' : 'var(--out)'}">${eur(v)}</td>`;
+  }).join('') + '</tr>').join('');
+  $('matrix').innerHTML = `<table><thead>${head}</thead><tbody>${body}</tbody></table>`;
+}
+
+function breakdown(f) {
+  renderBars('byPlano', groupSum(f, r => r['PLANO DE CONTA'], r => r._v).slice(0, 8));
+  renderBars('byForma', groupSum(f, r => r['FORMA DE PAGAMENTO'], r => r._v).slice(0, 8));
+  renderBars('byCaixa', groupSum(f, r => r['CAIXA'], r => r._v).slice(0, 8));
+}
+
+function statusAndQuality(f) {
+  const counts = groupSum(f, r => r.STATUS, () => 1);
+  $('status-box').innerHTML = counts.length ? counts.map(([k, v]) => {
+    const cls = k === 'VALIDADO' ? 'ok' : 'wa';
+    return `<div class="qrow"><span>${esc(k)}</span><span><span class="pill ${cls}">${v}</span></span></div>`;
+  }).join('') : '<span class="muted">Sem dados</span>';
+
+  const notVal = f.filter(r => r.STATUS !== 'VALIDADO');
+  const idCount = {}; RECS.forEach(r => { if (r.ID_INTERNO) idCount[r.ID_INTERNO] = (idCount[r.ID_INTERNO] || 0) + 1; });
+  const dupIds = Object.values(idCount).filter(c => c > 1).length;
+  const docCount = {}; RECS.forEach(r => { if (r['DOC. SOMA']) docCount[r['DOC. SOMA']] = (docCount[r['DOC. SOMA']] || 0) + 1; });
+  const dupDocs = Object.values(docCount).filter(c => c > 1).length;
+  const noValor = f.filter(r => !r['DATA VALOR']).length;
+  const noUser = f.filter(r => !r.IDUSER).length;
+  const noTs = f.filter(r => !r.TIMESTAMP).length;
+  const mism = f.filter(r => {
+    const t = toDate(r.TIMESTAMP), g = regDate(r);
+    return t && g && Math.abs(t - g) > 5 * 60000;
+  }).length;
+
+  const checks = [
+    ['Não validados (STATUS ≠ VALIDADO)', notVal.length, 'bad'],
+    ['IDs internos duplicados (global)', dupIds, 'bad'],
+    ['DOC. SOMA repetidos (global)', dupDocs, 'wa'],
+    ['Sem DATA VALOR', noValor, 'wa'],
+    ['Sem IDUSER', noUser, 'wa'],
+    ['Sem TIMESTAMP', noTs, 'wa'],
+    ['TIMESTAMP ≠ "Registrado em" (>5 min)', mism, 'wa'],
+  ];
+  $('quality').innerHTML = checks.map(([label, n, sev]) =>
+    `<div class="qrow"><span>${label}</span><span class="pill ${n === 0 ? 'ok' : sev}">${n}</span></div>`
+  ).join('');
+}
+
+function renderTable() {
+  const q = $('search').value.trim().toLowerCase();
+  const list = filtered()
+    .filter(r => r._in || /^sa.da/i.test((r.TIPO || '').trim()))
+    .filter(r => !q || [r['DESCRIÇÃO'], r['PLANO DE CONTA'], r.ID_INTERNO, r['DESCRIÇÃO SOMA']].join(' ').toLowerCase().includes(q))
+    .sort((a, b) => (b._d || 0) - (a._d || 0));
+  $('count').textContent = '';
+  $('sub').textContent = `Lançamentos ${list.length}`;
+  $('rows').innerHTML = list.slice(0, 300).map(r => `<tr>
+    <td>${esc(r['DATA MOV.'])}</td>
+    <td>${esc(r['DESCRIÇÃO'])}</td>
+    <td>${esc(r.TIPO)}</td>
+    <td>${esc(r['PLANO DE CONTA'])}</td>
+    <td>${esc(r.CAIXA)}</td>
+    <td class="num" style="color:${r._in ? 'var(--in)' : 'var(--out)'}">${r._in ? '+' : '−'}${eur(r._v)}</td>
+    
+    <td class="muted">${esc(r.ID_INTERNO)}</td>
+  </tr>`).join('');
+  $('more').textContent = list.length > 300 ? `A mostrar 300 de ${list.length}. Use a pesquisa para filtrar.` : '';
+}
+
+let WB2 = null;
+const VC_FILE_ID = '11sUHhTzKaV21uX_FpBOEnJxNpFjUn6EHEiU79Pe3jXU';
+
+function readTableIn(wb, name) {
+  if (!wb) return null;
+  const t = normS(name).replace(/[^A-Z0-9]/g, '');
+  const k = wb.SheetNames.find(n => normS(n).replace(/[^A-Z0-9]/g, '') === t);
+  if (!k) return null;
+  const rows = XLSX.utils.sheet_to_json(wb.Sheets[k], { header: 1, raw: false, defval: '' });
+  if (!rows.length) return [];
+  const head = rows[0].map(h => normS(h));
+  return rows.slice(1).map(r => {
+    const o = {};
+    head.forEach((h, i) => { if (h && !(h in o)) o[h] = String(r[i] ?? '').trim(); });
+    return o;
+  });
+}
+
+function renderVerbo() {
+  const box = $('origins');
+  if (!WB2) {
+    box.insertAdjacentHTML('beforeend', `<div class="card"><h2>Verbo Café</h2><div class="muted">Ficheiro AppVerboCafé não carregado</div></div>`);
+    return;
+  }
+  const inPeriod = d => !d
+    ? (YEAR === 'all' && MONTH === 'all')
+    : (YEAR === 'all' || String(d.getFullYear()) === YEAR) && (MONTH === 'all' || monthKey(d) === MONTH);
+  const periodLabel = MONTH !== 'all'
+    ? `${MESES[+MONTH.slice(5) - 1]} ${MONTH.slice(0, 4)}`
+    : (YEAR !== 'all' ? `Ano ${YEAR}` : 'Todos os períodos');
+  const contaIds = new Set(RECS.map(r => r.ID_INTERNO).filter(Boolean));
+  const contaPeriod = RECS.filter(r => inPeriod(r._d));
+  const vendas = readTableIn(WB2, 'VC_VENDAS');
+  const fin = readTableIn(WB2, 'Financeiro');
+  const missing = (label, sheet) => `<div class="card"><h2>${esc(label)}</h2><div class="muted">Separador ${esc(sheet)} não encontrado</div></div>`;
+  if (vendas === null) return box.insertAdjacentHTML('beforeend', missing('Verbo Café', 'VC_VENDAS'));
+  if (fin === null) return box.insertAdjacentHTML('beforeend', missing('Verbo Café', 'Financeiro'));
+
+  const pagos = vendas
+    .map(v => ({ id: v[normS('ID_INTERNO')], d: toDate(v[normS('DATA')]), forma: normS(v[normS('FORMA DE PAGAMENTO')]) }))
+    .filter(x => x.id && x.forma === 'DINHEIRO' && inPeriod(x.d));
+  const presentes = pagos.filter(x => contaIds.has(x.id)).length;
+  const faltam = pagos.filter(x => !contaIds.has(x.id)).map(x => x.id);
+  const finPeriodo = fin.filter(f => f[normS('ID_INTERNO')] && inPeriod(toDate(f[normS('DATA')]))).length;
+  const vendasIds = new Set(vendas.map(v => v[normS('ID_INTERNO')]));
+  const extra = contaPeriod.filter(r => r.ID_INTERNO && r.ID_INTERNO.startsWith('VCE') && !vendasIds.has(r.ID_INTERNO)).length;
+  const ok = faltam.length === 0;
+  const pill = (n, bad) => `<span class="pill ${n === 0 ? 'ok' : bad}">${n}</span>`;
+  const row = (label, value) => `<div class="qrow"><span>${label}</span><span class="num">${value}</span></div>`;
+  box.insertAdjacentHTML('beforeend', `<div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px"><h2 style="margin:0">Verbo Café</h2><span class="pill ${ok ? 'ok' : 'bad'}">${ok ? 'OK' : 'Verificar'}</span></div>
+      
+      ${row('Registos Financeiro na origem', pagos.length)}
+      ${row('Presentes em CONTAORDEM', presentes)}
+      ${row('Em falta em CONTAORDEM', pill(faltam.length, 'bad'))}
+      ${row('Financeiro na origem', `<span class="pill">${finPeriodo}</span>`)}
+      ${row('Presentes em CONTAORDEM', `<span class="num">${fin.filter(f => f[normS('ID_INTERNO')] && inPeriod(toDate(f[normS('DATA')])) && contaIds.has(f[normS('ID_INTERNO')])).length}</span>`)}
+      ${row('Extra em CONTAORDEM (sem origem)', pill(extra, 'wa'))}
+      ${faltam.length ? `<div class="muted" style="font-size:12px;margin-top:8px">ID em falta - ${faltam.map(x => esc(x)).join(', ')}</div>` : ''}
+    </div>`);
+}
+
+function renderOrigemPlano() {
+  const body = $('origemPlanoBody');
+  const f = filtered();
+  if (!f.length) { body.innerHTML = '<span class="muted">Sem dados</span>'; return; }
+  const grupos = { rec: {}, desp: {} };
+  f.forEach(r => {
+    if (!r._in && r._v === 0) return;
+    const tipo = r._in ? 'rec' : 'desp';
+    const plano = r['PLANO DE CONTA'] || '(vazio)';
+    const origem = r.PROCESSO || '(vazio)';
+    const g = grupos[tipo];
+    if (!g[plano]) g[plano] = { v: 0, n: 0, origens: {} };
+    g[plano].v += r._v;
+    g[plano].n++;
+    g[plano].origens[origem] = (g[plano].origens[origem] || 0) + 1;
+  });
+  const render = (tipo, titulo, color, band) => {
+    const g = grupos[tipo];
+    const planos = Object.keys(g).sort((a, b) => g[b].v - g[a].v);
+    const total = planos.reduce((s, p) => s + g[p].v, 0);
+    const count = planos.reduce((s, p) => s + g[p].n, 0);
+    let html = `<tr style="background:${band}"><td style="font-weight:700;color:${color}">${titulo}</td><td></td><td class="num" style="font-weight:700;color:${color}">${eur(total)}</td><td class="num" style="font-weight:700">${count}</td></tr>`;
+    planos.forEach(p => {
+      const origens = Object.keys(g[p].origens).sort((a, b) => g[p].origens[b] - g[p].origens[a]).join(', ');
+      html += `<tr><td>↳ ${esc(p)}</td><td class="muted" style="font-size:12px">${esc(origens)}</td><td class="num">${eur(g[p].v)}</td><td class="num">${g[p].n}</td></tr>`;
+    });
+    return html;
+  };
+  body.innerHTML = `<table><thead><tr><th>Plano de conta</th><th>Origem (PROCESSO)</th><th class="num">Valor</th><th class="num">Lançamentos</th></tr></thead><tbody>${render('rec', 'ENTRADAS', 'var(--in)', '#e6f4ea')}${render('desp', 'SAÍDAS', 'var(--out)', '#fce8e6')}</tbody></table>`;
+}
+
+function renderOrigemPlanoV3() {
+  const body = $('origemPlanoBody');
+  const f = filtered();
+  if (!f.length) { body.innerHTML = '<span class="muted">Sem dados</span>'; return; }
+  const grupos = { rec: {}, desp: {} };
+  f.forEach(r => {
+    if (!r._in && r._v === 0) return;
+    const tipo = r._in ? 'rec' : 'desp';
+    const plano = r['PLANO DE CONTA'] || '(vazio)';
+    const origem = r.PROCESSO || '(vazio)';
+    const g = grupos[tipo];
+    if (!g[plano]) g[plano] = { v: 0, n: 0, origens: {} };
+    g[plano].v += r._v;
+    g[plano].n++;
+    if (!g[plano].origens[origem]) g[plano].origens[origem] = { v: 0, n: 0 };
+    g[plano].origens[origem].v += r._v;
+    g[plano].origens[origem].n++;
+  });
+  const render = (tipo, titulo, color) => {
+    const g = grupos[tipo];
+    const planos = Object.keys(g).sort((a, b) => g[b].v - g[a].v);
+    const total = planos.reduce((s, p) => s + g[p].v, 0);
+    const count = planos.reduce((s, p) => s + g[p].n, 0);
+    let html = `<tr style="background:#f8fafc"><td style="font-weight:700;color:${color}">${titulo}</td><td></td><td class="num" style="font-weight:700;color:${color}">${eur(total)}</td><td class="num" style="font-weight:700">${count}</td></tr>`;
+    planos.forEach(p => {
+      html += `<tr><td style="padding-left:20px">${esc(p)}</td><td></td><td class="num" style="color:${color}">${eur(g[p].v)}</td><td class="num">${g[p].n}</td></tr>`;
+      Object.keys(g[p].origens).sort((a, b) => g[p].origens[b].v - g[p].origens[a].v).forEach(o => {
+        const od = g[p].origens[o];
+        html += `<tr><td></td><td style="padding-left:28px;color:var(--muted)">↳ ${esc(o)}</td><td class="num" style="color:${color}">${eur(od.v)}</td><td class="num">${od.n}</td></tr>`;
+      });
+    });
+    return html;
+  };
+  body.innerHTML = `<table><thead><tr><th>Grupo / Conta de plano</th><th>Origem (PROCESSO)</th><th class="num">Valor</th><th class="num">Lançamentos</th></tr></thead><tbody>${render('rec', 'Receitas', 'var(--in)')}${render('desp', 'Despesas', 'var(--out)')}</tbody></table>`;
+}
+
+function renderOrigemPlanoV2() {
+  const body = $('origemPlanoBody');
+  const f = filtered();
+  if (!f.length) { body.innerHTML = '<span class="muted">Sem dados</span>'; return; }
+  const tree = {};
+  f.forEach(r => {
+    if (!r._in && r._v === 0) return;
+    const plano = r['PLANO DE CONTA'] || '(vazio)';
+    const origem = r.PROCESSO || '(vazio)';
+    const tipo = r._in ? 'rec' : 'desp';
+    if (!tree[plano]) tree[plano] = { rec: {}, desp: {}, rT: 0, dT: 0, n: 0 };
+    const node = tree[plano];
+    if (!node[tipo][origem]) node[tipo][origem] = { v: 0, n: 0 };
+    node[tipo][origem].v += r._v;
+    node[tipo][origem].n++;
+    node[tipo === 'rec' ? 'rT' : 'dT'] += r._v;
+    node.n++;
+  });
+  const cnt = obj => Object.values(obj).reduce((s, x) => s + x.n, 0);
+  const block = (titulo, obj, total, color) => {
+    if (!Object.keys(obj).length) return '';
+    const origens = Object.keys(obj).sort((a, b) => obj[b].v - obj[a].v).map(o =>
+      `<tr><td></td><td style="padding-left:28px;color:var(--muted)">↳ ${esc(o)}</td><td class="num" style="color:${color}">${eur(obj[o].v)}</td><td class="num">${obj[o].n}</td></tr>`
+    ).join('');
+    return `<tr><td></td><td style="font-weight:600;color:${color}">${titulo}</td><td class="num" style="color:${color};font-weight:600">${eur(total)}</td><td class="num" style="font-weight:600">${cnt(obj)}</td></tr>` + origens;
+  };
+  const planos = Object.keys(tree).sort((a, b) => (tree[b].rT + tree[b].dT) - (tree[a].rT + tree[a].dT));
+  let totR = 0, totD = 0, totN = 0, rows = '';
+  planos.forEach(p => {
+    const t = tree[p];
+    totR += t.rT; totD += t.dT; totN += t.n;
+    rows += `<tr style="background:#f8fafc"><td style="font-weight:600">${esc(p)}</td><td></td><td></td><td class="num" style="font-weight:600">${t.n}</td></tr>`;
+    rows += block('Receitas', t.rec, t.rT, 'var(--in)') + block('Despesas', t.desp, t.dT, 'var(--out)');
+  });
+  body.innerHTML = `<table><thead><tr><th>Plano de conta</th><th>Subprocesso / Origem (PROCESSO)</th><th class="num">Valor</th><th class="num">Lançamentos</th></tr></thead><tbody>${rows}</tbody><tfoot><tr><th>Total receitas</th><th></th><th class="num" style="color:var(--in)">${eur(totR)}</th><th class="num">${totN}</th></tr><tr><th>Total despesas</th><th></th><th class="num" style="color:var(--out)">${eur(totD)}</th><th></th></tr></tfoot></table>`;
+}
+
+function renderOrigemPlanoPrev() {
+  const body = $('origemPlanoBody');
+  const f = filtered();
+  if (!f.length) { body.innerHTML = '<span class="muted">Sem dados</span>'; return; }
+  const planoTot = {};
+  const map = {};
+  f.forEach(r => {
+    const plano = r['PLANO DE CONTA'] || '(vazio)';
+    const origem = r.PROCESSO || '(vazio)';
+    const k = plano + '||' + origem;
+    if (!map[k]) map[k] = { plano, origem, rec: 0, desp: 0, n: 0 };
+    if (r._in) map[k].rec += r._v; else map[k].desp += r._v;
+    map[k].n++;
+    planoTot[plano] = (planoTot[plano] || 0) + r._v;
+  });
+  const rows = Object.values(map).sort((a, b) => (planoTot[b.plano] - planoTot[a.plano]) || a.origem.localeCompare(b.origem));
+  let last = null, totRec = 0, totDesp = 0, totN = 0;
+  const lines = rows.map(x => {
+    const novo = x.plano !== last;
+    last = x.plano;
+    totRec += x.rec; totDesp += x.desp; totN += x.n;
+    return `<tr>
+      <td style="font-weight:${novo ? 600 : 400};color:${novo ? 'var(--ink)' : 'var(--muted)'}">${novo ? esc(x.plano) : ''}</td>
+      <td>${esc(x.origem)}</td>
+      <td class="num" style="color:var(--in)">${x.rec ? eur(x.rec) : '—'}</td>
+      <td class="num" style="color:var(--out)">${x.desp ? eur(x.desp) : '—'}</td>
+      <td class="num">${x.n}</td>
+    </tr>`;
+  }).join('');
+  body.innerHTML = `<table><thead><tr><th>Plano de conta</th><th>Origem (PROCESSO)</th><th class="num">Receitas</th><th class="num">Despesas</th><th class="num">Lançamentos</th></tr></thead><tbody>${lines}</tbody><tfoot><tr><th>Total</th><th></th><th class="num" style="color:var(--in)">${eur(totRec)}</th><th class="num" style="color:var(--out)">${eur(totDesp)}</th><th class="num">${totN}</th></tr></tfoot></table>`;
+}
+
+let ORIGEM_PLANO_OPEN = true;
+$('toggleOrigemPlano').addEventListener('click', () => {
+  ORIGEM_PLANO_OPEN = !ORIGEM_PLANO_OPEN;
+  $('origemPlanoBody').style.display = ORIGEM_PLANO_OPEN ? 'block' : 'none';
+  $('toggleOrigemPlanoIcon').style.transform = ORIGEM_PLANO_OPEN ? 'rotate(0deg)' : 'rotate(-90deg)';
+  $('toggleOrigemPlano').title = ORIGEM_PLANO_OPEN ? 'Ocultar' : 'Mostrar';
+  $('toggleOrigemPlano').setAttribute('aria-label', $('toggleOrigemPlano').title);
+});
+
+function renderOrigemPlano() {
+  const body = $('origemPlanoBody');
+  const f = filtered();
+  if (!f.length) { body.innerHTML = '<span class="muted">Sem dados</span>'; return; }
+  const detalhe = recs => {
+    const linhas = recs.slice().sort((a, b) => (b._d || 0) - (a._d || 0)).slice(0, 300).map(x =>
+      `<tr><td>${esc(x['DATA MOV.'])}</td><td>${esc(x['DESCRIÇÃO'])}</td><td>${esc(x.ID_INTERNO)}</td><td>${esc(x.PROCESSO)}</td><td class="num" style="color:${x._in ? 'var(--in)' : 'var(--out)'}">${x._in ? '+' : '−'}${eur(x._v)}</td><td>${esc(x.STATUS)}</td></tr>`
+    ).join('');
+    const mais = recs.length > 300 ? `<div class="muted" style="font-size:12px;margin-top:6px">A mostrar 300 de ${recs.length} lançamentos.</div>` : '';
+    return `<table style="font-size:12px"><thead><tr><th>Data mov.</th><th>Descrição</th><th>ID</th><th>Processo</th><th class="num">Valor</th><th>Status</th></tr></thead><tbody>${linhas}</tbody></table>${mais}`;
+  };
+  const formaCat = r => {
+    const fp = normS(r['FORMA DE PAGAMENTO'] || '');
+    if (fp.includes('DOA')) return 'DOAÇÕES';
+    if (fp.includes('DIZIMO') || fp.includes('OFERTA')) return 'DÍZIMOS E OFERTAS';
+    if (fp.includes('TRANSF')) return 'TRANSFERÊNCIA BANCÁRIA';
+    if (fp.includes('DINHEIRO')) return 'DINHEIRO';
+    return 'OUTRAS FORMAS';
+  };
+  const FORMA_ORDEM = ['DOAÇÕES', 'DÍZIMOS E OFERTAS', 'TRANSFERÊNCIA BANCÁRIA', 'DINHEIRO', 'OUTRAS FORMAS'];
+  const grupos = { rec: {}, desp: {} };
+  f.forEach(r => {
+    if (!r._in && r._v === 0) return;
+    const tipo = r._in ? 'rec' : 'desp';
+    const cat = tipo === 'rec' ? formaCat(r) : 'TODAS';
+    const plano = r['PLANO DE CONTA'] || '(vazio)';
+    const origem = r.PROCESSO || '(vazio)';
+    const cg = grupos[tipo][cat] = grupos[tipo][cat] || { v: 0, n: 0, planos: {} };
+    cg.v += r._v;
+    cg.n++;
+    const g = cg.planos;
+    if (!g[plano]) g[plano] = { v: 0, n: 0, origens: {}, recs: [] };
+    g[plano].v += r._v;
+    g[plano].n++;
+    g[plano].origens[origem] = (g[plano].origens[origem] || 0) + 1;
+    g[plano].recs.push(r);
+  });
+  const planoRows = g => Object.keys(g).sort((a, b) => g[b].v - g[a].v).map(p => {
+    const origens = Object.keys(g[p].origens).sort((a, b) => g[p].origens[b] - g[p].origens[a]).join(', ');
+    return `<tr class="plano-row" style="cursor:pointer"><td>↳ ${esc(p)}</td><td class="muted" style="font-size:12px">${esc(origens)}</td><td class="num">${eur(g[p].v)}</td><td class="num">${g[p].n}</td></tr>`
+      + `<tr class="plano-det" style="display:none"><td colspan="4" style="padding:8px 16px;background:#fbfcfd">${detalhe(g[p].recs)}</td></tr>`;
+  }).join('');
+  const totalRow = (titulo, color, band, cg) => `<tr style="background:${band}"><td style="font-weight:700;color:${color}">${titulo}</td><td></td><td class="num" style="font-weight:700;color:${color}">${eur(cg.v)}</td><td class="num" style="font-weight:700">${cg.n}</td></tr>`;
+  const subRow = (titulo, cg) => `<tr style="background:#f5f7fa"><td style="font-weight:600;padding-left:16px">${esc(titulo)}</td><td></td><td class="num" style="font-weight:600">${eur(cg.v)}</td><td class="num" style="font-weight:600">${cg.n}</td></tr>`;
+  const recs = Object.values(grupos.rec);
+  const recTot = { v: recs.reduce((s, c) => s + c.v, 0), n: recs.reduce((s, c) => s + c.n, 0) };
+  const desp = grupos.desp.TODAS || { v: 0, n: 0, planos: {} };
+  let corpo = totalRow('ENTRADAS', 'var(--in)', '#e6f4ea', recTot);
+  FORMA_ORDEM.forEach(cat => { if (grupos.rec[cat]) corpo += subRow(cat, grupos.rec[cat]) + planoRows(grupos.rec[cat].planos); });
+  corpo += totalRow('SAÍDAS', 'var(--out)', '#fce8e6', desp) + planoRows(desp.planos);
+  body.innerHTML = `<table><thead><tr><th>Plano de conta</th><th>Origem (PROCESSO)</th><th class="num">Valor</th><th class="num">Lançamentos</th></tr></thead><tbody>${corpo}</tbody></table>`;
+}
+
+$('origemPlanoBody').addEventListener('click', e => {
+  const tr = e.target.closest('tr.plano-row');
+  if (!tr) return;
+  const det = tr.nextElementSibling;
+  if (det && det.classList.contains('plano-det')) det.style.display = det.style.display === 'none' ? 'table-row' : 'none';
+});
+
+let PROG_OPEN = true;
+$('toggleProg').addEventListener('click', () => {
+  PROG_OPEN = !PROG_OPEN;
+  $('prog').style.display = PROG_OPEN ? 'block' : 'none';
+  $('toggleProgIcon').style.transform = PROG_OPEN ? 'rotate(0deg)' : 'rotate(-90deg)';
+  $('toggleProg').title = PROG_OPEN ? 'Ocultar' : 'Mostrar';
+  $('toggleProg').setAttribute('aria-label', $('toggleProg').title);
+});
+
+let CC_OPEN = true;
+$('toggleCC').addEventListener('click', () => {
+  CC_OPEN = !CC_OPEN;
+  $('ccProg').style.display = CC_OPEN ? 'block' : 'none';
+  $('toggleCCIcon').style.transform = CC_OPEN ? 'rotate(0deg)' : 'rotate(-90deg)';
+  $('toggleCC').title = CC_OPEN ? 'Ocultar' : 'Mostrar';
+  $('toggleCC').setAttribute('aria-label', $('toggleCC').title);
+});
+
+loadFromDrive();
+</script>
+</body>
+</html>
