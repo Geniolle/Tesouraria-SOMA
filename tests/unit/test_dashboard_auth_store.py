@@ -40,3 +40,26 @@ def test_expired_session_is_rejected(tmp_path: Path, monkeypatch) -> None:
     token = store.create_session("ana@example.pt")
     monkeypatch.setattr(auth_store.time, "time", lambda: 10**12)
     assert store.session_email(token) is None
+
+
+def test_generated_password_must_be_changed(tmp_path: Path) -> None:
+    store = AuthStore(tmp_path / "auth.db")
+    store.set_password("ana@example.pt", "inicial-123", must_change=True)
+    assert store.must_change("ana@example.pt")
+    store.set_password("ana@example.pt", "escolhida-123")
+    assert not store.must_change("ana@example.pt")
+    assert not store.must_change("ninguem@example.pt")
+
+
+def test_old_database_gets_must_change_column(tmp_path: Path) -> None:
+    import sqlite3
+
+    db = sqlite3.connect(tmp_path / "auth.db")
+    db.execute(
+        "CREATE TABLE users (email TEXT PRIMARY KEY, pw_hash TEXT NOT NULL, updated_at INTEGER NOT NULL)"
+    )
+    db.execute("INSERT INTO users VALUES ('ana@example.pt', 'x', 0)")
+    db.commit()
+    db.close()
+    store = AuthStore(tmp_path / "auth.db")
+    assert not store.must_change("ana@example.pt")

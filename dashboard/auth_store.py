@@ -57,8 +57,12 @@ class AuthStore:
         with self._conn() as db:
             db.execute(
                 "CREATE TABLE IF NOT EXISTS users ("
-                "email TEXT PRIMARY KEY, pw_hash TEXT NOT NULL, updated_at INTEGER NOT NULL)"
+                "email TEXT PRIMARY KEY, pw_hash TEXT NOT NULL, updated_at INTEGER NOT NULL, "
+                "must_change INTEGER NOT NULL DEFAULT 0)"
             )
+            columns = [row[1] for row in db.execute("PRAGMA table_info(users)")]
+            if "must_change" not in columns:  # databases created before this column
+                db.execute("ALTER TABLE users ADD COLUMN must_change INTEGER NOT NULL DEFAULT 0")
             db.execute(
                 "CREATE TABLE IF NOT EXISTS sessions ("
                 "token_hash TEXT PRIMARY KEY, email TEXT NOT NULL, expires_at INTEGER NOT NULL)"
@@ -78,14 +82,22 @@ class AuthStore:
         with self._conn() as db:
             return [row[0] for row in db.execute("SELECT email FROM users ORDER BY email")]
 
-    def set_password(self, email: str, password: str) -> None:
+    def set_password(self, email: str, password: str, must_change: bool = False) -> None:
+        """must_change=True for generated passwords: the user has to replace it."""
         with self._conn() as db:
             db.execute(
-                "INSERT INTO users (email, pw_hash, updated_at) VALUES (?, ?, ?) "
+                "INSERT INTO users (email, pw_hash, updated_at, must_change) VALUES (?, ?, ?, ?) "
                 "ON CONFLICT(email) DO UPDATE SET pw_hash = excluded.pw_hash, "
-                "updated_at = excluded.updated_at",
-                (_norm(email), hash_password(password), int(time.time())),
+                "updated_at = excluded.updated_at, must_change = excluded.must_change",
+                (_norm(email), hash_password(password), int(time.time()), int(must_change)),
             )
+
+    def must_change(self, email: str) -> bool:
+        with self._conn() as db:
+            row = db.execute(
+                "SELECT must_change FROM users WHERE email = ?", (_norm(email),)
+            ).fetchone()
+        return bool(row and row[0])
 
     def check_password(self, email: str, password: str) -> bool:
         with self._conn() as db:

@@ -47,7 +47,10 @@ sudo systemd-run --quiet --uid=opc --gid=opc --pipe --wait \
   Diretória.
 - `reset EMAIL`: new password for one member; ends their sessions.
 
-Members change their own password in the user menu (minimum 10 characters).
+Generated passwords are initial: at first login a popup that cannot be
+dismissed forces a new password, and the data endpoints answer 403 until it
+is changed. Members can change it again in the user menu (minimum 10
+characters).
 Ten failed logins per IP or email block further attempts for 15 minutes.
 
 ## Deploy (server `ubuntu@152.67.150.143`)

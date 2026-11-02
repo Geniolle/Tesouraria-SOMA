@@ -140,7 +140,11 @@ class Handler(BaseHTTPRequestHandler):
         if path in PAGES:
             self._send(200, (HERE / PAGES[path]).read_bytes(), "text/html; charset=utf-8")
         elif path == "/api/me":
-            self._json(200, {"name": user["name"], "email": user["email"]})
+            must = STORE.must_change(user["email"])
+            self._json(200, {"name": user["name"], "email": user["email"], "must_change": must})
+        elif STORE.must_change(user["email"]):
+            # Initial password: no data until it has been replaced.
+            self._json(403, {"error": "change_password"})
         elif path == "/api/photo":
             self._photo(user["email"])
         elif path in FILES:
@@ -189,10 +193,14 @@ class Handler(BaseHTTPRequestHandler):
             self._json(401, {"error": "login"})
             return
         new = str(body.get("new", ""))
-        if not STORE.check_password(user["email"], str(body.get("current", ""))):
+        # First login: the session was just opened with the initial password.
+        must = STORE.must_change(user["email"])
+        if not must and not STORE.check_password(user["email"], str(body.get("current", ""))):
             self._json(400, {"error": "A senha atual está errada."})
         elif len(new) < MIN_PASSWORD:
             self._json(400, {"error": f"A nova senha precisa de {MIN_PASSWORD} caracteres."})
+        elif must and STORE.check_password(user["email"], new):
+            self._json(400, {"error": "A nova senha tem de ser diferente da inicial."})
         else:
             STORE.set_password(user["email"], new)
             STORE.delete_sessions(user["email"], keep_token=self._token())

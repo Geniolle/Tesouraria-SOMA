@@ -74,7 +74,10 @@ select[aria-label="Medida"]{margin-left:auto}
 .menuItem:hover{background:#f5f7fa}
 #pwForm{text-align:left;margin-top:4px}
 #pwForm input{width:100%;margin:4px 0}
-#pwMsg{font-size:12px;min-height:16px}
+#pwMsg,#fpMsg{font-size:12px;min-height:16px}
+#firstPw{border:1px solid var(--line);border-radius:10px;padding:24px;width:min(360px,calc(100% - 32px))}
+#firstPw::backdrop{background:rgba(15,23,42,.55)}
+#firstPw input{width:100%;margin:4px 0 8px}
 /* Wide tables scroll inside their card instead of stretching the page. */
 #app{grid-template-columns:minmax(0,1fr)}
 .card,.grid2>*{min-width:0}
@@ -133,6 +136,19 @@ select[aria-label="Medida"]{margin-left:auto}
     </div>
   </div>
 </header>
+
+<dialog id="firstPw" aria-labelledby="fpTitle">
+  <form id="fpForm">
+    <h2 id="fpTitle" style="font-size:16px;margin:0 0 4px">Defina a sua senha</h2>
+    <p class="muted" style="margin:0 0 12px">É o primeiro acesso com a senha inicial. Escolha uma senha nova para continuar.</p>
+    <label for="fpNew" style="font-weight:600">Nova senha (mín. 10 caracteres)</label>
+    <input id="fpNew" type="password" autocomplete="new-password" minlength="10" required>
+    <label for="fpNew2" style="font-weight:600">Repetir nova senha</label>
+    <input id="fpNew2" type="password" autocomplete="new-password" required>
+    <button type="submit" style="width:100%;margin-top:4px">Guardar e continuar</button>
+    <div id="fpMsg" role="alert" style="color:var(--out);margin-top:8px"></div>
+  </form>
+</dialog>
 
 <main>
   <div id="app" class="hidden" style="display:grid;gap:16px">
@@ -1322,8 +1338,10 @@ async function loadUser() {
   try {
     const r = await fetch('api/me', { cache: 'no-store' });
     if (r.status === 401) { location.href = 'login'; return; }
-    if (!r.ok) return;
+    if (!r.ok) return true;
     const u = await r.json();
+    MUST_PW = !!u.must_change;
+    if (MUST_PW) { $('firstPw').showModal(); $('fpNew').focus(); }
     const nome = u.name || u.email || '';
     const ini = nome.split(/\s+/).filter(Boolean).map(w => w[0]).filter((_, i, a) => i === 0 || i === a.length - 1).join('').toUpperCase() || '?';
     $('userBtn').textContent = $('userAv').textContent = ini;
@@ -1334,8 +1352,9 @@ async function loadUser() {
     const img = new Image();
     img.alt = '';
     img.onload = () => { $('userBtn').replaceChildren(img.cloneNode()); $('userAv').replaceChildren(img); };
-    img.src = 'api/photo';
-  } catch (e) { /* menu keeps its placeholder */ }
+    if (!u.must_change) img.src = 'api/photo';
+    return !u.must_change;
+  } catch (e) { return true; /* menu keeps its placeholder */ }
 }
 const menuAberto = open => {
   $('userMenu').classList.toggle('hidden', !open);
@@ -1364,8 +1383,21 @@ $('pwForm').addEventListener('submit', async e => {
   if (ok) $('pwForm').reset();
 });
 
-loadUser();
-loadFromDrive();
+// Mandatory first-access password change: the dialog cannot be dismissed
+// (Chrome may still close it on Escape, so it reopens while the change is pending).
+let MUST_PW = false;
+$('firstPw').addEventListener('cancel', e => e.preventDefault());
+$('firstPw').addEventListener('close', () => { if (MUST_PW) $('firstPw').showModal(); });
+$('fpForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const msg = $('fpMsg');
+  if ($('fpNew').value !== $('fpNew2').value) { msg.textContent = 'As senhas não coincidem.'; return; }
+  const r = await fetch('api/password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ new: $('fpNew').value }) }).catch(() => null);
+  if (r && r.ok) { MUST_PW = false; $('firstPw').close(); loadUser(); loadFromDrive(); return; }
+  msg.textContent = (r && (await r.json().catch(() => ({}))).error) || 'Sem ligação ao servidor.';
+});
+
+loadUser().then(ok => { if (ok) loadFromDrive(); });
 </script>
 </body>
 </html>

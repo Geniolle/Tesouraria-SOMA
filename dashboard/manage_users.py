@@ -4,7 +4,7 @@
     python dashboard/manage_users.py reset EMAIL   # new password for one member
 
 New passwords are printed once (email<TAB>password) to stdout; only their hash is
-stored. ``sync`` also removes accounts whose email left the Diretória.
+stored, and the user must replace it at first login. ``sync`` also removes accounts whose email left the Diretória.
 """
 
 import argparse
@@ -50,7 +50,7 @@ def main() -> None:
         if email not in members:
             raise SystemExit(f"{email} is not in the Diretória (BP SERVICE)")
         password = new_password()
-        store.set_password(email, password)
+        store.set_password(email, password, must_change=True)
         store.delete_sessions(email)
         print(f"{email}\t{password}")
         return
@@ -58,7 +58,7 @@ def main() -> None:
     existing = set(store.emails())
     for email in sorted(set(members) - existing):
         password = new_password()
-        store.set_password(email, password)
+        store.set_password(email, password, must_change=True)
         print(f"{email}\t{password}")
     for email in sorted(existing - set(members)):
         store.delete_user(email)
