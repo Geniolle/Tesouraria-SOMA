@@ -382,6 +382,32 @@ $('refresh').addEventListener('click', loadFromDrive);
 const track = (action, detail = '') => fetch('api/event', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, detail }) }).catch(() => {});
 $('month').addEventListener('change', e => { MONTH = e.target.value; render(); track('periodo', MONTH === 'all' ? YEAR : MONTH); });
 $('year').addEventListener('change', e => { YEAR = e.target.value; MONTH = 'all'; render(); track('periodo', YEAR); });
+// Card interactions for the audit log: open/close, dropdown choices, drill-down clicks.
+// Nearest heading above the element (some cards hold two sections with their own h2).
+const cardName = el => {
+  for (let n = el; n && n.id !== 'app'; n = n.parentElement) {
+    const h = n.querySelector('h2');
+    if (h) return h.textContent.trim();
+  }
+  return '';
+};
+$('app').addEventListener('click', e => {
+  const tog = e.target.closest('button[id^="toggle"]');
+  if (tog) {
+    // Each toggle handler updates its title first; read it after they ran.
+    setTimeout(() => track('card', `${cardName(tog)} · ${tog.title === 'Ocultar' ? 'abriu' : tog.title === 'Mostrar' ? 'fechou' : 'clicou'}`));
+    return;
+  }
+  const alvo = e.target.closest('.cf-row, .cc-cell, .cc-label, [data-m], [data-y]');
+  if (!alvo) return;
+  const quem = alvo.dataset.c || alvo.closest('tr')?.firstElementChild?.textContent || '';
+  const mes = alvo.dataset.m ? `${MESES[+alvo.dataset.m.slice(5) - 1]} ${alvo.dataset.m.slice(0, 4)}` : alvo.dataset.y || '';
+  track('clique', [cardName(alvo), quem.trim(), mes].filter(Boolean).join(' · '));
+}, true); // capture: read the element before the card's own handler re-renders it
+$('app').addEventListener('change', e => {
+  const sel = e.target.closest('select');
+  if (sel) track('opcao', `${cardName(sel)} · ${sel.options[sel.selectedIndex]?.text || sel.value}`);
+});
 $('search').addEventListener('input', renderTable);
 
 let ORIG_OPEN = true;
@@ -1430,6 +1456,7 @@ async function loadAdmin() {
 const ACOES = {
   login: 'Entrou no site', login_falhado: 'Tentativa de login falhada', logout: 'Saiu',
   dados: 'Carregou os dados', periodo: 'Mudou o período para', gerir_contas: 'Abriu Gerir contas',
+  card: 'Card', opcao: 'Escolheu a opção', clique: 'Clicou em',
   senha_alterada: 'Alterou a senha', senha_inicial_trocada: 'Definiu a senha no primeiro acesso',
   admin_nova_senha: 'Gerou senha inicial para', senha_reposta: 'Senha reposta pelo administrador'
 };
