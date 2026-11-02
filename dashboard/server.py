@@ -6,9 +6,12 @@ Binds to localhost only; Caddy terminates HTTPS and enforces basic auth.
 
 Required env (same ``.env`` as the automation): SHEETS_SPREADSHEET_ID,
 VERBO_CAFE_SOURCE_SPREADSHEET_ID, SHEETS_SERVICE_ACCOUNT_PATH.
-Optional: DASHBOARD_PORT (default 8090).
+Optional: DASHBOARD_PORT (default 8090), DASHBOARD_USERS_PATH (JSON profiles
+``{"login": {"name": ..., "email": ..., "role": ...}}`` for ``/api/me``).
+Caddy sends the authenticated login in ``X-Dashboard-User``.
 """
 
+import json
 import logging
 import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -33,6 +36,10 @@ FILES = {
     "/api/main.xlsx": _require("SHEETS_SPREADSHEET_ID"),
     "/api/vc.xlsx": _require("VERBO_CAFE_SOURCE_SPREADSHEET_ID"),
 }
+_users_path = os.environ.get("DASHBOARD_USERS_PATH", "").strip().strip('"')
+USERS: dict[str, dict[str, str]] = (
+    json.loads(Path(_users_path).read_text(encoding="utf-8")) if _users_path else {}
+)
 _creds = service_account.Credentials.from_service_account_file(
     _require("SHEETS_SERVICE_ACCOUNT_PATH"),
     scopes=["https://www.googleapis.com/auth/drive.readonly"],
@@ -52,6 +59,12 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.split("?", 1)[0]
         if path in ("/", "/index.html"):
             self._send(200, INDEX.read_bytes(), "text/html; charset=utf-8")
+            return
+        if path == "/api/me":
+            login = self.headers.get("X-Dashboard-User", "")
+            profile = {"name": login, "email": "", "role": ""} | USERS.get(login, {})
+            body = json.dumps({"login": login, **profile}).encode()
+            self._send(200, body, "application/json")
             return
         file_id = FILES.get(path)
         if not file_id:

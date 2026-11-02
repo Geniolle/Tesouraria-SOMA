@@ -1,9 +1,10 @@
-# Installed at /etc/caddy/Caddyfile. DASHBOARD_DOMAIN and DASHBOARD_USER /
-# DASHBOARD_PASSWORD_HASH come from /etc/caddy/dashboard.env (not in Git).
-# Generate the hash with: caddy hash-password
+# Installed at /etc/caddy/Caddyfile. DASHBOARD_DOMAIN comes from
+# /etc/caddy/dashboard.env; logins live in /etc/caddy/dashboard-users.caddy
+# (one "login hash" per line, mode 640, not in Git).
+# Generate each hash with: caddy hash-password
 {$DASHBOARD_DOMAIN} {
 	basicauth {
-		{$DASHBOARD_USER} {$DASHBOARD_PASSWORD_HASH}
+		import /etc/caddy/dashboard-users.caddy
 	}
 	header {
 		Strict-Transport-Security "max-age=31536000"
@@ -11,5 +12,8 @@
 		X-Frame-Options DENY
 		Referrer-Policy no-referrer
 	}
-	reverse_proxy 127.0.0.1:8090
+	reverse_proxy 127.0.0.1:8090 {
+		# Overwrites any client-sent value; the backend trusts only this.
+		header_up X-Dashboard-User {http.auth.user.id}
+	}
 }
