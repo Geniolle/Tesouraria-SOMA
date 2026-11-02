@@ -773,7 +773,7 @@ function renderCC() {
     cc[c][r._m] = (cc[c][r._m] || 0) + (r._in ? r._v : -r._v);
   });
   const tot = c => months.reduce((s, m) => s + (cc[c][m] || 0), 0);
-  const centros = Object.keys(cc).sort((a, b) => tot(b) - tot(a));
+  const centros = Object.keys(cc).sort((a, b) => a.localeCompare(b, 'pt'));
   const hl = m => m === MONTH ? 'background:#eff6ff;' : '';
   const cor = v => v >= 0 ? 'var(--in)' : 'var(--out)';
   const cel = (v, m, c) => v === undefined
