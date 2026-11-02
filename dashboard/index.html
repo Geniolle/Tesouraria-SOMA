@@ -378,8 +378,10 @@ async function loadFromDrive() {
 }
 
 $('refresh').addEventListener('click', loadFromDrive);
-$('month').addEventListener('change', e => { MONTH = e.target.value; render(); });
-$('year').addEventListener('change', e => { YEAR = e.target.value; MONTH = 'all'; render(); });
+// Page actions sent to the audit log (server keeps a whitelist).
+const track = (action, detail = '') => fetch('api/event', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, detail }) }).catch(() => {});
+$('month').addEventListener('change', e => { MONTH = e.target.value; render(); track('periodo', MONTH === 'all' ? YEAR : MONTH); });
+$('year').addEventListener('change', e => { YEAR = e.target.value; MONTH = 'all'; render(); track('periodo', YEAR); });
 $('search').addEventListener('input', renderTable);
 
 let ORIG_OPEN = true;
@@ -1415,17 +1417,42 @@ $('fpForm').addEventListener('submit', async e => {
 });
 
 // Admin: account list per Diretória member, create/reset with a one-time password.
-const quando = t => t ? new Date(t * 1000).toLocaleString('pt-PT', { dateStyle: 'short', timeStyle: 'short' }) : '—';
+const quando = t => t ? new Date(t * 1000).toLocaleString('pt-PT', { dateStyle: 'short', timeStyle: 'medium' }) : '—';
 async function loadAdmin() {
   const r = await fetch('api/admin/users', { cache: 'no-store' }).catch(() => null);
   if (!r || !r.ok) { $('adminList').innerHTML = '<span class="muted">Não foi possível carregar as contas.</span>'; return; }
   const { users } = await r.json();
   $('adminList').innerHTML = `<table><thead><tr><th>Nome</th><th>Email</th><th>Estado</th><th>Último acesso</th><th></th></tr></thead><tbody>${users.map(u => {
     const estado = !u.has_account ? '<span class="pill">Sem conta</span>' : u.must_change ? '<span class="pill" style="background:#fef3c7">Senha inicial</span>' : '<span class="pill ok">Ativa</span>';
-    return `<tr><td>${esc(u.name)}</td><td>${esc(u.email)}</td><td>${estado}</td><td>${quando(u.last_login)}</td><td><button type="button" class="adminReset" data-email="${esc(u.email)}">${u.has_account ? 'Nova senha' : 'Criar conta'}</button></td></tr>`;
+    return `<tr><td><button type="button" class="adminHist" data-email="${esc(u.email)}" aria-expanded="false" style="border:0;background:none;padding:0;color:var(--acc);text-decoration:underline;cursor:pointer">${esc(u.name)}</button></td><td>${esc(u.email)}</td><td>${estado}</td><td>${quando(u.last_login)}</td><td><button type="button" class="adminReset" data-email="${esc(u.email)}">${u.has_account ? 'Nova senha' : 'Criar conta'}</button></td></tr>`;
   }).join('')}</tbody></table>`;
 }
-$('adminOpen').addEventListener('click', () => { menuAberto(false); $('adminPw').classList.add('hidden'); $('adminDlg').showModal(); loadAdmin(); });
+const ACOES = {
+  login: 'Entrou no site', login_falhado: 'Tentativa de login falhada', logout: 'Saiu',
+  dados: 'Carregou os dados', periodo: 'Mudou o período para', gerir_contas: 'Abriu Gerir contas',
+  senha_alterada: 'Alterou a senha', senha_inicial_trocada: 'Definiu a senha no primeiro acesso',
+  admin_nova_senha: 'Gerou senha inicial para', senha_reposta: 'Senha reposta pelo administrador'
+};
+// Click on a name: that user's history (newest first) in a row below.
+$('adminList').addEventListener('click', async e => {
+  const b = e.target.closest('.adminHist');
+  if (!b) return;
+  const tr = b.closest('tr'), aberto = tr.nextElementSibling?.classList.contains('hist');
+  $('adminList').querySelectorAll('tr.hist').forEach(x => x.remove());
+  $('adminList').querySelectorAll('.adminHist').forEach(x => x.setAttribute('aria-expanded', 'false'));
+  if (aberto) return;
+  b.setAttribute('aria-expanded', 'true');
+  const row = document.createElement('tr');
+  row.className = 'hist';
+  row.innerHTML = '<td colspan="5" class="muted" style="background:#fbfcfd">A carregar…</td>';
+  tr.after(row);
+  const r = await fetch('api/admin/events?email=' + encodeURIComponent(b.dataset.email), { cache: 'no-store' }).catch(() => null);
+  const ev = r && r.ok ? (await r.json()).events : null;
+  row.firstElementChild.innerHTML = !ev ? 'Não foi possível carregar o histórico.' : !ev.length ? 'Sem registos.'
+    : `<div style="max-height:320px;overflow:auto"><table style="font-size:12px"><thead><tr><th>Data e hora</th><th>Ação</th><th>Detalhe</th><th>IP</th></tr></thead><tbody>${ev.map(x =>
+      `<tr><td>${quando(x.ts)}</td><td>${esc(ACOES[x.action] || x.action)}</td><td>${esc(x.detail)}</td><td>${esc(x.ip)}</td></tr>`).join('')}</tbody></table></div>`;
+});
+$('adminOpen').addEventListener('click', () => { track('gerir_contas'); menuAberto(false); $('adminPw').classList.add('hidden'); $('adminDlg').showModal(); loadAdmin(); });
 $('adminClose').addEventListener('click', () => $('adminDlg').close());
 $('adminList').addEventListener('click', async e => {
   const b = e.target.closest('.adminReset');

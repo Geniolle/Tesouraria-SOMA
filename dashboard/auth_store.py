@@ -86,6 +86,13 @@ class AuthStore:
                 "CREATE TABLE IF NOT EXISTS sessions ("
                 "token_hash TEXT PRIMARY KEY, email TEXT NOT NULL, expires_at INTEGER NOT NULL)"
             )
+            # Audit trail: every access and action, kept indefinitely.
+            db.execute(
+                "CREATE TABLE IF NOT EXISTS events ("
+                "id INTEGER PRIMARY KEY, email TEXT NOT NULL, ts INTEGER NOT NULL, "
+                "action TEXT NOT NULL, detail TEXT NOT NULL DEFAULT '', ip TEXT NOT NULL DEFAULT '')"
+            )
+            db.execute("CREATE INDEX IF NOT EXISTS events_email_ts ON events (email, ts)")
 
     @contextmanager
     def _conn(self) -> Iterator[sqlite3.Connection]:
@@ -101,6 +108,22 @@ class AuthStore:
         with self._conn() as db:
             rows = db.execute("SELECT email, must_change, last_login FROM users").fetchall()
         return {e: {"must_change": m, "last_login": last} for e, m, last in rows}
+
+    def log_event(self, email: str, action: str, detail: str = "", ip: str = "") -> None:
+        with self._conn() as db:
+            db.execute(
+                "INSERT INTO events (email, ts, action, detail, ip) VALUES (?, ?, ?, ?, ?)",
+                (_norm(email), int(time.time()), action, detail[:200], ip[:64]),
+            )
+
+    def events(self, email: str, limit: int = 500) -> list[dict[str, str | int]]:
+        with self._conn() as db:
+            rows = db.execute(
+                "SELECT ts, action, detail, ip FROM events WHERE email = ? "
+                "ORDER BY ts DESC, id DESC LIMIT ?",
+                (_norm(email), limit),
+            ).fetchall()
+        return [{"ts": t, "action": a, "detail": d, "ip": i} for t, a, d, i in rows]
 
     def emails(self) -> list[str]:
         with self._conn() as db:

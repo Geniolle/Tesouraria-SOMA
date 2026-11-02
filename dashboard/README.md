@@ -58,7 +58,9 @@ Admins (`DASHBOARD_ADMIN_EMAILS` in `.env`, comma-separated Diretória emails)
 see "Administrador" in the menu and a "Gerir contas" window: every Diretória
 member with their account state (no account / initial password / active) and
 last login, plus "Criar conta" / "Nova senha", which shows a one-time initial
-password.
+password. Clicking a name shows that user's history from the `events` table
+(kept indefinitely): logins, failed logins, logouts, data loads, period
+changes, password changes and admin actions, with time and IP.
 Ten failed logins per IP or email block further attempts for 15 minutes.
 
 ## Deploy (server `ubuntu@152.67.150.143`)

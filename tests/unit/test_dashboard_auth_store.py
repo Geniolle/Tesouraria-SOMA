@@ -78,3 +78,13 @@ def test_initial_password_from_env(monkeypatch) -> None:
     assert len(auth_store.generate_password()) == 16
     monkeypatch.setenv("DASHBOARD_INITIAL_PASSWORD", "fixa-inicial")
     assert auth_store.generate_password() == "fixa-inicial"
+
+
+def test_events_are_kept_per_user_newest_first(tmp_path: Path) -> None:
+    store = AuthStore(tmp_path / "auth.db")
+    store.log_event("Ana@Example.pt", "login", ip="1.2.3.4")
+    store.log_event("ana@example.pt", "dados")
+    store.log_event("rui@example.pt", "login")
+    events = store.events("ana@example.pt")
+    assert [e["action"] for e in events] == ["dados", "login"]
+    assert events[1]["ip"] == "1.2.3.4"

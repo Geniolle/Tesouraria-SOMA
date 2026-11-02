@@ -24,6 +24,7 @@ import time
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 from auth_store import SESSION_TTL, AuthStore, generate_password
 from directory import Directory, DirectoryUnavailable
@@ -34,6 +35,7 @@ XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 HERE = Path(__file__).parent
 PAGES = {"/": "index.html", "/index.html": "index.html", "/login": "login.html"}
 MIN_PASSWORD = 10
+CLIENT_EVENTS = {"periodo", "gerir_contas"}
 MAX_BODY = 4096
 MAX_FAILS, FAIL_WINDOW = 10, 15 * 60
 log = logging.getLogger("dashboard")
@@ -154,7 +156,12 @@ class Handler(BaseHTTPRequestHandler):
             self._photo(user["email"])
         elif path == "/api/admin/users" and user["email"] in ADMINS:
             self._admin_users()
+        elif path == "/api/admin/events" and user["email"] in ADMINS:
+            email = parse_qs(urlsplit(self.path).query).get("email", [""])[0]
+            self._json(200, {"events": STORE.events(email)})
         elif path in FILES:
+            if path == "/api/main.xlsx":  # one per page load / "Atualizar"
+                self._audit(user["email"], "dados")
             self._export(path)
         else:
             self._send(404, b"Not found", "text/plain")
@@ -167,12 +174,17 @@ class Handler(BaseHTTPRequestHandler):
                 self._login(body)
             elif path == "/api/logout":
                 if self._token():
+                    email = STORE.session_email(self._token())
+                    if email:
+                        self._audit(email, "logout")
                     STORE.delete_session(self._token())
                 self._json(200, {}, {"Set-Cookie": "sid=; Max-Age=0; Path=/; HttpOnly; Secure"})
             elif path == "/api/password":
                 self._change_password(body)
             elif path == "/api/admin/reset":
                 self._admin_reset(body)
+            elif path == "/api/event":
+                self._client_event(body)
             else:
                 self._send(404, b"Not found", "text/plain")
         except DirectoryUnavailable:
@@ -189,10 +201,13 @@ class Handler(BaseHTTPRequestHandler):
         if not (email and DIRECTORY.get(email) and STORE.check_password(email, password)):
             _fail(ip_key, email_key)
             log.warning("Failed login from %s", self._client())
+            if email and DIRECTORY.get(email):  # only members, so bots cannot fill the log
+                self._audit(email, "login_falhado")
             self._json(401, {"error": "Email ou senha inválidos."})
             return
         token = STORE.create_session(email)
         log.info("Login ok from %s", self._client())
+        self._audit(email, "login")
         cookie = f"sid={token}; Max-Age={SESSION_TTL}; Path=/; HttpOnly; Secure; SameSite=Strict"
         self._json(200, {}, {"Set-Cookie": cookie})
 
@@ -213,7 +228,24 @@ class Handler(BaseHTTPRequestHandler):
         else:
             STORE.set_password(user["email"], new)
             STORE.delete_sessions(user["email"], keep_token=self._token())
+            self._audit(user["email"], "senha_inicial_trocada" if must else "senha_alterada")
             self._json(200, {})
+
+    def _audit(self, email: str, action: str, detail: str = "") -> None:
+        try:
+            STORE.log_event(email, action, detail, self._client())
+        except Exception:  # auditing must never break the request
+            log.exception("Audit write failed")
+
+    def _client_event(self, body: dict) -> None:
+        """Page actions reported by the browser (whitelisted, logged-in users only)."""
+        user = self._user()
+        action = str(body.get("action", ""))
+        if not user or action not in CLIENT_EVENTS:
+            self._json(400, {})
+            return
+        self._audit(user["email"], action, str(body.get("detail", "")))
+        self._json(200, {})
 
     @staticmethod
     def _public(member: dict[str, str]) -> dict[str, str]:
@@ -242,6 +274,8 @@ class Handler(BaseHTTPRequestHandler):
         STORE.set_password(email, password, must_change=True)
         STORE.delete_sessions(email, keep_token=self._token() if email == user["email"] else None)
         log.info("Admin reset password for an account")
+        self._audit(user["email"], "admin_nova_senha", email)
+        self._audit(email, "senha_reposta", user["email"])
         self._json(200, {"email": email, "password": password})
 
     def _photo(self, email: str) -> None:
