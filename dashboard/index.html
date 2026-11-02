@@ -180,11 +180,6 @@ select[aria-label="Medida"]{margin-left:auto}
       </div>
     </div>
 
-    <div class="grid2">
-      <div class="card"><h2>Estado dos lançamentos</h2><div id="status-box"></div></div>
-      <div class="card"><h2>Controlos de qualidade</h2><div id="quality"></div></div>
-    </div>
-
     <div id="originsCard" class="card">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><button type="button" id="toggleOrig" title="Ocultar" aria-label="Ocultar" style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;color:var(--muted)"><svg id="toggleOrigIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .2s ease"><polyline points="6 9 12 15 18 9"></polyline></svg></button><h2 style="margin:0">Validação das origens</h2></div>
       <div id="origins" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px"></div>
@@ -402,7 +397,6 @@ function render() {
   renderCustosFixos();
   renderMotivos();
   breakdown(f);
-  statusAndQuality(f);
   renderTable();
 }
 
@@ -845,40 +839,6 @@ function breakdown(f) {
   renderBars('byPlano', groupSum(f, r => r['PLANO DE CONTA'], r => r._v).slice(0, 8));
   renderBars('byForma', groupSum(f, r => r['FORMA DE PAGAMENTO'], r => r._v).slice(0, 8));
   renderBars('byCaixa', groupSum(f, r => r['CAIXA'], r => r._v).slice(0, 8));
-}
-
-function statusAndQuality(f) {
-  const counts = groupSum(f, r => r.STATUS, () => 1);
-  $('status-box').innerHTML = counts.length ? counts.map(([k, v]) => {
-    const cls = k === 'VALIDADO' ? 'ok' : 'wa';
-    return `<div class="qrow"><span>${esc(k)}</span><span><span class="pill ${cls}">${v}</span></span></div>`;
-  }).join('') : '<span class="muted">Sem dados</span>';
-
-  const notVal = f.filter(r => r.STATUS !== 'VALIDADO');
-  const idCount = {}; RECS.forEach(r => { if (r.ID_INTERNO) idCount[r.ID_INTERNO] = (idCount[r.ID_INTERNO] || 0) + 1; });
-  const dupIds = Object.values(idCount).filter(c => c > 1).length;
-  const docCount = {}; RECS.forEach(r => { if (r['DOC. SOMA']) docCount[r['DOC. SOMA']] = (docCount[r['DOC. SOMA']] || 0) + 1; });
-  const dupDocs = Object.values(docCount).filter(c => c > 1).length;
-  const noValor = f.filter(r => !r['DATA VALOR']).length;
-  const noUser = f.filter(r => !r.IDUSER).length;
-  const noTs = f.filter(r => !r.TIMESTAMP).length;
-  const mism = f.filter(r => {
-    const t = toDate(r.TIMESTAMP), g = regDate(r);
-    return t && g && Math.abs(t - g) > 5 * 60000;
-  }).length;
-
-  const checks = [
-    ['Não validados (STATUS ≠ VALIDADO)', notVal.length, 'bad'],
-    ['IDs internos duplicados (global)', dupIds, 'bad'],
-    ['DOC. SOMA repetidos (global)', dupDocs, 'wa'],
-    ['Sem DATA VALOR', noValor, 'wa'],
-    ['Sem IDUSER', noUser, 'wa'],
-    ['Sem TIMESTAMP', noTs, 'wa'],
-    ['TIMESTAMP ≠ "Registrado em" (>5 min)', mism, 'wa'],
-  ];
-  $('quality').innerHTML = checks.map(([label, n, sev]) =>
-    `<div class="qrow"><span>${label}</span><span class="pill ${n === 0 ? 'ok' : sev}">${n}</span></div>`
-  ).join('');
 }
 
 function renderTable() {
