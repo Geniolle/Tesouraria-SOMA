@@ -753,7 +753,7 @@ $('ccProg').addEventListener('click', e => {
 });
 
 function ccDet(c, n) {
-  const recs = RECS.filter(r => r._m === CC_SEL.m && (YEAR === 'all' || r._y === YEAR) && !['CARTAO', 'TRANSFERENCIA'].includes(normS(r.TIPO)) && (r['CENTRO DE CUSTO'] || '(vazio)') === c).sort((a, b) => (a._d || 0) - (b._d || 0));
+  const recs = RECS.filter(r => r._m === CC_SEL.m && (YEAR === 'all' || r._y === YEAR) && normS(r.TIPO) !== 'TRANSFERENCIA' && (r['CENTRO DE CUSTO'] || '(vazio)') === c).sort((a, b) => (a._d || 0) - (b._d || 0));
   const soma = recs.reduce((s, r) => s + (r._in ? r._v : -r._v), 0);
   const linhas = recs.map(x => `<tr><td>${esc(x['DATA MOV.'])}</td><td>${esc(x['DESCRIÇÃO'])}</td><td>${esc(x.TIPO)}</td><td>${esc(x.ID_INTERNO)}</td><td>${esc(x.PROCESSO)}</td><td class="num" style="color:${x._in ? 'var(--in)' : 'var(--out)'}">${x._in ? '+' : '−'}${eur(x._v)}</td><td>${esc(x.STATUS)}</td></tr>`).join('');
   return `<tr class="cc-det"><td colspan="${n}" style="padding:8px 16px;background:#fbfcfd"><div class="muted" style="font-size:12px;margin-bottom:6px">${MESES[+CC_SEL.m.slice(5) - 1]} ${CC_SEL.m.slice(0, 4)} · ${recs.length} lançamentos · soma ${eur(soma)}</div>${recs.length ? `<div style="overflow-x:auto"><table style="font-size:12px"><thead><tr><th>Data mov.</th><th>Descrição</th><th>Tipo</th><th>ID</th><th>Processo</th><th class="num">Valor</th><th>Status</th></tr></thead><tbody>${linhas}</tbody></table></div>` : '<span class="muted">Sem lançamentos</span>'}</td></tr>`;
@@ -761,7 +761,7 @@ function ccDet(c, n) {
 
 function renderCC() {
   const el = $('ccProg');
-  const scope = RECS.filter(r => r._m && (YEAR === 'all' || r._y === YEAR) && !['CARTAO', 'TRANSFERENCIA'].includes(normS(r.TIPO)));
+  const scope = RECS.filter(r => r._m && (YEAR === 'all' || r._y === YEAR) && normS(r.TIPO) !== 'TRANSFERENCIA');
   const months = YEAR === 'all'
     ? [...new Set(scope.map(r => r._m))].sort()
     : Array.from({ length: 12 }, (_, i) => `${YEAR}-${String(i + 1).padStart(2, '0')}`);
