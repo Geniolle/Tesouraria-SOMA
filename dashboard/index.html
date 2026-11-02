@@ -1250,11 +1250,14 @@ function renderMotivos() {
   const tbl = (rows, bom) => `<table style="font-size:13px"><thead><tr><th>Centro de custo</th><th class="num">Nº</th><th class="num">Ticket médio</th><th class="num">Δ €</th></tr></thead><tbody>${rows.map(x =>
     `<tr><td>${esc(x.g)}${x.a.n ? '' : ' <span class="pill">sem mov. no mês anterior</span>'}</td><td class="num" style="white-space:nowrap">${x.a.n} → ${x.b.n}</td><td class="num" style="white-space:nowrap">${eur(x.a.t)} → ${eur(x.b.t)}</td><td class="num" style="font-weight:600;white-space:nowrap;${cor(x.d, bom)}">${fd(x.d)}</td></tr>`).join('')}</tbody></table>`;
   const kpi = (l, a, b, bom) => `<div class="kpi"><div class="l">${l}</div><div class="v" style="${cor(b - a, bom)}">${fd(b - a)}</div><div class="muted" style="font-size:12px">${eur(a)} → ${eur(b)} · ${fp(pct(a, b))}</div></div>`;
-  const split = (a, b, bom) => `<div style="font-size:13px;margin:6px 0 10px">Nº de lançamentos: <b>${a.n} → ${b.n}</b> (efeito quantidade <b style="${cor(vol(a, b), bom)}">${fd(vol(a, b))}</b>) · Ticket médio: <b>${eur(a.t)} → ${eur(b.t)}</b> (efeito ticket <b style="${cor(tic(a, b), bom)}">${fd(tic(a, b))}</b>)</div>`;
+  const split = (a, b, bom, rot = '') => `<div style="font-size:13px;margin:6px 0 10px">${rot}Nº de lançamentos: <b>${a.n} → ${b.n}</b> (efeito quantidade <b style="${cor(vol(a, b), bom)}">${fd(vol(a, b))}</b>) · Ticket médio: <b>${eur(a.t)} → ${eur(b.t)}</b> (efeito ticket <b style="${cor(tic(a, b), bom)}">${fd(tic(a, b))}</b>)</div>`;
 
   // Donors identified by DESCRIÇÃO: approximate, cash entries share generic descriptions.
-  const doad = a => a.filter(r => normS(r['CENTRO DE CUSTO']).includes('DIZIMOS')).reduce((o, r) => { o[r['DESCRIÇÃO']] = (o[r['DESCRIÇÃO']] || 0) + r._v; return o; }, {});
-  const dA = doad(inA), dB = doad(inB);
+  // Count and ticket of entries use tithes only: small café sales would distort them.
+  const dzA = inA.filter(r => normS(r['CENTRO DE CUSTO']).includes('DIZIMOS')), dzB = inB.filter(r => normS(r['CENTRO DE CUSTO']).includes('DIZIMOS'));
+  const zA = st(dzA), zB = st(dzB);
+  const doad = a => a.reduce((o, r) => { o[r['DESCRIÇÃO']] = (o[r['DESCRIÇÃO']] || 0) + r._v; return o; }, {});
+  const dA = doad(dzA), dB = doad(dzB);
   const rec = Object.keys(dB).filter(k => k in dA), nov = Object.keys(dB).filter(k => !(k in dA)), per = Object.keys(dA).filter(k => !(k in dB));
   const soma = (o, ks) => ks.reduce((s, k) => s + o[k], 0);
   const recD = soma(dB, rec) - soma(dA, rec);
@@ -1271,15 +1274,15 @@ function renderMotivos() {
   const cA = cart(prevKey), cB = cart(MONTH);
 
   const curto = x => `${esc(x.g.replace(/^[\d.]+\s*-\s*/, ''))} (${fd(x.d)})`;
-  const dn = iB.n - iA.n;
-  const frase = `<b>Entradas ${fp(pct(iA.s, iB.s))}</b>: ${dn === 0 ? 'mesmo nº de lançamentos' : `${dn > 0 ? 'mais' : 'menos'} lançamentos (${dn > 0 ? '+' : ''}${dn})`} e ticket médio ${fp(pct(iA.t, iB.t))}${rec.length ? `; doadores recorrentes ${fd(recD)}` : ''}. `
+  const dn = zB.n - zA.n;
+  const frase = `<b>Entradas ${fp(pct(iA.s, iB.s))}</b>: dízimos e ofertas com ${dn === 0 ? 'o mesmo nº de lançamentos' : `${dn > 0 ? 'mais' : 'menos'} lançamentos (${dn > 0 ? '+' : ''}${dn})`} e ticket médio ${fp(pct(zA.t, zB.t))}${rec.length ? `; doadores recorrentes ${fd(recD)}` : ''}. `
     + `<b>Saídas ${fp(pct(oA.s, oB.s))}</b>${piores.length ? `: subiram ${piores.slice(0, 2).map(curto).join(' e ')}` : ''}${melhores.length ? `${piores.length ? '; ' : ': '}desceram ${melhores.slice(0, 2).map(curto).join(' e ')}` : ''}.`;
 
   el.innerHTML = `
     <div style="background:#f5f7fa;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:13px">${frase}</div>
     <div class="kpis" style="margin-bottom:16px">${kpi('Entradas', iA.s, iB.s, true)}${kpi('Saídas', oA.s, oB.s, false)}${kpi('Saldo', iA.s - oA.s, iB.s - oB.s, true)}</div>
     <h2 style="color:var(--in)">Entradas</h2>
-    ${split(iA, iB, true)}
+    ${split(zA, zB, true, '<b>Dízimos e ofertas</b> · ')}
     <div style="overflow-x:auto">${tbl(inCC, true)}</div>
     <div style="font-size:13px;margin:10px 0 4px">Dízimos e ofertas por doador <span class="muted">(identificado pela descrição; aproximado)</span>:
       recorrentes <b>${rec.length}</b> (${eur(soma(dA, rec))} → ${eur(soma(dB, rec))}, <b style="${cor(recD, true)}">${fd(recD)}</b>) ·
