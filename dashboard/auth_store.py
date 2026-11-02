@@ -7,6 +7,7 @@ digests, so a copy of the database does not grant access.
 import base64
 import hashlib
 import hmac
+import os
 import secrets
 import sqlite3
 import string
@@ -20,6 +21,13 @@ _N, _R, _P = 2**14, 8, 1
 
 
 def generate_password() -> str:
+    """Initial password for new/reset accounts (always changed at first login).
+
+    DASHBOARD_INITIAL_PASSWORD fixes it (owner's choice); otherwise random.
+    """
+    fixed = os.environ.get("DASHBOARD_INITIAL_PASSWORD", "").strip().strip('"')
+    if fixed:
+        return fixed
     alphabet = string.ascii_letters + string.digits
     return "".join(secrets.choice(alphabet) for _ in range(16))
 

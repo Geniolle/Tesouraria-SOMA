@@ -26,7 +26,9 @@ production server. Only Diretória members can log in.
 Required env (project `.env`): `SHEETS_SPREADSHEET_ID`,
 `VERBO_CAFE_SOURCE_SPREADSHEET_ID`, `SHEETS_SERVICE_ACCOUNT_PATH`,
 `BP_SERVICE_SPREADSHEET_ID`, `DASHBOARD_DB_PATH`. The server fails at startup
-if any is missing. Optional: `DASHBOARD_ADMIN_EMAILS`.
+if any is missing. Optional: `DASHBOARD_ADMIN_EMAILS`,
+`DASHBOARD_INITIAL_PASSWORD` (fixed initial password for new/reset accounts;
+random when unset).
 
 Profile photos are found in Drive by the file name stored in `FOTO DO PERFIL`;
 they only show if the AppSheet images folders are shared (read-only) with the

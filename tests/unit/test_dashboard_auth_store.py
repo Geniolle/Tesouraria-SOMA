@@ -71,3 +71,10 @@ def test_accounts_report_state_and_last_login(tmp_path: Path) -> None:
     assert store.accounts() == {"ana@example.pt": {"must_change": 1, "last_login": None}}
     store.create_session("ana@example.pt")
     assert store.accounts()["ana@example.pt"]["last_login"] is not None
+
+
+def test_initial_password_from_env(monkeypatch) -> None:
+    monkeypatch.delenv("DASHBOARD_INITIAL_PASSWORD", raising=False)
+    assert len(auth_store.generate_password()) == 16
+    monkeypatch.setenv("DASHBOARD_INITIAL_PASSWORD", "fixa-inicial")
+    assert auth_store.generate_password() == "fixa-inicial"
