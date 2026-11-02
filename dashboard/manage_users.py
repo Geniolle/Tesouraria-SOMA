@@ -9,14 +9,10 @@ stored, and the user must replace it at first login. ``sync`` also removes accou
 
 import argparse
 import os
-import secrets
-import string
 
-from auth_store import AuthStore
+from auth_store import AuthStore, generate_password
 from directory import Directory
 from google.oauth2 import service_account
-
-ALPHABET = string.ascii_letters + string.digits
 
 
 def _env(name: str) -> str:
@@ -24,10 +20,6 @@ def _env(name: str) -> str:
     if not value:
         raise SystemExit(f"Missing required env var {name}")
     return value
-
-
-def new_password() -> str:
-    return "".join(secrets.choice(ALPHABET) for _ in range(16))
 
 
 def main() -> None:
@@ -49,7 +41,7 @@ def main() -> None:
         email = args.email.strip().lower()
         if email not in members:
             raise SystemExit(f"{email} is not in the Diretória (BP SERVICE)")
-        password = new_password()
+        password = generate_password()
         store.set_password(email, password, must_change=True)
         store.delete_sessions(email)
         print(f"{email}\t{password}")
@@ -57,7 +49,7 @@ def main() -> None:
 
     existing = set(store.emails())
     for email in sorted(set(members) - existing):
-        password = new_password()
+        password = generate_password()
         store.set_password(email, password, must_change=True)
         print(f"{email}\t{password}")
     for email in sorted(existing - set(members)):

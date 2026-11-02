@@ -12,7 +12,8 @@ Accounts are created with ``manage_users.py``.
 Required env (same ``.env`` as the automation): SHEETS_SPREADSHEET_ID,
 VERBO_CAFE_SOURCE_SPREADSHEET_ID, SHEETS_SERVICE_ACCOUNT_PATH,
 BP_SERVICE_SPREADSHEET_ID, DASHBOARD_DB_PATH.
-Optional: DASHBOARD_PORT (default 8090).
+Optional: DASHBOARD_PORT (default 8090), DASHBOARD_ADMIN_EMAILS (comma-separated
+Diretória emails that may manage accounts from the page).
 """
 
 import json
@@ -24,7 +25,7 @@ from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from auth_store import SESSION_TTL, AuthStore
+from auth_store import SESSION_TTL, AuthStore, generate_password
 from directory import Directory, DirectoryUnavailable
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -55,6 +56,9 @@ CREDS = service_account.Credentials.from_service_account_file(
 )
 STORE = AuthStore(_require("DASHBOARD_DB_PATH"))
 DIRECTORY = Directory(CREDS, _require("BP_SERVICE_SPREADSHEET_ID"))
+ADMINS = {
+    e.strip().lower() for e in os.environ.get("DASHBOARD_ADMIN_EMAILS", "").split(",") if e.strip()
+}
 
 # Failed logins per client IP and per email (in memory; one process).
 _fails: dict[str, list[float]] = {}
@@ -141,12 +145,15 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, (HERE / PAGES[path]).read_bytes(), "text/html; charset=utf-8")
         elif path == "/api/me":
             must = STORE.must_change(user["email"])
-            self._json(200, {"name": user["name"], "email": user["email"], "must_change": must})
+            admin = user["email"] in ADMINS
+            self._json(200, {**self._public(user), "must_change": must, "admin": admin})
         elif STORE.must_change(user["email"]):
             # Initial password: no data until it has been replaced.
             self._json(403, {"error": "change_password"})
         elif path == "/api/photo":
             self._photo(user["email"])
+        elif path == "/api/admin/users" and user["email"] in ADMINS:
+            self._admin_users()
         elif path in FILES:
             self._export(path)
         else:
@@ -164,6 +171,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, {}, {"Set-Cookie": "sid=; Max-Age=0; Path=/; HttpOnly; Secure"})
             elif path == "/api/password":
                 self._change_password(body)
+            elif path == "/api/admin/reset":
+                self._admin_reset(body)
             else:
                 self._send(404, b"Not found", "text/plain")
         except DirectoryUnavailable:
@@ -205,6 +214,35 @@ class Handler(BaseHTTPRequestHandler):
             STORE.set_password(user["email"], new)
             STORE.delete_sessions(user["email"], keep_token=self._token())
             self._json(200, {})
+
+    @staticmethod
+    def _public(member: dict[str, str]) -> dict[str, str]:
+        return {"name": member["name"], "email": member["email"]}
+
+    def _admin_users(self) -> None:
+        """Diretória members with their account state, for the admin page."""
+        accounts = STORE.accounts()
+        users = [
+            {**self._public(m), **accounts.get(email, {}), "has_account": email in accounts}
+            for email, m in sorted(DIRECTORY.members().items(), key=lambda kv: kv[1]["name"])
+        ]
+        self._json(200, {"users": users})
+
+    def _admin_reset(self, body: dict) -> None:
+        """Create or reset a member's account; the initial password is shown once."""
+        user = self._user()
+        if not user or user["email"] not in ADMINS or STORE.must_change(user["email"]):
+            self._json(403, {"error": "Sem permissão."})
+            return
+        email = str(body.get("email", "")).strip().lower()
+        if not DIRECTORY.get(email):
+            self._json(400, {"error": "Este email não está na Diretória."})
+            return
+        password = generate_password()
+        STORE.set_password(email, password, must_change=True)
+        STORE.delete_sessions(email, keep_token=self._token() if email == user["email"] else None)
+        log.info("Admin reset password for an account")
+        self._json(200, {"email": email, "password": password})
 
     def _photo(self, email: str) -> None:
         try:

@@ -63,3 +63,11 @@ def test_old_database_gets_must_change_column(tmp_path: Path) -> None:
     db.close()
     store = AuthStore(tmp_path / "auth.db")
     assert not store.must_change("ana@example.pt")
+
+
+def test_accounts_report_state_and_last_login(tmp_path: Path) -> None:
+    store = AuthStore(tmp_path / "auth.db")
+    store.set_password("ana@example.pt", "inicial-123", must_change=True)
+    assert store.accounts() == {"ana@example.pt": {"must_change": 1, "last_login": None}}
+    store.create_session("ana@example.pt")
+    assert store.accounts()["ana@example.pt"]["last_login"] is not None

@@ -26,7 +26,7 @@ production server. Only Diretória members can log in.
 Required env (project `.env`): `SHEETS_SPREADSHEET_ID`,
 `VERBO_CAFE_SOURCE_SPREADSHEET_ID`, `SHEETS_SERVICE_ACCOUNT_PATH`,
 `BP_SERVICE_SPREADSHEET_ID`, `DASHBOARD_DB_PATH`. The server fails at startup
-if any is missing.
+if any is missing. Optional: `DASHBOARD_ADMIN_EMAILS`.
 
 Profile photos are found in Drive by the file name stored in `FOTO DO PERFIL`;
 they only show if the AppSheet images folders are shared (read-only) with the
@@ -51,6 +51,12 @@ Generated passwords are initial: at first login a popup that cannot be
 dismissed forces a new password, and the data endpoints answer 403 until it
 is changed. Members can change it again in the user menu (minimum 10
 characters).
+
+Admins (`DASHBOARD_ADMIN_EMAILS` in `.env`, comma-separated Diretória emails)
+see "Administrador" in the menu and a "Gerir contas" window: every Diretória
+member with their account state (no account / initial password / active) and
+last login, plus "Criar conta" / "Nova senha", which shows a one-time initial
+password.
 Ten failed logins per IP or email block further attempts for 15 minutes.
 
 ## Deploy (server `ubuntu@152.67.150.143`)

@@ -9,6 +9,7 @@ import hashlib
 import hmac
 import secrets
 import sqlite3
+import string
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -16,6 +17,11 @@ from pathlib import Path
 
 SESSION_TTL = 12 * 3600
 _N, _R, _P = 2**14, 8, 1
+
+
+def generate_password() -> str:
+    alphabet = string.ascii_letters + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(16))
 
 
 def _b64(raw: bytes) -> str:
@@ -60,9 +66,14 @@ class AuthStore:
                 "email TEXT PRIMARY KEY, pw_hash TEXT NOT NULL, updated_at INTEGER NOT NULL, "
                 "must_change INTEGER NOT NULL DEFAULT 0)"
             )
+            # Columns added after the first release; older databases get them here.
             columns = [row[1] for row in db.execute("PRAGMA table_info(users)")]
-            if "must_change" not in columns:  # databases created before this column
-                db.execute("ALTER TABLE users ADD COLUMN must_change INTEGER NOT NULL DEFAULT 0")
+            for name, ddl in (
+                ("must_change", "INTEGER NOT NULL DEFAULT 0"),
+                ("last_login", "INTEGER"),
+            ):
+                if name not in columns:
+                    db.execute(f"ALTER TABLE users ADD COLUMN {name} {ddl}")
             db.execute(
                 "CREATE TABLE IF NOT EXISTS sessions ("
                 "token_hash TEXT PRIMARY KEY, email TEXT NOT NULL, expires_at INTEGER NOT NULL)"
@@ -77,6 +88,11 @@ class AuthStore:
                 yield db
         finally:
             db.close()
+
+    def accounts(self) -> dict[str, dict[str, int | None]]:
+        with self._conn() as db:
+            rows = db.execute("SELECT email, must_change, last_login FROM users").fetchall()
+        return {e: {"must_change": m, "last_login": last} for e, m, last in rows}
 
     def emails(self) -> list[str]:
         with self._conn() as db:
@@ -117,6 +133,7 @@ class AuthStore:
         now = int(time.time())
         with self._conn() as db:
             db.execute("DELETE FROM sessions WHERE expires_at < ?", (now,))
+            db.execute("UPDATE users SET last_login = ? WHERE email = ?", (now, _norm(email)))
             db.execute(
                 "INSERT INTO sessions (token_hash, email, expires_at) VALUES (?, ?, ?)",
                 (_token_hash(token), _norm(email), now + SESSION_TTL),
