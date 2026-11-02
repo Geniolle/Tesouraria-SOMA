@@ -379,11 +379,13 @@ function render() {
   const months = [...new Set(RECS.map(r => r._m).filter(Boolean))].sort();
   const sel = $('month');
   const ysel = $('year');
-  const yearsList = [...new Set([...RECS.map(r => r._y).filter(Boolean), ...(YEAR !== 'all' ? [YEAR] : [])])].sort();
+  // Current month is always selectable, even before its first record.
+  const cur = monthKey(new Date());
+  const yearsList = [...new Set([...RECS.map(r => r._y).filter(Boolean), cur.slice(0, 4), ...(YEAR !== 'all' ? [YEAR] : [])])].sort();
   ysel.innerHTML = '<option value="all">Todos os anos</option>' +
     yearsList.map(y => `<option value="${y}">${y}</option>`).join('');
   ysel.value = YEAR;
-  const monthsOfYear = [...new Set([...RECS.filter(r => YEAR === 'all' || r._y === YEAR).map(r => r._m).filter(Boolean), ...(MONTH !== 'all' ? [MONTH] : [])])].sort();
+  const monthsOfYear = [...new Set([...RECS.filter(r => YEAR === 'all' || r._y === YEAR).map(r => r._m).filter(Boolean), ...(YEAR === 'all' || cur.startsWith(YEAR) ? [cur] : []), ...(MONTH !== 'all' ? [MONTH] : [])])].sort();
   sel.innerHTML = '<option value="all">Todos os meses</option>' +
     monthsOfYear.map(m => `<option value="${m}">${MESES[+m.slice(5)-1]} ${m.slice(0,4)}</option>`).join('');
   sel.value = MONTH;
