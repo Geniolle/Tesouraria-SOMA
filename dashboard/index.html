@@ -1239,6 +1239,8 @@ function renderMotivos() {
   const cor = (v, bom) => Math.abs(v) < 0.005 ? '' : `color:${(v > 0) === bom ? 'var(--in)' : 'var(--out)'}`;
   const inA = sel(prevKey, true), inB = sel(MONTH, true), outA = sel(prevKey, false), outB = sel(MONTH, false);
   const iA = st(inA), iB = st(inB), oA = st(outA), oB = st(outB);
+  const vazio = [[MONTH, iB.n + oB.n], [prevKey, iA.n + oA.n]].find(([, n]) => !n);
+  if (vazio) { el.innerHTML = `<span class="muted">Sem dados em ${nome(vazio[0])} para comparar.</span>`; return; }
   // Price/volume split: delta = delta_n * ticket_prev + delta_ticket * n_curr
   const vol = (a, b) => (b.n - a.n) * a.t, tic = (a, b) => (b.t - a.t) * b.n;
   const grp = (a, k) => a.reduce((o, r) => { const g = r[k] || '(vazio)'; (o[g] = o[g] || []).push(r); return o; }, {});
