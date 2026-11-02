@@ -1,19 +1,12 @@
 # Installed at /etc/caddy/Caddyfile. DASHBOARD_DOMAIN comes from
-# /etc/caddy/dashboard.env; logins live in /etc/caddy/dashboard-users.caddy
-# (one "login hash" per line, mode 640, not in Git).
-# Generate each hash with: caddy hash-password
+# /etc/caddy/dashboard.env. Caddy only terminates HTTPS: login (Diretória in
+# BP SERVICE + password) is enforced by dashboard/server.py.
 {$DASHBOARD_DOMAIN} {
-	basicauth {
-		import /etc/caddy/dashboard-users.caddy
-	}
 	header {
 		Strict-Transport-Security "max-age=31536000"
 		X-Content-Type-Options nosniff
 		X-Frame-Options DENY
 		Referrer-Policy no-referrer
 	}
-	reverse_proxy 127.0.0.1:8090 {
-		# Overwrites any client-sent value; the backend trusts only this.
-		header_up X-Dashboard-User {http.auth.user.id}
-	}
+	reverse_proxy 127.0.0.1:8090
 }

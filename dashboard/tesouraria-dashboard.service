@@ -1,5 +1,5 @@
 [Unit]
-Description=Tesouraria CONTAORDEM dashboard (read-only backend)
+Description=Tesouraria CONTAORDEM dashboard
 After=network-online.target
 Wants=network-online.target
 
@@ -13,6 +13,8 @@ RestartSec=5
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=read-only
+# SQLite logins/sessions (DASHBOARD_DB_PATH) live here.
+ReadWritePaths=/home/opc/AppExtrato/data
 PrivateTmp=true
 
 [Install]

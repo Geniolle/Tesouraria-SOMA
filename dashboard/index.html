@@ -69,8 +69,12 @@ select[aria-label="Medida"]{margin-left:auto}
 #userMenu{position:absolute;right:0;top:46px;width:280px;background:var(--card);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:20px 16px 12px;text-align:center;z-index:10}
 #userMenu .av{width:56px;height:56px;margin:0 auto 10px;border-radius:50%;background:#e0ecff;color:#1d4ed8;font-size:20px;font-weight:700;display:flex;align-items:center;justify-content:center}
 #userMenu hr{border:0;border-top:1px solid var(--line);margin:12px 0 8px}
-#logout{width:100%;text-align:left;border:0;background:none;padding:8px}
-#logout:hover{background:#f5f7fa}
+#userMenu .av img,#userBtn img{width:100%;height:100%;border-radius:50%;object-fit:cover}
+.menuItem{width:100%;text-align:left;border:0;background:none;padding:8px}
+.menuItem:hover{background:#f5f7fa}
+#pwForm{text-align:left;margin-top:4px}
+#pwForm input{width:100%;margin:4px 0}
+#pwMsg{font-size:12px;min-height:16px}
 /* Wide tables scroll inside their card instead of stretching the page. */
 #app{grid-template-columns:minmax(0,1fr)}
 .card,.grid2>*{min-width:0}
@@ -114,9 +118,17 @@ select[aria-label="Medida"]{margin-left:auto}
         <div class="av" id="userAv">?</div>
         <div id="userName" style="font-weight:700"></div>
         <div id="userEmail" class="muted" style="font-size:13px;word-break:break-all"></div>
-        <div id="userRole" class="muted" style="font-size:13px"></div>
+        <div class="muted" style="font-size:13px">Diretória</div>
         <hr>
-        <button id="logout" type="button" role="menuitem">Sair</button>
+        <button id="pwToggle" class="menuItem" type="button" role="menuitem" aria-expanded="false" aria-controls="pwForm">Mudar senha</button>
+        <form id="pwForm" class="hidden">
+          <input id="pwCur" type="password" autocomplete="current-password" placeholder="Senha atual" aria-label="Senha atual" required>
+          <input id="pwNew" type="password" autocomplete="new-password" placeholder="Nova senha (mín. 10 caracteres)" aria-label="Nova senha" minlength="10" required>
+          <input id="pwNew2" type="password" autocomplete="new-password" placeholder="Repetir nova senha" aria-label="Repetir nova senha" required>
+          <button type="submit" style="width:100%;margin-top:4px">Guardar senha</button>
+          <div id="pwMsg" role="status"></div>
+        </form>
+        <button id="logout" class="menuItem" type="button" role="menuitem">Sair</button>
       </div>
     </div>
   </div>
@@ -308,6 +320,7 @@ async function loadFromDrive() {
   try {
     const getXlsx = async url => {
       const r = await fetch(url, { cache: 'no-store' });
+      if (r.status === 401) { location.href = 'login'; return new Promise(() => {}); }
       if (!r.ok) throw new Error('Servidor respondeu ' + r.status + ' em ' + url);
       return XLSX.read(await r.arrayBuffer(), { type: 'array' });
     };
@@ -1304,19 +1317,24 @@ $('toggleCC').addEventListener('click', () => {
   $('toggleCC').setAttribute('aria-label', $('toggleCC').title);
 });
 
-// User area: profile of the login Caddy authenticated (see /api/me in server.py).
+// User area: profile of the logged-in Diretória member (BP SERVICE, see server.py).
 async function loadUser() {
   try {
     const r = await fetch('api/me', { cache: 'no-store' });
+    if (r.status === 401) { location.href = 'login'; return; }
     if (!r.ok) return;
     const u = await r.json();
-    const nome = u.name || u.login || '';
+    const nome = u.name || u.email || '';
     const ini = nome.split(/\s+/).filter(Boolean).map(w => w[0]).filter((_, i, a) => i === 0 || i === a.length - 1).join('').toUpperCase() || '?';
     $('userBtn').textContent = $('userAv').textContent = ini;
     $('userBtn').title = nome;
     $('userName').textContent = nome;
     $('userEmail').textContent = u.email || '';
-    $('userRole').textContent = u.role || '';
+    // Photo only when Drive serves it; otherwise the initials stay.
+    const img = new Image();
+    img.alt = '';
+    img.onload = () => { $('userBtn').replaceChildren(img.cloneNode()); $('userAv').replaceChildren(img); };
+    img.src = 'api/photo';
   } catch (e) { /* menu keeps its placeholder */ }
 }
 const menuAberto = open => {
@@ -1326,13 +1344,24 @@ const menuAberto = open => {
 $('userBtn').addEventListener('click', e => { e.stopPropagation(); menuAberto($('userMenu').classList.contains('hidden')); });
 document.addEventListener('click', e => { if (!e.target.closest('.user')) menuAberto(false); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') menuAberto(false); });
-// shortcut: basic auth has no real logout; wrong credentials make the browser drop the cached ones
-// (Chrome/Edge/Firefox). Safari may keep them until it is closed. Move to session login if that matters.
-$('logout').addEventListener('click', () => {
-  const x = new XMLHttpRequest();
-  x.open('GET', 'api/me', true, 'sair', 'sair');
-  x.onloadend = () => location.reload();
-  x.send();
+$('userMenu').addEventListener('click', e => e.stopPropagation());
+$('logout').addEventListener('click', async () => {
+  try { await fetch('api/logout', { method: 'POST' }); } finally { location.href = 'login'; }
+});
+$('pwToggle').addEventListener('click', () => {
+  const open = $('pwForm').classList.toggle('hidden') === false;
+  $('pwToggle').setAttribute('aria-expanded', String(open));
+  if (open) $('pwCur').focus();
+});
+$('pwForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const msg = $('pwMsg');
+  if ($('pwNew').value !== $('pwNew2').value) { msg.style.color = 'var(--out)'; msg.textContent = 'As senhas novas não coincidem.'; return; }
+  const r = await fetch('api/password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ current: $('pwCur').value, new: $('pwNew').value }) }).catch(() => null);
+  const ok = r && r.ok;
+  msg.style.color = ok ? 'var(--in)' : 'var(--out)';
+  msg.textContent = ok ? 'Senha alterada.' : ((r && (await r.json().catch(() => ({}))).error) || 'Sem ligação ao servidor.');
+  if (ok) $('pwForm').reset();
 });
 
 loadUser();

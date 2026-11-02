@@ -1,27 +1,40 @@
-"""Read-only HTTP backend for the CONTAORDEM dashboard.
+"""HTTP backend for the CONTAORDEM dashboard.
 
-Serves ``index.html`` and streams the treasury and Verbo Café spreadsheets as
-XLSX exports via the Drive API, using the existing Sheets service account.
-Binds to localhost only; Caddy terminates HTTPS and enforces basic auth.
+Serves the pages and streams the treasury and Verbo Café spreadsheets as XLSX
+exports via the Drive API, using the existing Sheets service account. Binds to
+localhost only; Caddy terminates HTTPS.
+
+Login: email + password. The email must belong to a BP SERVICE row with
+DIRETÓRIA = TRUE (checked at login and on every request, cached a few
+minutes); passwords and sessions live in the SQLite file at DASHBOARD_DB_PATH.
+Accounts are created with ``manage_users.py``.
 
 Required env (same ``.env`` as the automation): SHEETS_SPREADSHEET_ID,
-VERBO_CAFE_SOURCE_SPREADSHEET_ID, SHEETS_SERVICE_ACCOUNT_PATH.
-Optional: DASHBOARD_PORT (default 8090), DASHBOARD_USERS_PATH (JSON profiles
-``{"login": {"name": ..., "email": ..., "role": ...}}`` for ``/api/me``).
-Caddy sends the authenticated login in ``X-Dashboard-User``.
+VERBO_CAFE_SOURCE_SPREADSHEET_ID, SHEETS_SERVICE_ACCOUNT_PATH,
+BP_SERVICE_SPREADSHEET_ID, DASHBOARD_DB_PATH.
+Optional: DASHBOARD_PORT (default 8090).
 """
 
 import json
 import logging
 import os
+import threading
+import time
+from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from auth_store import SESSION_TTL, AuthStore
+from directory import Directory, DirectoryUnavailable
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-INDEX = Path(__file__).with_name("index.html")
+HERE = Path(__file__).parent
+PAGES = {"/": "index.html", "/index.html": "index.html", "/login": "login.html"}
+MIN_PASSWORD = 10
+MAX_BODY = 4096
+MAX_FAILS, FAIL_WINDOW = 10, 15 * 60
 log = logging.getLogger("dashboard")
 
 
@@ -36,44 +49,171 @@ FILES = {
     "/api/main.xlsx": _require("SHEETS_SPREADSHEET_ID"),
     "/api/vc.xlsx": _require("VERBO_CAFE_SOURCE_SPREADSHEET_ID"),
 }
-_users_path = os.environ.get("DASHBOARD_USERS_PATH", "").strip().strip('"')
-USERS: dict[str, dict[str, str]] = (
-    json.loads(Path(_users_path).read_text(encoding="utf-8")) if _users_path else {}
-)
-_creds = service_account.Credentials.from_service_account_file(
+CREDS = service_account.Credentials.from_service_account_file(
     _require("SHEETS_SERVICE_ACCOUNT_PATH"),
     scopes=["https://www.googleapis.com/auth/drive.readonly"],
 )
+STORE = AuthStore(_require("DASHBOARD_DB_PATH"))
+DIRECTORY = Directory(CREDS, _require("BP_SERVICE_SPREADSHEET_ID"))
+
+# Failed logins per client IP and per email (in memory; one process).
+_fails: dict[str, list[float]] = {}
+_fails_lock = threading.Lock()
+
+
+def _blocked(*keys: str) -> bool:
+    now = time.time()
+    with _fails_lock:
+        for k in keys:
+            _fails[k] = [t for t in _fails.get(k, []) if now - t < FAIL_WINDOW]
+        return any(len(_fails[k]) >= MAX_FAILS for k in keys)
+
+
+def _fail(*keys: str) -> None:
+    with _fails_lock:
+        for k in keys:
+            _fails.setdefault(k, []).append(time.time())
 
 
 class Handler(BaseHTTPRequestHandler):
-    def _send(self, code: int, body: bytes, ctype: str) -> None:
+    def _send(
+        self, code: int, body: bytes, ctype: str, headers: dict[str, str] | None = None
+    ) -> None:
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        for k, v in (headers or {}).items():
+            self.send_header(k, v)
         self.end_headers()
         self.wfile.write(body)
 
+    def _json(self, code: int, data: dict, headers: dict[str, str] | None = None) -> None:
+        self._send(code, json.dumps(data).encode(), "application/json", headers)
+
+    def _token(self) -> str:
+        cookie = SimpleCookie(self.headers.get("Cookie", ""))
+        return cookie["sid"].value if "sid" in cookie else ""
+
+    def _user(self) -> dict[str, str] | None:
+        """Profile of the logged-in Diretória member, or None."""
+        token = self._token()
+        email = STORE.session_email(token) if token else None
+        if not email:
+            return None
+        member = DIRECTORY.get(email)
+        if not member:  # removed from the Diretória: end the session
+            STORE.delete_session(token)
+        return member
+
+    def _client(self) -> str:
+        # Caddy sets X-Forwarded-For from the real client address.
+        fwd = self.headers.get("X-Forwarded-For", "")
+        return fwd.split(",")[-1].strip() or self.client_address[0]
+
+    def _body(self) -> dict:
+        length = int(self.headers.get("Content-Length") or 0)
+        if not 0 < length <= MAX_BODY or "json" not in self.headers.get("Content-Type", ""):
+            return {}
+        try:
+            data = json.loads(self.rfile.read(length))
+        except ValueError:
+            return {}
+        return data if isinstance(data, dict) else {}
+
     def do_GET(self) -> None:  # noqa: N802
         path = self.path.split("?", 1)[0]
-        if path in ("/", "/index.html"):
-            self._send(200, INDEX.read_bytes(), "text/html; charset=utf-8")
-            return
-        if path == "/api/me":
-            login = self.headers.get("X-Dashboard-User", "")
-            profile = {"name": login, "email": "", "role": ""} | USERS.get(login, {})
-            body = json.dumps({"login": login, **profile}).encode()
-            self._send(200, body, "application/json")
-            return
-        file_id = FILES.get(path)
-        if not file_id:
-            self._send(404, b"Not found", "text/plain")
+        if path == "/login":
+            self._send(200, (HERE / "login.html").read_bytes(), "text/html; charset=utf-8")
             return
         try:
+            user = self._user()
+        except DirectoryUnavailable:
+            self._send(503, b"Directory unavailable", "text/plain")
+            return
+        if not user:
+            if path in PAGES:
+                self._send(303, b"", "text/plain", {"Location": "login"})
+            else:
+                self._json(401, {"error": "login"})
+            return
+        if path in PAGES:
+            self._send(200, (HERE / PAGES[path]).read_bytes(), "text/html; charset=utf-8")
+        elif path == "/api/me":
+            self._json(200, {"name": user["name"], "email": user["email"]})
+        elif path == "/api/photo":
+            self._photo(user["email"])
+        elif path in FILES:
+            self._export(path)
+        else:
+            self._send(404, b"Not found", "text/plain")
+
+    def do_POST(self) -> None:  # noqa: N802
+        path = self.path.split("?", 1)[0]
+        body = self._body()
+        try:
+            if path == "/api/login":
+                self._login(body)
+            elif path == "/api/logout":
+                if self._token():
+                    STORE.delete_session(self._token())
+                self._json(200, {}, {"Set-Cookie": "sid=; Max-Age=0; Path=/; HttpOnly; Secure"})
+            elif path == "/api/password":
+                self._change_password(body)
+            else:
+                self._send(404, b"Not found", "text/plain")
+        except DirectoryUnavailable:
+            self._json(503, {"error": "Diretório indisponível. Tente mais tarde."})
+
+    def _login(self, body: dict) -> None:
+        email = str(body.get("email", "")).strip().lower()
+        password = str(body.get("password", ""))
+        ip_key, email_key = f"ip:{self._client()}", f"email:{email}"
+        if _blocked(ip_key, email_key):
+            self._json(429, {"error": "Demasiadas tentativas. Tente daqui a 15 minutos."})
+            return
+        # Same message whatever failed, so it does not reveal who has access.
+        if not (email and DIRECTORY.get(email) and STORE.check_password(email, password)):
+            _fail(ip_key, email_key)
+            log.warning("Failed login from %s", self._client())
+            self._json(401, {"error": "Email ou senha inválidos."})
+            return
+        token = STORE.create_session(email)
+        log.info("Login ok from %s", self._client())
+        cookie = f"sid={token}; Max-Age={SESSION_TTL}; Path=/; HttpOnly; Secure; SameSite=Strict"
+        self._json(200, {}, {"Set-Cookie": cookie})
+
+    def _change_password(self, body: dict) -> None:
+        user = self._user()
+        if not user:
+            self._json(401, {"error": "login"})
+            return
+        new = str(body.get("new", ""))
+        if not STORE.check_password(user["email"], str(body.get("current", ""))):
+            self._json(400, {"error": "A senha atual está errada."})
+        elif len(new) < MIN_PASSWORD:
+            self._json(400, {"error": f"A nova senha precisa de {MIN_PASSWORD} caracteres."})
+        else:
+            STORE.set_password(user["email"], new)
+            STORE.delete_sessions(user["email"], keep_token=self._token())
+            self._json(200, {})
+
+    def _photo(self, email: str) -> None:
+        try:
+            found = DIRECTORY.photo(email)
+        except Exception:
+            log.exception("Profile photo lookup failed")
+            found = None
+        if found:
+            self._send(200, found[0], found[1])
+        else:
+            self._send(404, b"No photo", "text/plain")
+
+    def _export(self, path: str) -> None:
+        try:
             # httplib2 is not thread-safe, so build a client per request.
-            drive = build("drive", "v3", credentials=_creds, cache_discovery=False)
-            data = drive.files().export(fileId=file_id, mimeType=XLSX_MIME).execute()
+            drive = build("drive", "v3", credentials=CREDS, cache_discovery=False)
+            data = drive.files().export(fileId=FILES[path], mimeType=XLSX_MIME).execute()
         except Exception:
             log.exception("Drive export failed for %s", path)
             self._send(502, b"Drive export failed", "text/plain")
@@ -81,7 +221,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send(200, data, XLSX_MIME)
 
     def log_message(self, fmt: str, *args: object) -> None:
-        log.info("%s %s", self.address_string(), fmt % args)
+        log.info("%s %s", self._client(), fmt % args)
 
 
 def main() -> None:
