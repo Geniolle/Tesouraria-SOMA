@@ -47,14 +47,15 @@ select,input,button{font:inherit;padding:6px 10px;border:1px solid #cbd5e1;borde
 button{cursor:pointer}
 .hidden{display:none}
 /* Card order (CSS order only accepts integers). */
-#app > .card, #app > .grid2{order:9}
+#app > .card, #app > .grid2{order:10}
 #app > #originsCard{order:0}
 #app > #custosFixosCard{order:1}
-#app > .card:has(#weekChart){order:8}
+#app > .card:has(#weekChart){order:9}
 #app > .card:has(#monthly){order:4}
-#app > .card:has(#ccProg){order:5}
-#app > #origemPlano{order:6}
-#app > .card:has(#search){order:7}
+#app > #motivosCard{order:5}
+#app > .card:has(#ccProg){order:6}
+#app > #origemPlano{order:7}
+#app > .card:has(#search){order:8}
 #weekTable{display:none}
 #sub{display:none}
 .card:has(#monthly) > h2:first-child,.card:has(#monthly) > div:nth-child(2),.card:has(#monthly) > #monthly{display:none}
@@ -154,6 +155,14 @@ select[aria-label="Medida"]{margin-left:auto}
         <span id="cfResumo" style="margin-left:auto"></span>
       </div>
       <div id="custosFixos" style="overflow-x:auto"></div>
+    </div>
+
+    <div id="motivosCard" class="card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <button type="button" id="toggleMV" title="Ocultar" aria-label="Ocultar" style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;color:var(--muted)"><svg id="toggleMVIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .2s ease"><polyline points="6 9 12 15 18 9"></polyline></svg></button><h2 style="margin:0">Motivos da variação</h2>
+        <span id="mvResumo" class="muted" style="margin-left:auto;font-size:12px"></span>
+      </div>
+      <div id="motivos"></div>
     </div>
 
     <div class="card">
@@ -389,6 +398,7 @@ function render() {
   renderOrigemPlano();
   renderCC();
   renderCustosFixos();
+  renderMotivos();
   breakdown(f);
   statusAndQuality(f);
   renderTable();
@@ -1209,6 +1219,86 @@ function cfDet(c) {
   const linhas = recs.map(x => `<tr><td>${esc(x['DATA MOV.'])}</td><td>${esc(x['DESCRIÇÃO'])}</td><td>${esc(x.TIPO)}</td><td>${esc(x.ID_INTERNO)}</td><td>${esc(x.PROCESSO)}</td><td class="num" style="color:${x._in ? 'var(--in)' : 'var(--out)'}">${x._in ? '+' : '−'}${eur(x._v)}</td><td>${esc(x.STATUS)}</td></tr>`).join('');
   return `<tr class="cf-det"><td colspan="4" style="padding:8px 16px;background:#fbfcfd"><div class="muted" style="font-size:12px;margin-bottom:6px">${esc(c)} · ${MESES[+MONTH.slice(5) - 1]} ${MONTH.slice(0, 4)} · ${recs.length} lançamentos</div>${recs.length ? `<div style="overflow-x:auto"><table style="font-size:12px"><thead><tr><th>Data mov.</th><th>Descrição</th><th>Tipo</th><th>ID</th><th>Processo</th><th class="num">Valor</th><th>Status</th></tr></thead><tbody>${linhas}</tbody></table></div>` : '<span class="muted">Sem lançamentos</span>'}</td></tr>`;
 }
+
+// "Motivos da variação": selected month vs previous one, same base as
+// "Progressão dos meses" (_in / _v, records with _v = 0 ignored).
+const MV_BIG = 500; // entries at or above this are treated as exceptional
+function renderMotivos() {
+  const el = $('motivos'), resumo = $('mvResumo');
+  if (MONTH === 'all') { el.innerHTML = '<span class="muted">Selecione um mês para ver os motivos da variação.</span>'; resumo.innerHTML = ''; return; }
+  const [y, m] = MONTH.split('-').map(Number);
+  const prevKey = monthKey(new Date(y, m - 2, 1));
+  const nome = k => `${MESES[+k.slice(5) - 1]} ${k.slice(0, 4)}`;
+  resumo.textContent = `${nome(MONTH)} vs ${nome(prevKey)}`;
+  const sel = (mk, inn) => RECS.filter(r => r._m === mk && r._in === inn && r._v > 0);
+  const st = a => { const s = a.reduce((x, r) => x + r._v, 0); return { n: a.length, s, t: a.length ? s / a.length : 0 }; };
+  // No % when the sign flips (e.g. negative saldo turning positive): it would be meaningless.
+  const pct = (a, b) => a * b > 0 ? ((b - a) / Math.abs(a) * 100) : null;
+  const fp = v => v === null ? '—' : (v > 0 ? '+' : '') + v.toFixed(1) + '%';
+  const fd = v => (v > 0 ? '+' : '') + eur(v);
+  const cor = (v, bom) => Math.abs(v) < 0.005 ? '' : `color:${(v > 0) === bom ? 'var(--in)' : 'var(--out)'}`;
+  const inA = sel(prevKey, true), inB = sel(MONTH, true), outA = sel(prevKey, false), outB = sel(MONTH, false);
+  const iA = st(inA), iB = st(inB), oA = st(outA), oB = st(outB);
+  // Price/volume split: delta = delta_n * ticket_prev + delta_ticket * n_curr
+  const vol = (a, b) => (b.n - a.n) * a.t, tic = (a, b) => (b.t - a.t) * b.n;
+  const grp = (a, k) => a.reduce((o, r) => { const g = r[k] || '(vazio)'; (o[g] = o[g] || []).push(r); return o; }, {});
+  const cmp = (a, b, k) => { const ga = grp(a, k), gb = grp(b, k); return [...new Set([...Object.keys(ga), ...Object.keys(gb)])].map(g => ({ g, a: st(ga[g] || []), b: st(gb[g] || []) })).map(x => ({ ...x, d: x.b.s - x.a.s })); };
+  const tbl = (rows, bom) => `<table style="font-size:13px"><thead><tr><th>Centro de custo</th><th class="num">Nº</th><th class="num">Ticket médio</th><th class="num">Δ €</th></tr></thead><tbody>${rows.map(x =>
+    `<tr><td>${esc(x.g)}${x.a.n ? '' : ' <span class="pill">sem mov. no mês anterior</span>'}</td><td class="num" style="white-space:nowrap">${x.a.n} → ${x.b.n}</td><td class="num" style="white-space:nowrap">${eur(x.a.t)} → ${eur(x.b.t)}</td><td class="num" style="font-weight:600;white-space:nowrap;${cor(x.d, bom)}">${fd(x.d)}</td></tr>`).join('')}</tbody></table>`;
+  const kpi = (l, a, b, bom) => `<div class="kpi"><div class="l">${l}</div><div class="v" style="${cor(b - a, bom)}">${fd(b - a)}</div><div class="muted" style="font-size:12px">${eur(a)} → ${eur(b)} · ${fp(pct(a, b))}</div></div>`;
+  const split = (a, b, bom) => `<div style="font-size:13px;margin:6px 0 10px">Nº de lançamentos: <b>${a.n} → ${b.n}</b> (efeito quantidade <b style="${cor(vol(a, b), bom)}">${fd(vol(a, b))}</b>) · Ticket médio: <b>${eur(a.t)} → ${eur(b.t)}</b> (efeito ticket <b style="${cor(tic(a, b), bom)}">${fd(tic(a, b))}</b>)</div>`;
+
+  // Donors identified by DESCRIÇÃO: approximate, cash entries share generic descriptions.
+  const doad = a => a.filter(r => normS(r['CENTRO DE CUSTO']).includes('DIZIMOS')).reduce((o, r) => { o[r['DESCRIÇÃO']] = (o[r['DESCRIÇÃO']] || 0) + r._v; return o; }, {});
+  const dA = doad(inA), dB = doad(inB);
+  const rec = Object.keys(dB).filter(k => k in dA), nov = Object.keys(dB).filter(k => !(k in dA)), per = Object.keys(dA).filter(k => !(k in dB));
+  const soma = (o, ks) => ks.reduce((s, k) => s + o[k], 0);
+  const recD = soma(dB, rec) - soma(dA, rec);
+  const semBig = a => a.filter(r => r._v < MV_BIG).reduce((s, r) => s + r._v, 0);
+  const nBig = a => a.filter(r => r._v >= MV_BIG).length;
+  const inCC = cmp(inA, inB, 'CENTRO DE CUSTO').sort((p, q) => Math.abs(q.d) - Math.abs(p.d));
+
+  const outCC = cmp(outA, outB, 'CENTRO DE CUSTO');
+  const piores = outCC.filter(x => x.d > 0.005).sort((p, q) => q.d - p.d).slice(0, 5);
+  const melhores = outCC.filter(x => x.d < -0.005).sort((p, q) => p.d - q.d).slice(0, 5);
+
+  // Card payments have _v = 0 globally, so they are out of "Saídas"; flag them.
+  const cart = mk => RECS.filter(r => r._m === mk && normS(r.TIPO) === 'CARTAO').reduce((s, r) => s + Math.abs(num(r['IMPORTÂNCIA'])), 0);
+  const cA = cart(prevKey), cB = cart(MONTH);
+
+  const curto = x => `${esc(x.g.replace(/^[\d.]+\s*-\s*/, ''))} (${fd(x.d)})`;
+  const dn = iB.n - iA.n;
+  const frase = `<b>Entradas ${fp(pct(iA.s, iB.s))}</b>: ${dn === 0 ? 'mesmo nº de lançamentos' : `${dn > 0 ? 'mais' : 'menos'} lançamentos (${dn > 0 ? '+' : ''}${dn})`} e ticket médio ${fp(pct(iA.t, iB.t))}${rec.length ? `; doadores recorrentes ${fd(recD)}` : ''}. `
+    + `<b>Saídas ${fp(pct(oA.s, oB.s))}</b>${piores.length ? `: subiram ${piores.slice(0, 2).map(curto).join(' e ')}` : ''}${melhores.length ? `${piores.length ? '; ' : ': '}desceram ${melhores.slice(0, 2).map(curto).join(' e ')}` : ''}.`;
+
+  el.innerHTML = `
+    <div style="background:#f5f7fa;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:13px">${frase}</div>
+    <div class="kpis" style="margin-bottom:16px">${kpi('Entradas', iA.s, iB.s, true)}${kpi('Saídas', oA.s, oB.s, false)}${kpi('Saldo', iA.s - oA.s, iB.s - oB.s, true)}</div>
+    <h2 style="color:var(--in)">Entradas</h2>
+    ${split(iA, iB, true)}
+    <div style="overflow-x:auto">${tbl(inCC, true)}</div>
+    <div style="font-size:13px;margin:10px 0 4px">Dízimos e ofertas por doador <span class="muted">(identificado pela descrição; aproximado)</span>:
+      recorrentes <b>${rec.length}</b> (${eur(soma(dA, rec))} → ${eur(soma(dB, rec))}, <b style="${cor(recD, true)}">${fd(recD)}</b>) ·
+      novos <b>${nov.length}</b> (<span style="color:var(--in)">+${eur(soma(dB, nov))}</span>) ·
+      só no mês anterior <b>${per.length}</b> (<span style="color:var(--out)">−${eur(soma(dA, per))}</span>)</div>
+    <div style="font-size:13px;margin-bottom:16px">Lançamentos ≥ ${eur(MV_BIG)}: <b>${nBig(inA)} → ${nBig(inB)}</b> (${eur(iA.s - semBig(inA))} → ${eur(iB.s - semBig(inB))}). Sem eles, entradas <b>${fp(pct(semBig(inA), semBig(inB)))}</b> (${eur(semBig(inA))} → ${eur(semBig(inB))}).</div>
+    <h2 style="color:var(--out)">Saídas</h2>
+    ${split(oA, oB, false)}
+    <div class="grid2">
+      <div style="overflow-x:auto"><div class="muted" style="font-size:12px;margin-bottom:4px">Pioraram o resultado (gastou-se mais)</div>${piores.length ? tbl(piores, false) : '<span class="muted">Nenhum</span>'}</div>
+      <div style="overflow-x:auto"><div class="muted" style="font-size:12px;margin-bottom:4px">Melhoraram o resultado (gastou-se menos)</div>${melhores.length ? tbl(melhores, false) : '<span class="muted">Nenhum</span>'}</div>
+    </div>
+    ${cA || cB ? `<div style="font-size:12px;margin-top:12px;padding:8px 10px;border-radius:8px;background:#fff7ed">⚠️ Pagamentos com TIPO = Cartão não entram nas saídas: ${nome(prevKey)} ${eur(cA)} · ${nome(MONTH)} ${eur(cB)}.</div>` : ''}`;
+}
+
+let MV_OPEN = true;
+$('toggleMV').addEventListener('click', () => {
+  MV_OPEN = !MV_OPEN;
+  $('motivos').style.display = MV_OPEN ? 'block' : 'none';
+  $('toggleMVIcon').style.transform = MV_OPEN ? 'rotate(0deg)' : 'rotate(-90deg)';
+  $('toggleMV').title = MV_OPEN ? 'Ocultar' : 'Mostrar';
+  $('toggleMV').setAttribute('aria-label', $('toggleMV').title);
+});
 
 let CF_OPEN = true;
 $('toggleCF').addEventListener('click', () => {
