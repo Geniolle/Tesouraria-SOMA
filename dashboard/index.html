@@ -1455,13 +1455,15 @@ function renderResultado(cfg) {
   const vendas = D.sales.filter(v => noPeriodo(v.date));
   const doacoes = (D.donations || []).filter(v => noPeriodo(v.date)).reduce((t, v) => t + v.amount, 0);
   let bruto = 0, liquido = 0, recebido = 0, custo = 0, tpaApp = 0, nTpaApp = 0, semCusto = 0;
-  const artigos = {};
+  const artigos = {}, formas = {};
   // Café sales carry TOTAL RECEBIDO (credit sales = 0); bookshop sales count the amount to pay.
   const temRecebido = D.sales.some(v => v.received !== undefined);
   const rec = v => v.received ?? v.total;
   vendas.forEach(v => {
     const b = v.items.reduce((t, i) => t + i.price * i.qty, 0);
     bruto += b; liquido += v.total; recebido += rec(v);
+    const f = formas[v.payment || '(sem forma)'] ??= { n: 0, pagar: 0, recebido: 0 };
+    f.n++; f.pagar += v.total; f.recebido += rec(v);
     if (v.payment.includes('TPA')) { tpaApp += rec(v); nTpaApp++; }
     v.items.forEach(i => {
       const c = D.costs[i.key];
@@ -1502,6 +1504,9 @@ function renderResultado(cfg) {
           ${linha('Aluguer da máquina TPA', aluguer, false, '− ')}
           ${linha(cfg.resultado, resultado, true, resultado < 0 ? '− ' : '')}
         </tbody></table>
+        ${Object.keys(formas).length ? `<div class="muted" style="font-size:12px;margin:10px 0 4px">Por forma de pagamento</div>
+        <table style="font-size:12px"><thead><tr><th>Forma</th><th class="num">Vendas</th><th class="num">A pagar</th>${temRecebido ? '<th class="num">Recebido</th>' : ''}</tr></thead><tbody>${Object.entries(formas).sort((a, b) => b[1].pagar - a[1].pagar).map(([k, f]) =>
+          `<tr><td>${esc(k)}</td><td class="num">${f.n}</td><td class="num">${eur(f.pagar)}</td>${temRecebido ? `<td class="num" style="${f.recebido < f.pagar - 0.005 ? 'color:var(--out)' : ''}">${eur(f.recebido)}</td>` : ''}</tr>`).join('')}</tbody></table>` : ''}
         ${doacoes ? `<div class="muted" style="font-size:12px;margin-top:6px">Doações registadas na app no período: ${eur(doacoes)} (fora do resultado de vendas).</div>` : ''}
         ${semCusto ? `<div class="muted" style="font-size:12px;margin-top:6px">${semCusto} ${cfg.semCusto}: custo contado como 0.</div>` : ''}
         <div style="font-size:12px;margin-top:8px;padding:8px 10px;border-radius:8px;background:${Math.abs(dif) > 1 ? '#fff7ed' : '#f0fdf4'}">
