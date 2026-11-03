@@ -82,6 +82,10 @@ select[aria-label="Medida"]{margin-left:auto}
 #adminPw{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;margin-bottom:12px}
 #adminPw code{font-size:15px;font-weight:700;user-select:all}
 #firstPw input{width:100%;margin:4px 0 8px}
+/* "?" next to each card title: short description on hover or keyboard focus. */
+.help{position:relative;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;margin-left:6px;border-radius:50%;border:1px solid #cbd5e1;color:var(--muted);font-size:11px;font-weight:700;line-height:1;cursor:help;vertical-align:middle;text-transform:none;letter-spacing:0}
+.help:hover,.help:focus{color:var(--acc);border-color:var(--acc);outline:none}
+#helpTip{position:fixed;display:none;z-index:50;max-width:min(320px,calc(100vw - 16px));padding:8px 10px;border-radius:8px;background:#1d2433;color:#fff;font-size:12px;font-weight:400;line-height:1.4;text-transform:none;letter-spacing:0;box-shadow:0 6px 18px rgba(0,0,0,.18);pointer-events:none}
 /* Wide tables scroll inside their card instead of stretching the page. */
 #app{grid-template-columns:minmax(0,1fr)}
 .card,.grid2>*{min-width:0}
@@ -479,6 +483,7 @@ function render() {
   const f = filtered();
   $('sub').textContent = `${RECS.length} lançamentos · ${months.length} meses · ${f.length} no filtro atual`;
   kpis(f);
+  ajudaKpis();
   monthly(months);
   renderProgression();
   renderWeeks();
@@ -1541,6 +1546,66 @@ $('adminList').addEventListener('click', async e => {
     : `<span style="color:var(--out)">${esc(d.error || 'Sem ligação ao servidor.')}</span>`;
   loadAdmin();
 });
+
+// Card help: what each card is for, for people new to the report.
+const AJUDA = {
+  'Validação das origens': 'Confirma se todos os registos das origens do mês (extratos, dízimos e ofertas, saídas, cartão e Verbo Café) chegaram à CONTAORDEM. "Em falta" a 0 = tudo certo.',
+  'Custos fixos do mês': 'Contas de custo fixo (CONSTANTES, TYPE_CC = CUSTO FIXO) e se já foram pagas no mês escolhido. Clique numa conta para ver os lançamentos.',
+  'Progressão dos meses': 'Entradas, saídas e saldo de cada mês do ano. O menu à direita alterna entre valores, acumulado e variação face ao mês anterior.',
+  'Motivos da variação': 'Explica a diferença entre o mês escolhido e o anterior: dízimos, doadores recorrentes, frequência nos cultos e os centros de custo que mais pesaram.',
+  'Progressão Centro de Custo': 'Resultado de cada centro de custo por mês. Clique numa célula para ver os lançamentos; na linha do cartão aparecem também as compras do cartão.',
+  'Origem das receitas e despesas por plano de contas': 'Entradas e saídas do período agrupadas por forma de pagamento, plano de contas e processo de origem.',
+  'Lançamentos': 'Lista de todos os lançamentos do período escolhido, com pesquisa.',
+  'Análise por semana do mês': 'Compara as semanas do mês para ver em que semana entra e sai mais dinheiro.',
+  'Entradas vs saídas por mês': 'Gráfico de entradas e saídas por mês. Clique numa coluna para filtrar o dashboard por esse mês.',
+  'Top 8 planos de conta (volume)': 'Os 8 planos de conta com mais dinheiro movimentado no período.',
+  'Forma de pagamento': 'Dinheiro movimentado por forma de pagamento (transferência, dinheiro, ...).',
+  'Caixa': 'Dinheiro movimentado por conta ou caixa.',
+  // KPI tiles at the top
+  'Lançamentos (kpi)': 'Número de entradas e saídas registadas na CONTAORDEM no período escolhido.',
+  'Entradas (kpi)': 'Total de dinheiro que entrou no período escolhido.',
+  'Saídas (kpi)': 'Total de dinheiro que saiu no período escolhido.',
+  'Saldo (kpi)': 'Entradas menos saídas do período escolhido.',
+  '% validado (kpi)': 'Percentagem de lançamentos do período com STATUS = VALIDADO.'
+};
+function ajuda(el, texto) {
+  if (!texto || el.querySelector('.help')) return;
+  const i = document.createElement('span');
+  i.className = 'help';
+  i.tabIndex = 0;
+  i.textContent = '?';
+  i.dataset.tip = texto;
+  i.setAttribute('role', 'img');
+  i.setAttribute('aria-label', 'Ajuda: ' + texto);
+  el.insertBefore(i, el.querySelector('span') || null); // before any muted suffix like "(clique…)"
+}
+document.querySelectorAll('#app h2').forEach(h => {
+  const t = h.firstChild?.textContent.trim() || '';
+  ajuda(h, AJUDA[Object.keys(AJUDA).find(k => t === k || t.startsWith(k))]);
+});
+// One floating tooltip, kept inside the viewport (shows on hover, keyboard focus or tap).
+const tip = document.createElement('div');
+tip.id = 'helpTip';
+tip.setAttribute('role', 'tooltip');
+document.body.append(tip);
+const mostrarAjuda = e => {
+  const h = e.target.closest?.('.help');
+  if (!h) return;
+  tip.textContent = h.dataset.tip;
+  tip.style.display = 'block';
+  const r = h.getBoundingClientRect();
+  tip.style.left = Math.max(8, Math.min(r.left, innerWidth - tip.offsetWidth - 8)) + 'px';
+  tip.style.top = (r.bottom + 6 + tip.offsetHeight > innerHeight ? r.top - tip.offsetHeight - 6 : r.bottom + 6) + 'px';
+};
+const esconderAjuda = e => { if (!e || e.target.closest?.('.help')) tip.style.display = 'none'; };
+document.addEventListener('mouseover', mostrarAjuda);
+document.addEventListener('focusin', mostrarAjuda);
+document.addEventListener('mouseout', esconderAjuda);
+document.addEventListener('focusout', esconderAjuda);
+addEventListener('scroll', () => esconderAjuda(), { passive: true });
+function ajudaKpis() {
+  document.querySelectorAll('#kpis .kpi .l').forEach(l => ajuda(l, AJUDA[l.textContent.trim() + ' (kpi)']));
+}
 
 loadUser().then(ok => { if (ok) loadFromDrive(); });
 </script>
