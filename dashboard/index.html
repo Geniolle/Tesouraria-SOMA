@@ -1435,12 +1435,12 @@ function renderLivraria() {
   const noPeriodo = iso => MONTH !== 'all' ? iso.slice(0, 7) === MONTH : YEAR === 'all' || iso.slice(0, 4) === YEAR;
   resumo.textContent = MONTH !== 'all' ? `${MESES[+MONTH.slice(5) - 1]} ${MONTH.slice(0, 4)}` : YEAR === 'all' ? 'Todos os anos' : `Ano ${YEAR}`;
   const vendas = LIVRARIA.sales.filter(v => noPeriodo(v.date));
-  let bruto = 0, liquido = 0, custo = 0, tpaApp = 0, semCusto = 0;
+  let bruto = 0, liquido = 0, custo = 0, tpaApp = 0, nTpaApp = 0, semCusto = 0;
   const livros = {};
   vendas.forEach(v => {
     const b = v.items.reduce((t, i) => t + i.price * i.qty, 0);
     bruto += b; liquido += v.total;
-    if (v.payment.includes('TPA')) tpaApp += v.total;
+    if (v.payment.includes('TPA')) { tpaApp += v.total; nTpaApp++; }
     v.items.forEach(i => {
       const c = LIVRARIA.costs[i.isbn];
       if (c === undefined) semCusto += i.qty; else custo += c * i.qty;
@@ -1454,6 +1454,11 @@ function renderLivraria() {
   const chave = r => normS(r['DESCRIÇÃO']).replace(/[^A-Z0-9]/g, '');
   const banco = RECS.filter(r => r._m && noPeriodo(r._m + '-01'));
   const soma = p => banco.filter(r => chave(r).startsWith(p)).reduce((t, r) => t + Math.abs(num(r['IMPORTÂNCIA'])), 0);
+  // What actually came in: CONTAORDEM entries on plan RECEITAS DE LIVRARIA (TPA closings + cash).
+  const receitas = banco.filter(r => r._in && normS(r['PLANO DE CONTA']) === 'RECEITAS DE LIVRARIA').sort((a, b) => (a._d || 0) - (b._d || 0));
+  const valor = r => Math.abs(num(r['IMPORTÂNCIA']));
+  const nFechos = receitas.filter(r => chave(r).startsWith('FECHOTPA' + LIV_TPA)).length;
+  const totalReceitas = receitas.reduce((t, r) => t + valor(r), 0);
   const fechos = soma('FECHOTPA' + LIV_TPA), comissoes = soma('COMISSTPA' + LIV_TPA), aluguer = soma('COMISSOESTPA' + LIV_MAQUINA);
   const margem = liquido - custo, resultado = margem - comissoes - aluguer;
   const pctM = liquido ? margem / liquido * 100 : 0;
@@ -1475,8 +1480,11 @@ function renderLivraria() {
       </tbody></table>
       ${semCusto ? `<div class="muted" style="font-size:12px;margin-top:6px">${semCusto} livro(s) vendido(s) sem compra registada em DB_COMPRAS: custo contado como 0.</div>` : ''}
       <div style="font-size:12px;margin-top:8px;padding:8px 10px;border-radius:8px;background:${Math.abs(dif) > 1 ? '#fff7ed' : '#f0fdf4'}">
-        Fechos TPA no banco: <b>${eur(fechos)}</b> · vendas TPA registadas na app: <b>${eur(tpaApp)}</b>${Math.abs(dif) > 1 ? ` · ⚠️ diferença de <b>${eur(dif)}</b> (vendas por registar na app ou fecho noutro mês)` : ' · ✅ batem certo'}
-      </div></div>
+        <b>Entrou na máquina TPA:</b> ${nFechos} fecho(s) · <b>${eur(fechos)}</b> &nbsp;|&nbsp; <b>Registado na app:</b> ${nTpaApp} venda(s) TPA · <b>${eur(tpaApp)}</b>${Math.abs(dif) > 1 ? `<br>⚠️ Diferença de <b>${eur(dif)}</b>: vendas por registar na app ou fecho contado noutro mês.` : ' · ✅ batem certo'}
+      </div>
+      <div class="muted" style="font-size:12px;margin:10px 0 4px">Receitas de livraria na CONTAORDEM (plano RECEITAS DE LIVRARIA): ${receitas.length} lançamento(s) · ${eur(totalReceitas)}</div>
+      ${receitas.length ? `<div style="overflow-x:auto"><table style="font-size:12px"><thead><tr><th>Data mov.</th><th>Descrição</th><th>Forma</th><th class="num">Valor</th></tr></thead><tbody>${receitas.map(r =>
+        `<tr><td>${esc(r['DATA MOV.'])}</td><td>${esc(r['DESCRIÇÃO'])}</td><td>${esc(r['FORMA DE PAGAMENTO'])}</td><td class="num">${eur(valor(r))}</td></tr>`).join('')}</tbody></table></div>` : ''}</div></div>
       <div style="overflow-x:auto"><div class="muted" style="font-size:12px;margin-bottom:4px">Livros mais vendidos</div>${top.length ? `<table style="font-size:12px"><thead><tr><th>Título</th><th class="num">Qtd</th><th class="num">Receita</th><th class="num">Custo</th><th class="num">Margem</th></tr></thead><tbody>${top.map(([t, l]) =>
         `<tr><td>${esc(t)}</td><td class="num">${l.qty}</td><td class="num">${eur(l.receita)}</td><td class="num">${eur(l.custo)}</td><td class="num" style="color:${l.receita - l.custo < 0 ? 'var(--out)' : 'var(--in)'}">${eur(l.receita - l.custo)}</td></tr>`).join('')}</tbody></table>` : '<span class="muted">Sem vendas</span>'}</div>
     </div>`;
