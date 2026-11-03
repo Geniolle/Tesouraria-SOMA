@@ -1446,7 +1446,7 @@ const RESULTADOS = {
     bruto: 'Vendas a preço de capa', custo: 'Custo dos livros vendidos (DB_COMPRAS)', semCusto: 'livro(s) vendido(s) sem compra registada em DB_COMPRAS', top: 'Livros mais vendidos', item: 'Título', resultado: 'Resultado da livraria', vazio: 'Sem vendas da livraria neste período.' },
   // Café: no product cost line; result = amount received minus TPA fees and rental.
   cafe: { el: 'cafe', resumo: 'cafeResumo', dados: () => CAFE, fonte: 'AppVerboCafé', tpa: '01443426', maquina: '0005346910002', plano: 'RECEITAS DE LANCHONETE',
-    bruto: 'Vendas a preço de tabela', custo: null, semCusto: 'produto(s) vendido(s) sem compra registada em VC_COMPRAS', top: 'Produtos mais vendidos', item: 'Produto', resultado: 'Resultado do Verbo Café', vazio: 'Sem vendas do Verbo Café neste período.' }
+    bruto: 'Vendas a preço de tabela', custo: null, custoNoLugarDoDesconto: 'Custo de compra dos produtos vendidos (VC_COMPRAS; doações a custo 0)', semCusto: 'produto(s) vendido(s) sem compra registada em VC_COMPRAS', top: 'Produtos mais vendidos', item: 'Produto', resultado: 'Resultado do Verbo Café', vazio: 'Sem vendas do Verbo Café neste período.' }
 };
 function renderResultado(cfg) {
   const el = $(cfg.el), resumo = $(cfg.resumo), D = cfg.dados();
@@ -1489,7 +1489,9 @@ function renderResultado(cfg) {
   const dinheiro = outrasReceitas.reduce((t, r) => t + valor(r), 0), difDin = dinheiro - dinApp;
   const fechos = soma('FECHOTPA' + cfg.tpa), comissoes = soma('COMISSTPA' + cfg.tpa), aluguer = soma('COMISSOESTPA' + cfg.maquina);
   const comCusto = !!cfg.custo;
-  const margem = recebido - (comCusto ? custo : 0), resultado = margem - comissoes - aluguer;
+  // Café: purchase cost of the products sold replaces the discount line and is deducted from the result.
+  const custoCompra = cfg.custoNoLugarDoDesconto ? custo : 0;
+  const margem = recebido - (comCusto ? custo : 0), resultado = margem - custoCompra - comissoes - aluguer;
   const pctM = recebido ? margem / recebido * 100 : 0;
   const linha = (rot, v, forte = false, sinal = '') => `<tr${forte ? ' style="font-weight:700;background:#f5f7fa"' : ''}><td>${rot}</td><td class="num" style="${forte ? `color:${v < 0 ? 'var(--out)' : 'var(--in)'}` : ''}">${sinal}${eur(Math.abs(v))}</td></tr>`;
   const top = Object.entries(artigos).sort((a, b) => b[1].receita - a[1].receita).slice(0, 8);
@@ -1501,7 +1503,7 @@ function renderResultado(cfg) {
         <table style="font-size:13px"><tbody>
           <tr><td>Vendas registadas na app</td><td class="num">${vendas.length}</td></tr>
           ${linha(cfg.bruto, bruto)}
-          ${linha('Descontos dados', bruto - liquido, false, bruto - liquido >= 0 ? '− ' : '+ ')}
+          ${cfg.custoNoLugarDoDesconto ? linha(cfg.custoNoLugarDoDesconto, custo, false, '− ') : linha('Descontos dados', bruto - liquido, false, bruto - liquido >= 0 ? '− ' : '+ ')}
           ${linha('Vendas líquidas', liquido, true)}
           ${temRecebido ? `${linha('Por receber (crédito ou sem valor recebido)', liquido - recebido, false, liquido - recebido >= 0 ? '− ' : '+ ')}${linha('Total recebido', recebido, true)}` : ''}
           ${comCusto ? `${linha(cfg.custo, custo, false, '− ')}${linha(`Margem bruta (${pctM.toFixed(1).replace('.', ',')}%)`, margem, true)}` : ''}
@@ -1513,7 +1515,7 @@ function renderResultado(cfg) {
         <table style="font-size:12px"><thead><tr><th>Forma</th><th class="num">Vendas</th><th class="num">A pagar</th>${temRecebido ? '<th class="num">Recebido</th>' : ''}</tr></thead><tbody>${Object.entries(formas).sort((a, b) => b[1].pagar - a[1].pagar).map(([k, f]) =>
           `<tr><td>${esc(k)}</td><td class="num">${f.n}</td><td class="num">${eur(f.pagar)}</td>${temRecebido ? `<td class="num" style="${f.recebido < f.pagar - 0.005 ? 'color:var(--out)' : ''}">${eur(f.recebido)}</td>` : ''}</tr>`).join('')}</tbody></table>` : ''}
         ${doacoes ? `<div class="muted" style="font-size:12px;margin-top:6px">Doações registadas na app no período: ${eur(doacoes)} (fora do resultado de vendas).</div>` : ''}
-        ${comCusto && semCusto ? `<div class="muted" style="font-size:12px;margin-top:6px">${semCusto} ${cfg.semCusto}: custo contado como 0.</div>` : ''}
+        ${(comCusto || cfg.custoNoLugarDoDesconto) && semCusto ? `<div class="muted" style="font-size:12px;margin-top:6px">${semCusto} ${cfg.semCusto}: custo contado como 0.</div>` : ''}
 
       </div>
       <div style="overflow-x:auto"><div class="muted" style="font-size:12px;margin-bottom:4px">${cfg.top}</div>${top.length ? `<table style="font-size:12px"><thead><tr><th>${cfg.item}</th><th class="num">Qtd</th><th class="num">Receita</th>${comCusto ? '<th class="num">Custo</th><th class="num">Margem</th>' : ''}</tr></thead><tbody>${top.map(([t, a]) =>
