@@ -69,7 +69,7 @@ def fetch_bookshop(credentials: Any, spreadsheet_id: str, min_year: int | None) 
             if qty:
                 items.append(
                     {
-                        "isbn": _isbn(r.get(f"ISBN{k}", "")),
+                        "key": _isbn(r.get(f"ISBN{k}", "")),
                         "title": r.get(f"TÍTULO {k}", "").strip(),
                         "qty": qty,
                         "price": _num(r.get(f"PREÇO DE CAPA {k}", "")),

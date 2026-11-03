@@ -28,6 +28,11 @@ production server. Only Diretória members can log in.
   `/api/livraria` without customer data. The "Livraria · Resultado de vendas"
   card adds the TPA fees from CONTAORDEM: terminal 01433272 (`FECHOTPA…`,
   `COMISS.TPA…`) and rental machine 0005346910001.
+- `cafe.py`: Verbo Café sales (VC_VENDAS, menus via VC_PACK) and average unit
+  cost per product (VC_COMPRAS `VALOR DA UNIDADE`; donated purchases cost 0)
+  from AppVerboCafé, served at `/api/cafe` in the same shape as the bookshop.
+  The "Verbo Café · Resultado de vendas" card uses terminal 01443426, rental
+  machine 0005346910002 and plan RECEITAS DE LANCHONETE.
 - `auth_store.py`: SQLite database (`DASHBOARD_DB_PATH`) with scrypt password
   hashes and session tokens (stored as SHA-256 digests; 12 h sessions).
 - `manage_users.py`: creates/resets accounts (see below).

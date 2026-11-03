@@ -31,6 +31,7 @@ from urllib.parse import parse_qs, urlsplit
 from attendance import fetch_attendance
 from auth_store import SESSION_TTL, AuthStore, generate_password
 from bookshop import fetch_bookshop
+from cafe import fetch_cafe
 from directory import Directory, DirectoryUnavailable
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -192,6 +193,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, {"events": STORE.events(email)})
         elif path == "/api/livraria":
             self._livraria(admin=user["email"] in ADMINS)
+        elif path == "/api/cafe":
+            self._cafe(admin=user["email"] in ADMINS)
         elif path == "/api/frequencia":
             self._frequencia(admin=user["email"] in ADMINS)
         elif path in FILES:
@@ -334,6 +337,16 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             log.exception("Bookshop read failed")
             self._send(502, b"Bookshop read failed", "text/plain")
+            return
+        self._json(200, data)
+
+    def _cafe(self, admin: bool) -> None:
+        try:
+            min_year = None if admin else int(USER_MIN_YEAR)
+            data = fetch_cafe(CREDS, FILES["/api/vc.xlsx"], min_year)
+        except Exception:
+            log.exception("Cafe read failed")
+            self._send(502, b"Cafe read failed", "text/plain")
             return
         self._json(200, data)
 
