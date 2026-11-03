@@ -26,6 +26,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
+from attendance import fetch_attendance
 from auth_store import SESSION_TTL, AuthStore, generate_password
 from directory import Directory, DirectoryUnavailable
 from google.oauth2 import service_account
@@ -57,7 +58,8 @@ CREDS = service_account.Credentials.from_service_account_file(
     scopes=["https://www.googleapis.com/auth/drive.readonly"],
 )
 STORE = AuthStore(_require("DASHBOARD_DB_PATH"))
-DIRECTORY = Directory(CREDS, _require("BP_SERVICE_SPREADSHEET_ID"))
+BP_SPREADSHEET_ID = _require("BP_SERVICE_SPREADSHEET_ID")
+DIRECTORY = Directory(CREDS, BP_SPREADSHEET_ID)
 ADMINS = {
     e.strip().lower() for e in os.environ.get("DASHBOARD_ADMIN_EMAILS", "").split(",") if e.strip()
 }
@@ -159,6 +161,8 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/admin/events" and user["email"] in ADMINS:
             email = parse_qs(urlsplit(self.path).query).get("email", [""])[0]
             self._json(200, {"events": STORE.events(email)})
+        elif path == "/api/frequencia":
+            self._frequencia()
         elif path in FILES:
             if path == "/api/main.xlsx":  # one per page load / "Atualizar"
                 self._audit(user["email"], "dados")
@@ -288,6 +292,15 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, found[0], found[1])
         else:
             self._send(404, b"No photo", "text/plain")
+
+    def _frequencia(self) -> None:
+        try:
+            data = fetch_attendance(CREDS, BP_SPREADSHEET_ID)
+        except Exception:
+            log.exception("Attendance read failed")
+            self._send(502, b"Attendance read failed", "text/plain")
+            return
+        self._json(200, {"cultos": data})
 
     def _export(self, path: str) -> None:
         try:

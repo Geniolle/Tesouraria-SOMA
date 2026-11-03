@@ -359,6 +359,7 @@ async function loadFromDrive() {
     const wb = await getXlsx('api/main.xlsx');
     WB = wb;
     try { WB2 = await getXlsx('api/vc.xlsx'); } catch (e) { WB2 = null; }
+    try { const r = await fetch('api/frequencia', { cache: 'no-store' }); FREQ = r.ok ? (await r.json()).cultos : null; } catch (e) { FREQ = null; }
     const ws = wb.Sheets[SHEET_NAME];
     if (!ws) throw new Error('Separador ' + SHEET_NAME + ' não encontrado');
     const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
@@ -954,6 +955,7 @@ function renderTable() {
 }
 
 let WB2 = null;
+let FREQ = null; // AppFrequenciaMembresia: [{date, tipo, mem, vis, cri}]
 const VC_FILE_ID = '11sUHhTzKaV21uX_FpBOEnJxNpFjUn6EHEiU79Pe3jXU';
 
 function readTableIn(wb, name) {
@@ -1325,12 +1327,57 @@ function renderMotivos() {
   const cA = cart(prevKey), cB = cart(MONTH);
 
   const curto = x => `${esc(x.g.replace(/^[\d.]+\s*-\s*/, ''))} (${fd(x.d)})`;
+  // Attendance (adults = members + visitors) next to tithes in cash vs transfer.
+  const freq = mk => {
+    const c = (FREQ || []).filter(x => x.tipo === 'CULTO' && x.date.slice(0, 7) === mk);
+    const dia = d => c.filter(x => new Date(x.date + 'T12:00').getDay() === d);
+    const media = a => a.length ? a.reduce((t, x) => t + x.mem + x.vis, 0) / a.length : 0;
+    return { n: c.length, dom: dia(0), qua: dia(3), pres: c.reduce((t, x) => t + x.mem + x.vis, 0), vis: c.reduce((t, x) => t + x.vis, 0), cri: c.reduce((t, x) => t + x.cri, 0), mDom: media(dia(0)), mQua: media(dia(3)) };
+  };
+  const fA = freq(prevKey), fB = freq(MONTH);
+  const din = a => a.filter(r => normS(r['FORMA DE PAGAMENTO']).includes('DINHEIRO')).reduce((t, r) => t + r._v, 0);
+  const dinA = din(dzA), dinB = din(dzB), trfA = zA.s - dinA, trfB = zB.s - dinB;
+  // Sundays/Wednesdays of the month (up to today) with no attendance row at all.
+  const registados = new Set((FREQ || []).map(x => x.date));
+  const hoje = new Date().toISOString().slice(0, 10), semReg = [];
+  for (let d = new Date(y, m - 1, 1, 12); d.getMonth() === m - 1; d.setDate(d.getDate() + 1)) {
+    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    if ((d.getDay() === 0 || d.getDay() === 3) && iso <= hoje && !registados.has(iso)) semReg.push(`${d.getDate()}/${m} (${d.getDay() ? 'Qua' : 'Dom'})`);
+  }
+  const outros = (FREQ || []).filter(x => x.date.slice(0, 7) === MONTH && x.tipo && x.tipo !== 'CULTO')
+    .map(x => `${+x.date.slice(8)}/${m} ${x.tipo.charAt(0) + x.tipo.slice(1).toLowerCase()}`);
+  const mediaCulto = (f => f.n ? f.pres / f.n : 0);
+  const linha = (rot, a, b, f = v => v.toFixed(1).replace('.', ','), bom = true) =>
+    `<tr><td>${rot}</td><td class="num">${f(a)}</td><td class="num">${f(b)}</td><td class="num" style="${cor(b - a, bom)}">${fp(pct(a, b))}</td></tr>`;
+  const inteiro = v => String(Math.round(v));
+  const freqHtml = !FREQ ? '<div class="muted" style="font-size:13px;margin-bottom:16px">Frequência indisponível (AppFrequenciaMembresia).</div>'
+    : !fB.n ? `<div class="muted" style="font-size:13px;margin-bottom:16px">Sem cultos registados em ${nome(MONTH)} na AppFrequenciaMembresia.</div>`
+    : `<h2>Frequência nos cultos</h2>
+    <div style="overflow-x:auto"><table style="font-size:13px"><thead><tr><th>Indicador</th><th class="num">${nome(prevKey)}</th><th class="num">${nome(MONTH)}</th><th class="num">Δ</th></tr></thead><tbody>
+      ${linha(`Cultos registados (Dom / Qua: ${fA.dom.length}/${fA.qua.length} → ${fB.dom.length}/${fB.qua.length})`, fA.n, fB.n, inteiro)}
+      ${linha('Presenças adultas (membros + visitantes)', fA.pres, fB.pres, inteiro)}
+      ${linha('Média por culto', mediaCulto(fA), mediaCulto(fB))}
+      ${linha('Média por domingo', fA.mDom, fB.mDom)}
+      ${linha('Média por quarta', fA.mQua, fB.mQua)}
+      ${linha('Visitantes', fA.vis, fB.vis, inteiro)}
+      ${linha('Crianças', fA.cri, fB.cri, inteiro)}
+      ${linha('Dízimos em dinheiro (entregues no culto)', dinA, dinB, eur)}
+      ${linha('Dízimos por transferência', trfA, trfB, eur)}
+      ${linha('Dinheiro por presença', fA.pres ? dinA / fA.pres : 0, fB.pres ? dinB / fB.pres : 0, eur)}
+      ${linha('Dízimos totais por presença', fA.pres ? zA.s / fA.pres : 0, fB.pres ? zB.s / fB.pres : 0, eur)}
+    </tbody></table></div>
+    ${semReg.length ? `<div style="font-size:12px;margin:8px 0 0;padding:8px 10px;border-radius:8px;background:#fff7ed">⚠️ Sem registo de frequência: ${semReg.join(', ')}. As presenças do mês podem estar abaixo do real.</div>` : ''}
+    ${outros.length ? `<div class="muted" style="font-size:12px;margin:8px 0 0">Outros registos no mês (não contam como culto): ${esc(outros.join(', '))}.</div>` : ''}
+    <div class="muted" style="font-size:12px;margin:6px 0 16px">A frequência acompanha as ofertas em dinheiro; as transferências não dependem de a pessoa ir ao culto nessa semana.</div>`;
+  const fraseFreq = FREQ && fA.n && fB.n
+    ? ` <b>Frequência</b> por culto ${fp(pct(mediaCulto(fA), mediaCulto(fB)))}; dinheiro nos cultos ${fp(pct(dinA, dinB))}; transferências ${fp(pct(trfA, trfB))}.`
+    : '';
   const dn = zB.n - zA.n;
   const frase = `<b>Entradas ${fp(pct(iA.s, iB.s))}</b>: dízimos e ofertas com ${dn === 0 ? 'o mesmo nº de lançamentos' : `${dn > 0 ? 'mais' : 'menos'} lançamentos (${dn > 0 ? '+' : ''}${dn})`} e ticket médio ${fp(pct(zA.t, zB.t))}${rec.length ? `; doadores recorrentes ${fd(recD)}` : ''}. `
     + `<b>Saídas ${fp(pct(oA.s, oB.s))}</b>${piores.length ? `: subiram ${piores.slice(0, 2).map(curto).join(' e ')}` : ''}${melhores.length ? `${piores.length ? '; ' : ': '}desceram ${melhores.slice(0, 2).map(curto).join(' e ')}` : ''}.`;
 
   el.innerHTML = `
-    <div style="background:#f5f7fa;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:13px">${frase}</div>
+    <div style="background:#f5f7fa;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:13px">${frase}${fraseFreq}</div>
     <div class="kpis" style="margin-bottom:16px">${kpi('Entradas', iA.s, iB.s, true)}${kpi('Saídas', oA.s, oB.s, false)}${kpi('Saldo', iA.s - oA.s, iB.s - oB.s, true)}</div>
     <h2 style="color:var(--in)">Entradas</h2>
     ${split(zA, zB, true, '<b>Dízimos e ofertas</b> · ')}
@@ -1340,6 +1387,7 @@ function renderMotivos() {
       novos <b>${nov.length}</b> (<span style="color:var(--in)">+${eur(soma(dB, nov))}</span>) ·
       só no mês anterior <b>${per.length}</b> (<span style="color:var(--out)">−${eur(soma(dA, per))}</span>)</div>
     <div style="font-size:13px;margin-bottom:16px">Lançamentos ≥ ${eur(MV_BIG)}: <b>${nBig(inA)} → ${nBig(inB)}</b> (${eur(iA.s - semBig(inA))} → ${eur(iB.s - semBig(inB))}). Sem eles, entradas <b>${fp(pct(semBig(inA), semBig(inB)))}</b> (${eur(semBig(inA))} → ${eur(semBig(inB))}).</div>
+    ${freqHtml}
     <h2 style="color:var(--out)">Saídas</h2>
     ${split(oA, oB, false)}
     <div class="grid2">

@@ -15,6 +15,9 @@ production server. Only Diretória members can log in.
   `EMAIL` may log in; `NOME` and `FOTO DO PERFIL` feed the user menu. Checked at
   login and on every request (5 min cache), so unticking `DIRETÓRIA` revokes
   access within minutes.
+- `attendance.py`: service attendance from `AppFrequenciaMembresia` (same
+  spreadsheet as BP SERVICE), served as counts only at `/api/frequencia` and
+  used by the "Frequência nos cultos" block of "Motivos da variação".
 - `auth_store.py`: SQLite database (`DASHBOARD_DB_PATH`) with scrypt password
   hashes and session tokens (stored as SHA-256 digests; 12 h sessions).
 - `manage_users.py`: creates/resets accounts (see below).
