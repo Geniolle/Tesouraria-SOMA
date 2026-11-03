@@ -857,7 +857,17 @@ function ccDet(c, n) {
   const recs = RECS.filter(r => r._m === CC_SEL.m && (YEAR === 'all' || r._y === YEAR) && normS(r.TIPO) !== 'TRANSFERENCIA' && (r['CENTRO DE CUSTO'] || '(vazio)') === c).sort((a, b) => (a._d || 0) - (b._d || 0));
   const soma = recs.reduce((s, r) => s + (r._in ? ccV(r) : -ccV(r)), 0);
   const linhas = recs.map(x => `<tr><td>${esc(x['DATA MOV.'])}</td><td>${esc(x['DESCRIÇÃO'])}</td><td>${esc(x.TIPO)}</td><td>${esc(x.ID_INTERNO)}</td><td>${esc(x.PROCESSO)}</td><td class="num" style="color:${x._in ? 'var(--in)' : 'var(--out)'}">${x._in ? '+' : '−'}${eur(ccV(x))}</td><td>${esc(x.STATUS)}</td></tr>`).join('');
-  return `<tr class="cc-det"><td colspan="${n}" style="padding:8px 16px;background:#fbfcfd"><div class="muted" style="font-size:12px;margin-bottom:6px">${MESES[+CC_SEL.m.slice(5) - 1]} ${CC_SEL.m.slice(0, 4)} · ${recs.length} lançamentos · soma ${eur(soma)}</div>${recs.length ? `<div style="overflow-x:auto"><table style="font-size:12px"><thead><tr><th>Data mov.</th><th>Descrição</th><th>Tipo</th><th>ID</th><th>Processo</th><th class="num">Valor</th><th>Status</th></tr></thead><tbody>${linhas}</tbody></table></div>` : '<span class="muted">Sem lançamentos</span>'}</td></tr>`;
+  return `<tr class="cc-det"><td colspan="${n}" style="padding:8px 16px;background:#fbfcfd"><div class="muted" style="font-size:12px;margin-bottom:6px">${MESES[+CC_SEL.m.slice(5) - 1]} ${CC_SEL.m.slice(0, 4)} · ${recs.length} lançamentos · soma ${eur(soma)}</div>${recs.length ? `<div style="overflow-x:auto"><table style="font-size:12px"><thead><tr><th>Data mov.</th><th>Descrição</th><th>Tipo</th><th>ID</th><th>Processo</th><th class="num">Valor</th><th>Status</th></tr></thead><tbody>${linhas}</tbody></table></div>` : '<span class="muted">Sem lançamentos</span>'}${c.startsWith('20.20.08') ? cartaoRef(CC_SEL.m) : ''}</td></tr>`;
+}
+
+// Card payment line: the individual CARTÃO sheet movements of the month, for reference only
+// (not added to the cost-centre totals, which already hold the payment from the bank statement).
+function cartaoRef(mk) {
+  const rows = (readTable('CARTÃO') || []).map(r => ({ ...r, _d: toDate(r['DATA MOV.']) })).filter(r => r._d && monthKey(r._d) === mk).sort((a, b) => a._d - b._d);
+  const deb = r => num(r['DEBITO EUR (+)']), cred = r => num(r['CREDITO EUR (-)']);
+  const total = rows.reduce((t, r) => t + deb(r) - cred(r), 0);
+  const linhas = rows.map(r => `<tr><td>${esc(r['DATA MOV.'])}</td><td>${esc(r['DESCRICAO'])}</td><td>${esc(r['PAIS'])}</td><td>${esc(r['ID_INTERNO'])}</td><td class="num">${deb(r) ? eur(deb(r)) : ''}</td><td class="num">${cred(r) ? eur(cred(r)) : ''}</td></tr>`).join('');
+  return `<div style="margin-top:12px;padding-top:8px;border-top:1px dashed var(--line)"><div class="muted" style="font-size:12px;margin-bottom:6px"><b>Movimentos do cartão (sheet CARTÃO)</b> · ${rows.length} movimentos · ${eur(total)} · só referência, não entram nos valores acima</div>${rows.length ? `<div style="overflow-x:auto"><table style="font-size:12px"><thead><tr><th>Data mov.</th><th>Descrição</th><th>País</th><th>ID</th><th class="num">Débito</th><th class="num">Crédito</th></tr></thead><tbody>${linhas}</tbody></table></div>` : '<span class="muted">Sem movimentos do cartão neste mês</span>'}</div>`;
 }
 
 function renderCC() {
