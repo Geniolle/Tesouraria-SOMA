@@ -1332,7 +1332,6 @@ function renderMotivos() {
   const cart = mk => RECS.filter(r => r._m === mk && normS(r.TIPO) === 'CARTAO').reduce((s, r) => s + Math.abs(num(r['IMPORTÂNCIA'])), 0);
   const cA = cart(prevKey), cB = cart(MONTH);
 
-  const curto = x => `${esc(x.g.replace(/^[\d.]+\s*-\s*/, ''))} (${fd(x.d)})`;
   // Attendance (adults = members + visitors) next to tithes in cash vs transfer.
   const freq = mk => {
     const c = (FREQ || []).filter(x => x.tipo === 'CULTO' && x.date.slice(0, 7) === mk);
@@ -1378,7 +1377,7 @@ function renderMotivos() {
     : '';
   const dn = zB.n - zA.n;
   const frase = `<b>Entradas ${fp(pct(iA.s, iB.s))}</b>: dízimos e ofertas com ${dn === 0 ? 'o mesmo nº de lançamentos' : `${dn > 0 ? 'mais' : 'menos'} lançamentos (${dn > 0 ? '+' : ''}${dn})`} e ticket médio ${fp(pct(zA.t, zB.t))}${recorrentes.size ? `; deram ${nRecB} dos ${recorrentes.size} doadores recorrentes (mês anterior: ${nRecA})` : ''}. `
-    + `<b>Saídas ${fp(pct(oA.s, oB.s))}</b>${piores.length ? `: subiram ${piores.slice(0, 2).map(curto).join(' e ')}` : ''}${melhores.length ? `${piores.length ? '; ' : ': '}desceram ${melhores.slice(0, 2).map(curto).join(' e ')}` : ''}.`;
+    + `<b>Saídas ${fp(pct(oA.s, oB.s))}</b>: ${oB.s > oA.s ? 'os gastos subiram este mês' : oB.s < oA.s ? 'os gastos desceram este mês' : 'os gastos mantiveram-se'}.`;
 
   el.innerHTML = `
     <div style="background:#f5f7fa;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:13px">${frase}${fraseFreq}</div>
