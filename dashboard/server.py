@@ -32,6 +32,7 @@ from auth_store import SESSION_TTL, AuthStore, generate_password
 from directory import Directory, DirectoryUnavailable
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+from year_filter import filter_xlsx
 
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 HERE = Path(__file__).parent
@@ -66,6 +67,23 @@ USER_MIN_YEAR = os.environ.get("DASHBOARD_USER_MIN_YEAR", "2026").strip().strip(
 ADMINS = {
     e.strip().lower() for e in os.environ.get("DASHBOARD_ADMIN_EMAILS", "").split(",") if e.strip()
 }
+
+# Sheets the page reads from each export; non-admins get only these, without
+# rows dated before USER_MIN_YEAR.
+USED_SHEETS = {
+    "/api/main.xlsx": {
+        "CONTAORDEM",
+        "T_EXTRATO",
+        "DÍZIMOS/OFERTAS",
+        "SAÍDAS",
+        "CARTÃO",
+        "CONSTANTES",
+    },
+    "/api/vc.xlsx": {"Financeiro", "VC_VENDAS"},
+}
+# Filtering takes seconds, so keep the result until the file changes in Drive.
+_filtered: dict[str, tuple[str, bytes]] = {}
+_filtered_lock = threading.Lock()
 
 # Failed logins per client IP and per email (in memory; one process).
 _fails: dict[str, list[float]] = {}
@@ -169,11 +187,11 @@ class Handler(BaseHTTPRequestHandler):
             email = parse_qs(urlsplit(self.path).query).get("email", [""])[0]
             self._json(200, {"events": STORE.events(email)})
         elif path == "/api/frequencia":
-            self._frequencia()
+            self._frequencia(admin=user["email"] in ADMINS)
         elif path in FILES:
             if path == "/api/main.xlsx":  # one per page load / "Atualizar"
                 self._audit(user["email"], "dados")
-            self._export(path)
+            self._export(path, admin=user["email"] in ADMINS)
         else:
             self._send(404, b"Not found", "text/plain")
 
@@ -300,25 +318,44 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self._send(404, b"No photo", "text/plain")
 
-    def _frequencia(self) -> None:
+    def _frequencia(self, admin: bool) -> None:
         try:
             data = fetch_attendance(CREDS, BP_SPREADSHEET_ID)
+            if not admin:
+                data = [x for x in data if x["date"][:4] >= USER_MIN_YEAR]
         except Exception:
             log.exception("Attendance read failed")
             self._send(502, b"Attendance read failed", "text/plain")
             return
         self._json(200, {"cultos": data})
 
-    def _export(self, path: str) -> None:
+    def _export(self, path: str, admin: bool) -> None:
         try:
             # httplib2 is not thread-safe, so build a client per request.
             drive = build("drive", "v3", credentials=CREDS, cache_discovery=False)
-            data = drive.files().export(fileId=FILES[path], mimeType=XLSX_MIME).execute()
+            if admin:
+                data = drive.files().export(fileId=FILES[path], mimeType=XLSX_MIME).execute()
+            else:
+                data = self._filtered_export(drive, path)
         except Exception:
             log.exception("Drive export failed for %s", path)
             self._send(502, b"Drive export failed", "text/plain")
             return
         self._send(200, data, XLSX_MIME)
+
+    @staticmethod
+    def _filtered_export(drive: object, path: str) -> bytes:
+        """Export for non-admins: used sheets only, from USER_MIN_YEAR on (cached per version)."""
+        files = drive.files()  # type: ignore[attr-defined]
+        version = files.get(fileId=FILES[path], fields="modifiedTime").execute()["modifiedTime"]
+        with _filtered_lock:
+            cached = _filtered.get(path)
+            if cached and cached[0] == version:
+                return cached[1]
+            raw = files.export(fileId=FILES[path], mimeType=XLSX_MIME).execute()
+            data = filter_xlsx(raw, int(USER_MIN_YEAR), USED_SHEETS[path])
+            _filtered[path] = (version, data)
+            return data
 
     def log_message(self, fmt: str, *args: object) -> None:
         log.info("%s %s", self._client(), fmt % args)

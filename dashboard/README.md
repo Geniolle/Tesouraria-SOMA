@@ -18,6 +18,11 @@ production server. Only Diretória members can log in.
 - `attendance.py`: service attendance from `AppFrequenciaMembresia` (same
   spreadsheet as BP SERVICE), served as counts only at `/api/frequencia` and
   used by the "Frequência nos cultos" block of "Motivos da variação".
+- `year_filter.py`: for non-admins the server removes rows dated before
+  `DASHBOARD_USER_MIN_YEAR` and the sheets the page does not read from both
+  XLSX exports (and older attendance), so earlier years never reach their
+  browser. The filtered file is cached until the spreadsheet changes in Drive
+  (first load after a change takes a few seconds). Needs `openpyxl`.
 - `auth_store.py`: SQLite database (`DASHBOARD_DB_PATH`) with scrypt password
   hashes and session tokens (stored as SHA-256 digests; 12 h sessions).
 - `manage_users.py`: creates/resets accounts (see below).
