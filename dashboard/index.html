@@ -753,8 +753,8 @@ function renderOrigins() {
   const periodLabel = MONTH !== 'all'
     ? `${MESES[+MONTH.slice(5) - 1]} ${MONTH.slice(0, 4)}`
     : (YEAR !== 'all' ? `Ano ${YEAR}` : 'Todos os períodos');
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const elegivel = x => x.d && x.d < today && !x.tipo;
+  // Rule: OK only when the record exists in the source and in CONTAORDEM; anything else is missing.
+  const elegivel = () => true;
   const contaIds = new Set(RECS.map(r => r.ID_INTERNO).filter(Boolean));
   const contaPeriod = RECS.filter(r => inPeriod(r._d));
   const pill = (n, bad) => `<span class="pill ${n === 0 ? 'ok' : bad}">${n}</span>`;
@@ -799,7 +799,7 @@ function renderOrigins() {
     const prefix = all.length ? all[0].id.replace(/\d+$/, '') : '';
     const extra = prefix ? contaPeriod.filter(r => r.ID_INTERNO && r.ID_INTERNO.startsWith(prefix) && !srcAll.has(r.ID_INTERNO)) : [];
     const ok = faltam.length === 0 && extra.length === 0;
-    return `<div class="card">${head(o.label, o.sheet, ok)}${row('Registos na origem', src.length)}${row('Presentes em CONTAORDEM', presentes)}${row('Em falta em CONTAORDEM', pill(faltam.length, 'bad'))}${row('Pendentes (não contam como falta)', `<span class="pill">${src.filter(x => !contaIds.has(x.id) && !elegivel(x)).length}</span>`)}${row('Extra em CONTAORDEM (sem origem)', pill(extra.length, 'wa'))}${list(ehDizimos ? 'Data em falta -' : 'ID em falta -', faltamLabels)}${list('Pendentes (não contam como falta) -', src.filter(x => !contaIds.has(x.id) && !elegivel(x)).map(x => x.id + (x.d ? ' (' + x.d.toLocaleDateString('pt-PT') + ')' : '')))}</div>`;
+    return `<div class="card">${head(o.label, o.sheet, ok)}${row('Registos na origem', src.length)}${row('Presentes em CONTAORDEM', presentes)}${row('Em falta em CONTAORDEM', pill(faltam.length, 'bad'))}${row('Extra em CONTAORDEM (sem origem)', pill(extra.length, 'wa'))}${list(ehDizimos ? 'Data em falta -' : 'ID em falta -', faltamLabels)}</div>`;
   }).join('');
 }
 
@@ -819,8 +819,8 @@ function renderOriginsPrev() {
     if (all === null) return `<div class="card"><h2>${esc(o.label)}</h2><div class="muted">Separador ${esc(o.sheet)} não encontrado</div></div>`;
     const srcAll = new Set(all.map(x => x.id));
     const src = all.filter(x => inPeriod(x.d));
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    const elegivel = x => x.d && x.d < today && !x.tipo;
+    // Rule: OK only when the record exists in the source and in CONTAORDEM; anything else is missing.
+    const elegivel = () => true;
     const faltam = src.filter(x => !contaIds.has(x.id) && elegivel(x)).map(x => x.id);
     const presentes = src.length - faltam.length;
     const prefix = all.length ? all[0].id.replace(/\d+$/, '') : '';
