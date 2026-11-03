@@ -1305,15 +1305,21 @@ function renderMotivos() {
   const kpi = (l, a, b, bom) => `<div class="kpi"><div class="l">${l}</div><div class="v" style="${cor(b - a, bom)}">${fd(b - a)}</div><div class="muted" style="font-size:12px">${eur(a)} → ${eur(b)} · ${fp(pct(a, b))}</div></div>`;
   const split = (a, b, bom, rot = '') => `<div style="font-size:13px;margin:6px 0 10px">${rot}Nº de lançamentos: <b>${a.n} → ${b.n}</b> (efeito quantidade <b style="${cor(vol(a, b), bom)}">${fd(vol(a, b))}</b>) · Ticket médio: <b>${eur(a.t)} → ${eur(b.t)}</b> (efeito ticket <b style="${cor(tic(a, b), bom)}">${fd(tic(a, b))}</b>)</div>`;
 
-  // Donors identified by DESCRIÇÃO: approximate, cash entries share generic descriptions.
   // Count and ticket of entries use tithes only: small café sales would distort them.
   const dzA = inA.filter(r => normS(r['CENTRO DE CUSTO']).includes('DIZIMOS')), dzB = inB.filter(r => normS(r['CENTRO DE CUSTO']).includes('DIZIMOS'));
   const zA = st(dzA), zB = st(dzB);
-  const doad = a => a.reduce((o, r) => { o[r['DESCRIÇÃO']] = (o[r['DESCRIÇÃO']] || 0) + r._v; return o; }, {});
-  const dA = doad(dzA), dB = doad(dzB);
-  const rec = Object.keys(dB).filter(k => k in dA), nov = Object.keys(dB).filter(k => !(k in dA)), per = Object.keys(dA).filter(k => !(k in dB));
-  const soma = (o, ks) => ks.reduce((s, k) => s + o[k], 0);
-  const recD = soma(dB, rec) - soma(dA, rec);
+  // Recurring donors: gave tithes in more than 3 months of the selected year. Identified by
+  // DESCRIÇÃO, so only bank transfers count (cash entries share generic descriptions).
+  const porDescricao = r => !normS(r['FORMA DE PAGAMENTO']).includes('DINHEIRO');
+  // The bank changed the format in Aug 2026 ("TRF.CREDNOME" -> "TRF.CRED  NOME"): compare letters only.
+  const doador = r => normS(r['DESCRIÇÃO']).replace(/[^A-Z0-9]/g, '').replace(/^(TRFCRED|TRIPS|TRF)/, '');
+  const mesesDoador = {};
+  RECS.filter(r => r._in && r._v > 0 && r._y === String(y) && porDescricao(r) && normS(r['CENTRO DE CUSTO']).includes('DIZIMOS'))
+    .forEach(r => (mesesDoador[doador(r)] ??= new Set()).add(r._m));
+  const recorrentes = new Set(Object.keys(mesesDoador).filter(k => mesesDoador[k].size > 3));
+  const doRec = a => a.filter(r => porDescricao(r) && recorrentes.has(doador(r)));
+  const deram = a => new Set(doRec(a).map(doador)).size;
+  const rA = st(doRec(dzA)), rB = st(doRec(dzB)), nRecA = deram(dzA), nRecB = deram(dzB);
   const semBig = a => a.filter(r => r._v < MV_BIG).reduce((s, r) => s + r._v, 0);
   const nBig = a => a.filter(r => r._v >= MV_BIG).length;
   const inCC = cmp(inA, inB, 'CENTRO DE CUSTO').sort((p, q) => Math.abs(q.d) - Math.abs(p.d));
@@ -1371,7 +1377,7 @@ function renderMotivos() {
     ? ` <b>Frequência</b> por culto ${fp(pct(mediaCulto(fA), mediaCulto(fB)))}; dinheiro nos cultos ${fp(pct(dinA, dinB))}; transferências ${fp(pct(trfA, trfB))}.`
     : '';
   const dn = zB.n - zA.n;
-  const frase = `<b>Entradas ${fp(pct(iA.s, iB.s))}</b>: dízimos e ofertas com ${dn === 0 ? 'o mesmo nº de lançamentos' : `${dn > 0 ? 'mais' : 'menos'} lançamentos (${dn > 0 ? '+' : ''}${dn})`} e ticket médio ${fp(pct(zA.t, zB.t))}${rec.length ? `; doadores recorrentes ${fd(recD)}` : ''}. `
+  const frase = `<b>Entradas ${fp(pct(iA.s, iB.s))}</b>: dízimos e ofertas com ${dn === 0 ? 'o mesmo nº de lançamentos' : `${dn > 0 ? 'mais' : 'menos'} lançamentos (${dn > 0 ? '+' : ''}${dn})`} e ticket médio ${fp(pct(zA.t, zB.t))}${recorrentes.size ? `; deram ${nRecB} dos ${recorrentes.size} doadores recorrentes (mês anterior: ${nRecA})` : ''}. `
     + `<b>Saídas ${fp(pct(oA.s, oB.s))}</b>${piores.length ? `: subiram ${piores.slice(0, 2).map(curto).join(' e ')}` : ''}${melhores.length ? `${piores.length ? '; ' : ': '}desceram ${melhores.slice(0, 2).map(curto).join(' e ')}` : ''}.`;
 
   el.innerHTML = `
@@ -1380,10 +1386,9 @@ function renderMotivos() {
     <h2 style="color:var(--in)">Entradas</h2>
     ${split(zA, zB, true, '<b>Dízimos e ofertas</b> · ')}
     <div style="overflow-x:auto">${tbl(inCC, true)}</div>
-    <div style="font-size:13px;margin:10px 0 4px">Dízimos e ofertas por doador <span class="muted">(identificado pela descrição; aproximado)</span>:
-      recorrentes <b>${rec.length}</b> (${eur(soma(dA, rec))} → ${eur(soma(dB, rec))}, <b style="${cor(recD, true)}">${fd(recD)}</b>) ·
-      novos <b>${nov.length}</b> (<span style="color:var(--in)">+${eur(soma(dB, nov))}</span>) ·
-      só no mês anterior <b>${per.length}</b> (<span style="color:var(--out)">−${eur(soma(dA, per))}</span>)</div>
+    <div style="font-size:13px;margin:10px 0 4px">Doadores recorrentes <span class="muted">(deram dízimos em mais de 3 meses de ${y}, por transferência; identificados pela descrição)</span>:
+      dos <b>${recorrentes.size}</b> recorrentes, em ${nome(MONTH)} deram <b>${nRecB}</b> (${nome(prevKey)}: ${nRecA}) ·
+      ticket médio <b>${eur(rA.t)} → ${eur(rB.t)}</b> <span style="${cor(rB.t - rA.t, true)}">(${fp(pct(rA.t, rB.t))})</span></div>
     <div style="font-size:13px;margin-bottom:16px">Lançamentos ≥ ${eur(MV_BIG)}: <b>${nBig(inA)} → ${nBig(inB)}</b> (${eur(iA.s - semBig(inA))} → ${eur(iB.s - semBig(inB))}). Sem eles, entradas <b>${fp(pct(semBig(inA), semBig(inB)))}</b> (${eur(semBig(inA))} → ${eur(semBig(inB))}).</div>
     ${freqHtml}
     <h2 style="color:var(--out)">Saídas</h2>
