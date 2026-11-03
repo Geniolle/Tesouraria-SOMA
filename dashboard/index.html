@@ -1454,18 +1454,21 @@ function renderResultado(cfg) {
   resumo.textContent = MONTH !== 'all' ? `${MESES[+MONTH.slice(5) - 1]} ${MONTH.slice(0, 4)}` : YEAR === 'all' ? 'Todos os anos' : `Ano ${YEAR}`;
   const vendas = D.sales.filter(v => noPeriodo(v.date));
   const doacoes = (D.donations || []).filter(v => noPeriodo(v.date)).reduce((t, v) => t + v.amount, 0);
-  let bruto = 0, liquido = 0, custo = 0, tpaApp = 0, nTpaApp = 0, semCusto = 0;
+  let bruto = 0, liquido = 0, recebido = 0, custo = 0, tpaApp = 0, nTpaApp = 0, semCusto = 0;
   const artigos = {};
+  // Café sales carry TOTAL RECEBIDO (credit sales = 0); bookshop sales count the amount to pay.
+  const temRecebido = D.sales.some(v => v.received !== undefined);
+  const rec = v => v.received ?? v.total;
   vendas.forEach(v => {
     const b = v.items.reduce((t, i) => t + i.price * i.qty, 0);
-    bruto += b; liquido += v.total;
-    if (v.payment.includes('TPA')) { tpaApp += v.total; nTpaApp++; }
+    bruto += b; liquido += v.total; recebido += rec(v);
+    if (v.payment.includes('TPA')) { tpaApp += rec(v); nTpaApp++; }
     v.items.forEach(i => {
       const c = D.costs[i.key];
       if (c === undefined) semCusto += i.qty; else custo += c * i.qty;
       const a = artigos[i.title] ??= { qty: 0, receita: 0, custo: 0 };
       a.qty += i.qty;
-      a.receita += b ? i.price * i.qty * v.total / b : 0; // sale discount spread over its items
+      a.receita += b ? i.price * i.qty * rec(v) / b : 0; // sale discount spread over its items
       a.custo += (c ?? 0) * i.qty;
     });
   });
@@ -1478,8 +1481,8 @@ function renderResultado(cfg) {
   const nFechos = receitas.filter(r => chave(r).startsWith('FECHOTPA' + cfg.tpa)).length;
   const totalReceitas = receitas.reduce((t, r) => t + valor(r), 0);
   const fechos = soma('FECHOTPA' + cfg.tpa), comissoes = soma('COMISSTPA' + cfg.tpa), aluguer = soma('COMISSOESTPA' + cfg.maquina);
-  const margem = liquido - custo, resultado = margem - comissoes - aluguer;
-  const pctM = liquido ? margem / liquido * 100 : 0;
+  const margem = recebido - custo, resultado = margem - comissoes - aluguer;
+  const pctM = recebido ? margem / recebido * 100 : 0;
   const linha = (rot, v, forte = false, sinal = '') => `<tr${forte ? ' style="font-weight:700;background:#f5f7fa"' : ''}><td>${rot}</td><td class="num" style="${forte ? `color:${v < 0 ? 'var(--out)' : 'var(--in)'}` : ''}">${sinal}${eur(Math.abs(v))}</td></tr>`;
   const top = Object.entries(artigos).sort((a, b) => b[1].receita - a[1].receita).slice(0, 8);
   const dif = fechos - tpaApp;
@@ -1492,6 +1495,7 @@ function renderResultado(cfg) {
           ${linha(cfg.bruto, bruto)}
           ${linha('Descontos dados', bruto - liquido, false, bruto - liquido >= 0 ? '− ' : '+ ')}
           ${linha('Vendas líquidas', liquido, true)}
+          ${temRecebido ? `${linha('Por receber (crédito ou sem valor recebido)', liquido - recebido, false, liquido - recebido >= 0 ? '− ' : '+ ')}${linha('Total recebido', recebido, true)}` : ''}
           ${linha(cfg.custo, custo, false, '− ')}
           ${linha(`Margem bruta (${pctM.toFixed(1).replace('.', ',')}%)`, margem, true)}
           ${linha('Comissões TPA (por venda)', comissoes, false, '− ')}

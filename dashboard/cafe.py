@@ -79,6 +79,8 @@ def fetch_cafe(credentials: Any, spreadsheet_id: str, min_year: int | None) -> d
                 "date": day.isoformat(),
                 "payment": r.get("FORMA DE PAGAMENTO", "").strip().upper(),
                 "total": _num(r.get("VALOR A PAGAR", "")),
+                # Money actually received (0 on credit sales); the café P&L sums this.
+                "received": _num(r.get("TOTAL RECEBIDO", "")),
                 "items": items,
             }
         )
