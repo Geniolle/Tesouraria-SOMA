@@ -1387,7 +1387,7 @@ function renderMotivos() {
       ticket médio <b>${eur(rA.t)} → ${eur(rB.t)}</b> <span style="${cor(rB.t - rA.t, true)}">(${fp(pct(rA.t, rB.t))})</span></div>
     ${freqHtml}
     <h2 style="color:var(--out)">Saídas</h2>
-    ${split(oA, oB, false)}
+    <div style="font-size:13px;margin:6px 0 10px">Nº de lançamentos: <b>${oA.n} → ${oB.n}</b> (${oB.s === oA.s ? 'o valor gasto foi igual' : `o valor gasto foi ${oB.s > oA.s ? 'maior' : 'menor'} <b style="${cor(oB.s - oA.s, false)}">${eur(Math.abs(oB.s - oA.s))}</b>`})</div>
     <div class="grid2">
       <div style="overflow-x:auto"><div class="muted" style="font-size:12px;margin-bottom:4px">Pioraram o resultado (gastou-se mais)</div>${piores.length ? tbl(piores, false) : '<span class="muted">Nenhum</span>'}</div>
       <div style="overflow-x:auto"><div class="muted" style="font-size:12px;margin-bottom:4px">Melhoraram o resultado (gastou-se menos)</div>${melhores.length ? tbl(melhores, false) : '<span class="muted">Nenhum</span>'}</div>
