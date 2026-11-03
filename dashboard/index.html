@@ -1504,8 +1504,12 @@ function renderResultado(cfg) {
           <tr><td>Vendas registadas na app</td><td class="num">${vendas.length}</td></tr>
           ${linha(cfg.bruto, bruto)}
           ${cfg.custoNoLugarDoDesconto ? linha(cfg.custoNoLugarDoDesconto, custo, false, '− ') : linha('Descontos dados', bruto - liquido, false, bruto - liquido >= 0 ? '− ' : '+ ')}
-          ${linha('Vendas líquidas', liquido, true)}
-          ${temRecebido ? `${linha('Por receber (crédito ou sem valor recebido)', liquido - recebido, false, liquido - recebido >= 0 ? '− ' : '+ ')}${linha('Total recebido', recebido, true)}` : ''}
+          ${cfg.custoNoLugarDoDesconto
+            // Café: net sales = list-price sales − purchase cost; then what is still to receive.
+            // "Por receber" here is list price − received (credit, missing received value or discount),
+            // so the chain ends on received − purchase cost, the base of the result.
+            ? `${linha('Vendas líquidas', bruto - custo, true)}${linha('Por receber (crédito, sem valor recebido ou desconto)', bruto - recebido, false, bruto - recebido >= 0 ? '− ' : '+ ')}${linha('Valor líquido recebido', recebido - custo, true)}`
+            : `${linha('Vendas líquidas', liquido, true)}${temRecebido ? `${linha('Por receber (crédito ou sem valor recebido)', liquido - recebido, false, liquido - recebido >= 0 ? '− ' : '+ ')}${linha('Total recebido', recebido, true)}` : ''}`}
           ${comCusto ? `${linha(cfg.custo, custo, false, '− ')}${linha(`Margem bruta (${pctM.toFixed(1).replace('.', ',')}%)`, margem, true)}` : ''}
           ${linha('Comissões TPA (por venda)', comissoes, false, '− ')}
           ${linha('Aluguer da máquina TPA', aluguer, false, '− ')}
