@@ -1332,9 +1332,6 @@ function renderMotivos() {
   const piores = outCC.filter(x => x.d > 0.005).sort((p, q) => q.d - p.d).slice(0, 5);
   const melhores = outCC.filter(x => x.d < -0.005).sort((p, q) => p.d - q.d).slice(0, 5);
 
-  // Card payments have _v = 0 globally, so they are out of "Saídas"; flag them.
-  const cart = mk => RECS.filter(r => r._m === mk && normS(r.TIPO) === 'CARTAO').reduce((s, r) => s + Math.abs(num(r['IMPORTÂNCIA'])), 0);
-  const cA = cart(prevKey), cB = cart(MONTH);
 
   // Attendance (adults = members + visitors) next to tithes in cash vs transfer.
   const freq = mk => {
@@ -1398,8 +1395,7 @@ function renderMotivos() {
     <div class="grid2">
       <div style="overflow-x:auto"><div class="muted" style="font-size:12px;margin-bottom:4px">Pioraram o resultado (gastou-se mais)</div>${piores.length ? tbl(piores, false) : '<span class="muted">Nenhum</span>'}</div>
       <div style="overflow-x:auto"><div class="muted" style="font-size:12px;margin-bottom:4px">Melhoraram o resultado (gastou-se menos)</div>${melhores.length ? tbl(melhores, false) : '<span class="muted">Nenhum</span>'}</div>
-    </div>
-    ${cA || cB ? `<div style="font-size:12px;margin-top:12px;padding:8px 10px;border-radius:8px;background:#fff7ed">⚠️ Pagamentos com TIPO = Cartão não entram nas saídas: ${nome(prevKey)} ${eur(cA)} · ${nome(MONTH)} ${eur(cB)}.</div>` : ''}`;
+    </div>`;
 }
 
 let MV_OPEN = true;
