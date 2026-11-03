@@ -1295,14 +1295,11 @@ function renderMotivos() {
   const iA = st(inA), iB = st(inB), oA = st(outA), oB = st(outB);
   const vazio = [[MONTH, iB.n + oB.n], [prevKey, iA.n + oA.n]].find(([, n]) => !n);
   if (vazio) { el.innerHTML = `<span class="muted">Sem dados em ${nome(vazio[0])} para comparar.</span>`; return; }
-  // Price/volume split: delta = delta_n * ticket_prev + delta_ticket * n_curr
-  const vol = (a, b) => (b.n - a.n) * a.t, tic = (a, b) => (b.t - a.t) * b.n;
   const grp = (a, k) => a.reduce((o, r) => { const g = r[k] || '(vazio)'; (o[g] = o[g] || []).push(r); return o; }, {});
   const cmp = (a, b, k) => { const ga = grp(a, k), gb = grp(b, k); return [...new Set([...Object.keys(ga), ...Object.keys(gb)])].map(g => ({ g, a: st(ga[g] || []), b: st(gb[g] || []) })).map(x => ({ ...x, d: x.b.s - x.a.s })); };
   const tbl = (rows, bom) => `<table style="font-size:13px"><thead><tr><th>Centro de custo</th><th class="num">Nº</th><th class="num">Ticket médio</th><th class="num">Δ €</th></tr></thead><tbody>${rows.map(x =>
     `<tr><td>${esc(x.g)}${x.a.n ? '' : ' <span class="pill">sem mov. no mês anterior</span>'}</td><td class="num" style="white-space:nowrap">${x.a.n} → ${x.b.n}</td><td class="num" style="white-space:nowrap">${eur(x.a.t)} → ${eur(x.b.t)}</td><td class="num" style="font-weight:600;white-space:nowrap;${cor(x.d, bom)}">${fd(x.d)}</td></tr>`).join('')}</tbody></table>`;
   const kpi = (l, a, b, bom) => `<div class="kpi"><div class="l">${l}</div><div class="v" style="${cor(b - a, bom)}">${fd(b - a)}</div><div class="muted" style="font-size:12px">${eur(a)} → ${eur(b)} · ${fp(pct(a, b))}</div></div>`;
-  const split = (a, b, bom, rot = '') => `<div style="font-size:13px;margin:6px 0 10px">${rot}Nº de lançamentos: <b>${a.n} → ${b.n}</b> (efeito quantidade <b style="${cor(vol(a, b), bom)}">${fd(vol(a, b))}</b>) · Ticket médio: <b>${eur(a.t)} → ${eur(b.t)}</b> (efeito ticket <b style="${cor(tic(a, b), bom)}">${fd(tic(a, b))}</b>)</div>`;
 
   // Count and ticket of entries use tithes only: small café sales would distort them.
   const dzA = inA.filter(r => normS(r['CENTRO DE CUSTO']).includes('DIZIMOS')), dzB = inB.filter(r => normS(r['CENTRO DE CUSTO']).includes('DIZIMOS'));
@@ -1379,14 +1376,14 @@ function renderMotivos() {
   el.innerHTML = `
     <div style="background:#f5f7fa;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:13px">${frase}${fraseFreq}</div>
     <div class="kpis" style="margin-bottom:16px">${kpi('Entradas', iA.s, iB.s, true)}${kpi('Saídas', oA.s, oB.s, false)}${kpi('Saldo', iA.s - oA.s, iB.s - oB.s, true)}</div>
-    <h2 style="color:var(--in)">Entradas</h2>
-    ${split(zA, zB, true, '<b>Dízimos e ofertas</b> · ')}
+    <h2 style="color:var(--in);background:#f1f3f5;padding:6px 10px;border-radius:6px;margin:16px 0 8px">Entradas</h2>
+    <div style="font-size:13px;font-weight:600;margin:6px 0 8px">Dízimos e ofertas</div>
     <div style="overflow-x:auto">${tbl(inCC, true)}</div>
     <div style="font-size:13px;margin:10px 0 16px">Doadores recorrentes <span class="muted">(deram dízimos em mais de 3 meses de ${y}, por transferência; identificados pela descrição)</span>:
       dos <b>${recorrentes.size}</b> recorrentes, em ${nome(MONTH)} deram <b>${nRecB}</b> (${nome(prevKey)}: ${nRecA}) ·
       ticket médio <b>${eur(rA.t)} → ${eur(rB.t)}</b> <span style="${cor(rB.t - rA.t, true)}">(${fp(pct(rA.t, rB.t))})</span></div>
     ${freqHtml}
-    <h2 style="color:var(--out)">Saídas</h2>
+    <h2 style="color:var(--out);background:#f1f3f5;padding:6px 10px;border-radius:6px;margin:16px 0 8px">Saídas</h2>
     <div style="font-size:13px;margin:6px 0 10px">Nº de lançamentos: <b>${oA.n} → ${oB.n}</b> (${oB.s === oA.s ? 'o valor gasto foi igual' : `o valor gasto foi ${oB.s > oA.s ? 'maior' : 'menor'} <b style="${cor(oB.s - oA.s, false)}">${eur(Math.abs(oB.s - oA.s))}</b>`})</div>
     <div class="grid2">
       <div style="overflow-x:auto"><div class="muted" style="font-size:12px;margin-bottom:4px">Pioraram o resultado (gastou-se mais)</div>${piores.length ? tbl(piores, false) : '<span class="muted">Nenhum</span>'}</div>
