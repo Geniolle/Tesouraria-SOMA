@@ -13,7 +13,8 @@ Required env (same ``.env`` as the automation): SHEETS_SPREADSHEET_ID,
 VERBO_CAFE_SOURCE_SPREADSHEET_ID, SHEETS_SERVICE_ACCOUNT_PATH,
 BP_SERVICE_SPREADSHEET_ID, DASHBOARD_DB_PATH.
 Optional: DASHBOARD_PORT (default 8090), DASHBOARD_ADMIN_EMAILS (comma-separated
-Diretória emails that may manage accounts from the page).
+Diretória emails that may manage accounts from the page), DASHBOARD_USER_MIN_YEAR
+(first year non-admins see, default 2026).
 """
 
 import json
@@ -60,6 +61,8 @@ CREDS = service_account.Credentials.from_service_account_file(
 STORE = AuthStore(_require("DASHBOARD_DB_PATH"))
 BP_SPREADSHEET_ID = _require("BP_SERVICE_SPREADSHEET_ID")
 DIRECTORY = Directory(CREDS, BP_SPREADSHEET_ID)
+# Non-admin members only see data from this year on (admins see every year).
+USER_MIN_YEAR = os.environ.get("DASHBOARD_USER_MIN_YEAR", "2026").strip().strip('"')
 ADMINS = {
     e.strip().lower() for e in os.environ.get("DASHBOARD_ADMIN_EMAILS", "").split(",") if e.strip()
 }
@@ -150,7 +153,11 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/me":
             must = STORE.must_change(user["email"])
             admin = user["email"] in ADMINS
-            self._json(200, {**self._public(user), "must_change": must, "admin": admin})
+            min_year = None if admin else USER_MIN_YEAR
+            self._json(
+                200,
+                {**self._public(user), "must_change": must, "admin": admin, "min_year": min_year},
+            )
         elif STORE.must_change(user["email"]):
             # Initial password: no data until it has been replaced.
             self._json(403, {"error": "change_password"})

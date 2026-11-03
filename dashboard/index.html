@@ -279,6 +279,7 @@ const eur = n => n.toLocaleString('pt-PT', {style:'currency', currency:'EUR'});
 const MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 
 let RECS = [];
+let MIN_YEAR = null; // first year a non-admin may see (from /api/me); null = every year
 let MONTH = 'all';
 let YEAR = 'all';
 
@@ -368,6 +369,7 @@ async function loadFromDrive() {
     if (!ws) throw new Error('Separador ' + SHEET_NAME + ' não encontrado');
     const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
     buildRecords(rows, wb);
+    if (MIN_YEAR) RECS = RECS.filter(r => r._y >= MIN_YEAR);
     const now = new Date();
     const curYear = String(now.getFullYear());
     const curMonth = curYear + '-' + String(now.getMonth() + 1).padStart(2, '0');
@@ -724,8 +726,8 @@ function renderOrigins() {
   const box = $('origins');
   if (!WB || !RECS.length) { box.innerHTML = ''; return; }
   const inPeriod = d => !d
-    ? (YEAR === 'all' && MONTH === 'all')
-    : (YEAR === 'all' || String(d.getFullYear()) === YEAR) && (MONTH === 'all' || monthKey(d) === MONTH);
+    ? (YEAR === 'all' && MONTH === 'all' && !MIN_YEAR)
+    : (YEAR === 'all' || String(d.getFullYear()) === YEAR) && (MONTH === 'all' || monthKey(d) === MONTH) && (!MIN_YEAR || String(d.getFullYear()) >= MIN_YEAR);
   const periodLabel = MONTH !== 'all'
     ? `${MESES[+MONTH.slice(5) - 1]} ${MONTH.slice(0, 4)}`
     : (YEAR !== 'all' ? `Ano ${YEAR}` : 'Todos os períodos');
@@ -783,8 +785,8 @@ function renderOriginsPrev() {
   const box = $('origins');
   if (!WB || !RECS.length) { box.innerHTML = ''; return; }
   const inPeriod = d => !d
-    ? (YEAR === 'all' && MONTH === 'all')
-    : (YEAR === 'all' || String(d.getFullYear()) === YEAR) && (MONTH === 'all' || monthKey(d) === MONTH);
+    ? (YEAR === 'all' && MONTH === 'all' && !MIN_YEAR)
+    : (YEAR === 'all' || String(d.getFullYear()) === YEAR) && (MONTH === 'all' || monthKey(d) === MONTH) && (!MIN_YEAR || String(d.getFullYear()) >= MIN_YEAR);
   const periodLabel = MONTH !== 'all'
     ? `${MESES[+MONTH.slice(5) - 1]} ${MONTH.slice(0, 4)}`
     : (YEAR !== 'all' ? `Ano ${YEAR}` : 'Todos os períodos');
@@ -995,8 +997,8 @@ function renderVerbo() {
     return;
   }
   const inPeriod = d => !d
-    ? (YEAR === 'all' && MONTH === 'all')
-    : (YEAR === 'all' || String(d.getFullYear()) === YEAR) && (MONTH === 'all' || monthKey(d) === MONTH);
+    ? (YEAR === 'all' && MONTH === 'all' && !MIN_YEAR)
+    : (YEAR === 'all' || String(d.getFullYear()) === YEAR) && (MONTH === 'all' || monthKey(d) === MONTH) && (!MIN_YEAR || String(d.getFullYear()) >= MIN_YEAR);
   const periodLabel = MONTH !== 'all'
     ? `${MESES[+MONTH.slice(5) - 1]} ${MONTH.slice(0, 4)}`
     : (YEAR !== 'all' ? `Ano ${YEAR}` : 'Todos os períodos');
@@ -1438,6 +1440,7 @@ async function loadUser() {
     if (!r.ok) return true;
     const u = await r.json();
     MUST_PW = !!u.must_change;
+    MIN_YEAR = u.min_year || null;
     $('userRole').textContent = u.admin ? 'Administrador' : 'Diretória';
     $('adminOpen').classList.toggle('hidden', !u.admin);
     if (MUST_PW) { $('firstPw').showModal(); $('fpNew').focus(); }
