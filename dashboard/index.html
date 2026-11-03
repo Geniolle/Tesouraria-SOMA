@@ -1363,8 +1363,6 @@ function renderMotivos() {
       ${linha('Crianças', fA.cri, fB.cri, inteiro)}
       ${linha('Dízimos em dinheiro (entregues no culto)', dinA, dinB, eur)}
       ${linha('Dízimos por transferência', trfA, trfB, eur)}
-      ${linha('Dinheiro por presença', fA.pres ? dinA / fA.pres : 0, fB.pres ? dinB / fB.pres : 0, eur)}
-      ${linha('Dízimos totais por presença', fA.pres ? zA.s / fA.pres : 0, fB.pres ? zB.s / fB.pres : 0, eur)}
     </tbody></table></div>
     ${semReg.length ? `<div style="font-size:12px;margin:8px 0 0;padding:8px 10px;border-radius:8px;background:#fff7ed">⚠️ Sem registo de frequência: ${semReg.join(', ')}. As presenças do mês podem estar abaixo do real.</div>` : ''}
     ${outros.length ? `<div class="muted" style="font-size:12px;margin:8px 0 0">Outros registos no mês (não contam como culto): ${esc(outros.join(', '))}.</div>` : ''}
