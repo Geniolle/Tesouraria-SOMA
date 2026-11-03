@@ -14,7 +14,8 @@ VERBO_CAFE_SOURCE_SPREADSHEET_ID, SHEETS_SERVICE_ACCOUNT_PATH,
 BP_SERVICE_SPREADSHEET_ID, DASHBOARD_DB_PATH.
 Optional: DASHBOARD_PORT (default 8090), DASHBOARD_ADMIN_EMAILS (comma-separated
 Diretória emails that may manage accounts from the page), DASHBOARD_USER_MIN_YEAR
-(first year non-admins see, default 2026).
+(first year non-admins see, default 2026), LIVRARIA_SPREADSHEET_ID (AppVerboShop,
+for the bookshop P&L card).
 """
 
 import json
@@ -29,6 +30,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from attendance import fetch_attendance
 from auth_store import SESSION_TTL, AuthStore, generate_password
+from bookshop import fetch_bookshop
 from directory import Directory, DirectoryUnavailable
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -62,6 +64,8 @@ CREDS = service_account.Credentials.from_service_account_file(
 STORE = AuthStore(_require("DASHBOARD_DB_PATH"))
 BP_SPREADSHEET_ID = _require("BP_SERVICE_SPREADSHEET_ID")
 DIRECTORY = Directory(CREDS, BP_SPREADSHEET_ID)
+# AppVerboShop (bookshop purchases/sales); the bookshop card is hidden when unset.
+LIVRARIA_SPREADSHEET_ID = os.environ.get("LIVRARIA_SPREADSHEET_ID", "").strip().strip('"')
 # Non-admin members only see data from this year on (admins see every year).
 USER_MIN_YEAR = os.environ.get("DASHBOARD_USER_MIN_YEAR", "2026").strip().strip('"')
 ADMINS = {
@@ -186,6 +190,8 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/admin/events" and user["email"] in ADMINS:
             email = parse_qs(urlsplit(self.path).query).get("email", [""])[0]
             self._json(200, {"events": STORE.events(email)})
+        elif path == "/api/livraria":
+            self._livraria(admin=user["email"] in ADMINS)
         elif path == "/api/frequencia":
             self._frequencia(admin=user["email"] in ADMINS)
         elif path in FILES:
@@ -317,6 +323,19 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, found[0], found[1])
         else:
             self._send(404, b"No photo", "text/plain")
+
+    def _livraria(self, admin: bool) -> None:
+        if not LIVRARIA_SPREADSHEET_ID:
+            self._send(404, b"Bookshop not configured", "text/plain")
+            return
+        try:
+            min_year = None if admin else int(USER_MIN_YEAR)
+            data = fetch_bookshop(CREDS, LIVRARIA_SPREADSHEET_ID, min_year)
+        except Exception:
+            log.exception("Bookshop read failed")
+            self._send(502, b"Bookshop read failed", "text/plain")
+            return
+        self._json(200, data)
 
     def _frequencia(self, admin: bool) -> None:
         try:

@@ -47,15 +47,16 @@ select,input,button{font:inherit;padding:6px 10px;border:1px solid #cbd5e1;borde
 button{cursor:pointer}
 .hidden{display:none}
 /* Card order (CSS order only accepts integers). */
-#app > .card, #app > .grid2{order:10}
+#app > .card, #app > .grid2{order:11}
 #app > #originsCard{order:0}
 #app > #custosFixosCard{order:1}
-#app > .card:has(#weekChart){order:9}
+#app > .card:has(#weekChart){order:10}
 #app > .card:has(#monthly){order:4}
 #app > #motivosCard{order:5}
 #app > .card:has(#ccProg){order:6}
-#app > #origemPlano{order:7}
-#app > .card:has(#search){order:8}
+#app > #livrariaCard{order:7}
+#app > #origemPlano{order:8}
+#app > .card:has(#search){order:9}
 #weekTable{display:none}
 #sub{display:none}
 .card:has(#monthly) > h2:first-child,.card:has(#monthly) > div:nth-child(2),.card:has(#monthly) > #monthly{display:none}
@@ -238,6 +239,14 @@ select[aria-label="Medida"]{margin-left:auto}
       <div id="ccProg" style="overflow-x:auto"></div>
     </div>
 
+    <div id="livrariaCard" class="card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <button type="button" id="toggleLIV" title="Ocultar" aria-label="Ocultar" style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;color:var(--muted)"><svg id="toggleLIVIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .2s ease"><polyline points="6 9 12 15 18 9"></polyline></svg></button><h2 style="margin:0">Livraria · Resultado de vendas</h2>
+        <span id="livResumo" class="muted" style="margin-left:auto;font-size:12px"></span>
+      </div>
+      <div id="livraria"></div>
+    </div>
+
     <div class="grid2">
       <div class="card"><h2>Top 8 planos de conta (volume)</h2><div id="byPlano"></div></div>
       <div class="card">
@@ -364,6 +373,7 @@ async function loadFromDrive() {
     const wb = await getXlsx('api/main.xlsx');
     WB = wb;
     try { WB2 = await getXlsx('api/vc.xlsx'); } catch (e) { WB2 = null; }
+    try { const r = await fetch('api/livraria', { cache: 'no-store' }); LIVRARIA = r.ok ? await r.json() : null; } catch (e) { LIVRARIA = null; }
     try { const r = await fetch('api/frequencia', { cache: 'no-store' }); FREQ = r.ok ? (await r.json()).cultos : null; } catch (e) { FREQ = null; }
     const ws = wb.Sheets[SHEET_NAME];
     if (!ws) throw new Error('Separador ' + SHEET_NAME + ' não encontrado');
@@ -495,6 +505,7 @@ function render() {
   renderCC();
   renderCustosFixos();
   renderMotivos();
+  renderLivraria();
   breakdown(f);
   renderTable();
 }
@@ -972,6 +983,7 @@ function renderTable() {
 }
 
 let WB2 = null;
+let LIVRARIA = null; // AppVerboShop: {costs: {isbn: avg cost}, sales: [{date, payment, total, items}]}
 let FREQ = null; // AppFrequenciaMembresia: [{date, tipo, mem, vis, cri}]
 const VC_FILE_ID = '11sUHhTzKaV21uX_FpBOEnJxNpFjUn6EHEiU79Pe3jXU';
 
@@ -1414,6 +1426,71 @@ $('toggleMV').addEventListener('click', () => {
   $('toggleMV').setAttribute('aria-label', $('toggleMV').title);
 });
 
+// Bookshop P&L: AppVerboShop sales and purchase costs + TPA fees from CONTAORDEM.
+// Bookshop TPA terminal 01433272 (closings/fees) and rental machine 0005346910001.
+const LIV_TPA = '01433272', LIV_MAQUINA = '0005346910001';
+function renderLivraria() {
+  const el = $('livraria'), resumo = $('livResumo');
+  if (!LIVRARIA) { el.innerHTML = '<span class="muted">Dados da livraria indisponíveis (AppVerboShop).</span>'; resumo.textContent = ''; return; }
+  const noPeriodo = iso => MONTH !== 'all' ? iso.slice(0, 7) === MONTH : YEAR === 'all' || iso.slice(0, 4) === YEAR;
+  resumo.textContent = MONTH !== 'all' ? `${MESES[+MONTH.slice(5) - 1]} ${MONTH.slice(0, 4)}` : YEAR === 'all' ? 'Todos os anos' : `Ano ${YEAR}`;
+  const vendas = LIVRARIA.sales.filter(v => noPeriodo(v.date));
+  let bruto = 0, liquido = 0, custo = 0, tpaApp = 0, semCusto = 0;
+  const livros = {};
+  vendas.forEach(v => {
+    const b = v.items.reduce((t, i) => t + i.price * i.qty, 0);
+    bruto += b; liquido += v.total;
+    if (v.payment.includes('TPA')) tpaApp += v.total;
+    v.items.forEach(i => {
+      const c = LIVRARIA.costs[i.isbn];
+      if (c === undefined) semCusto += i.qty; else custo += c * i.qty;
+      const l = livros[i.title] ??= { qty: 0, receita: 0, custo: 0 };
+      l.qty += i.qty;
+      l.receita += b ? i.price * i.qty * v.total / b : 0; // sale discount spread over its items
+      l.custo += (c ?? 0) * i.qty;
+    });
+  });
+  // TPA closings, per-sale fees and the machine rental from CONTAORDEM.
+  const chave = r => normS(r['DESCRIÇÃO']).replace(/[^A-Z0-9]/g, '');
+  const banco = RECS.filter(r => r._m && noPeriodo(r._m + '-01'));
+  const soma = p => banco.filter(r => chave(r).startsWith(p)).reduce((t, r) => t + Math.abs(num(r['IMPORTÂNCIA'])), 0);
+  const fechos = soma('FECHOTPA' + LIV_TPA), comissoes = soma('COMISSTPA' + LIV_TPA), aluguer = soma('COMISSOESTPA' + LIV_MAQUINA);
+  const margem = liquido - custo, resultado = margem - comissoes - aluguer;
+  const pctM = liquido ? margem / liquido * 100 : 0;
+  const linha = (rot, v, forte = false, sinal = '') => `<tr${forte ? ' style="font-weight:700;background:#f5f7fa"' : ''}><td>${rot}</td><td class="num" style="${forte ? `color:${v < 0 ? 'var(--out)' : 'var(--in)'}` : ''}">${sinal}${eur(Math.abs(v))}</td></tr>`;
+  const top = Object.entries(livros).sort((a, b) => b[1].receita - a[1].receita).slice(0, 8);
+  const dif = fechos - tpaApp;
+  el.innerHTML = !vendas.length && !fechos && !aluguer ? '<span class="muted">Sem vendas da livraria neste período.</span>' : `
+    <div class="grid2">
+      <div style="overflow-x:auto"><table style="font-size:13px"><tbody>
+        <tr><td>Vendas registadas na app</td><td class="num">${vendas.length}</td></tr>
+        ${linha('Vendas a preço de capa', bruto)}
+        ${linha('Descontos dados', bruto - liquido, false, bruto - liquido >= 0 ? '− ' : '+ ')}
+        ${linha('Vendas líquidas', liquido, true)}
+        ${linha('Custo dos livros vendidos (DB_COMPRAS)', custo, false, '− ')}
+        ${linha(`Margem bruta (${pctM.toFixed(1).replace('.', ',')}%)`, margem, true)}
+        ${linha('Comissões TPA (por venda)', comissoes, false, '− ')}
+        ${linha('Aluguer da máquina TPA', aluguer, false, '− ')}
+        ${linha('Resultado da livraria', resultado, true, resultado < 0 ? '− ' : '')}
+      </tbody></table>
+      ${semCusto ? `<div class="muted" style="font-size:12px;margin-top:6px">${semCusto} livro(s) vendido(s) sem compra registada em DB_COMPRAS: custo contado como 0.</div>` : ''}
+      <div style="font-size:12px;margin-top:8px;padding:8px 10px;border-radius:8px;background:${Math.abs(dif) > 1 ? '#fff7ed' : '#f0fdf4'}">
+        Fechos TPA no banco: <b>${eur(fechos)}</b> · vendas TPA registadas na app: <b>${eur(tpaApp)}</b>${Math.abs(dif) > 1 ? ` · ⚠️ diferença de <b>${eur(dif)}</b> (vendas por registar na app ou fecho noutro mês)` : ' · ✅ batem certo'}
+      </div></div>
+      <div style="overflow-x:auto"><div class="muted" style="font-size:12px;margin-bottom:4px">Livros mais vendidos</div>${top.length ? `<table style="font-size:12px"><thead><tr><th>Título</th><th class="num">Qtd</th><th class="num">Receita</th><th class="num">Custo</th><th class="num">Margem</th></tr></thead><tbody>${top.map(([t, l]) =>
+        `<tr><td>${esc(t)}</td><td class="num">${l.qty}</td><td class="num">${eur(l.receita)}</td><td class="num">${eur(l.custo)}</td><td class="num" style="color:${l.receita - l.custo < 0 ? 'var(--out)' : 'var(--in)'}">${eur(l.receita - l.custo)}</td></tr>`).join('')}</tbody></table>` : '<span class="muted">Sem vendas</span>'}</div>
+    </div>`;
+}
+
+let LIV_OPEN = true;
+$('toggleLIV').addEventListener('click', () => {
+  LIV_OPEN = !LIV_OPEN;
+  $('livraria').style.display = LIV_OPEN ? 'block' : 'none';
+  $('toggleLIVIcon').style.transform = LIV_OPEN ? 'rotate(0deg)' : 'rotate(-90deg)';
+  $('toggleLIV').title = LIV_OPEN ? 'Ocultar' : 'Mostrar';
+  $('toggleLIV').setAttribute('aria-label', $('toggleLIV').title);
+});
+
 let CF_OPEN = true;
 $('toggleCF').addEventListener('click', () => {
   CF_OPEN = !CF_OPEN;
@@ -1556,6 +1633,7 @@ const AJUDA = {
   'Custos fixos do mês': 'Contas de custo fixo (CONSTANTES, TYPE_CC = CUSTO FIXO) e se já foram pagas no mês escolhido. Clique numa conta para ver os lançamentos.',
   'Progressão dos meses': 'Entradas, saídas e saldo de cada mês do ano. O menu à direita alterna entre valores, acumulado e variação face ao mês anterior.',
   'Motivos da variação': 'Explica a diferença entre o mês escolhido e o anterior: dízimos, doadores recorrentes, frequência nos cultos e os centros de custo que mais pesaram.',
+  'Livraria · Resultado de vendas': 'Demonstração de resultados da livraria no período: vendas registadas na app (AppVerboShop), descontos, custo dos livros (DB_COMPRAS), comissões e aluguer da máquina TPA. Compara também os fechos TPA no banco com as vendas registadas.',
   'Progressão Centro de Custo': 'Resultado de cada centro de custo por mês. Clique numa célula para ver os lançamentos; na linha do cartão aparecem também as compras do cartão.',
   'Origem das receitas e despesas por plano de contas': 'Entradas e saídas do período agrupadas por forma de pagamento, plano de contas e processo de origem.',
   'Lançamentos': 'Lista de todos os lançamentos do período escolhido, com pesquisa.',

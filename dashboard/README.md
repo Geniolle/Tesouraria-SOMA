@@ -23,6 +23,11 @@ production server. Only Diretória members can log in.
   XLSX exports (and older attendance), so earlier years never reach their
   browser. The filtered file is cached until the spreadsheet changes in Drive
   (first load after a change takes a few seconds). Needs `openpyxl`.
+- `bookshop.py`: bookshop sales (DB_VENDAS) and average purchase cost per ISBN
+  (DB_COMPRAS) from AppVerboShop (`LIVRARIA_SPREADSHEET_ID`), served at
+  `/api/livraria` without customer data. The "Livraria · Resultado de vendas"
+  card adds the TPA fees from CONTAORDEM: terminal 01433272 (`FECHOTPA…`,
+  `COMISS.TPA…`) and rental machine 0005346910001.
 - `auth_store.py`: SQLite database (`DASHBOARD_DB_PATH`) with scrypt password
   hashes and session tokens (stored as SHA-256 digests; 12 h sessions).
 - `manage_users.py`: creates/resets accounts (see below).
