@@ -745,6 +745,9 @@ function readTable(name) {
 
 const dkey = d => d ? `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}` : '';
 
+// Validation badge: missing records → Verificar (red); only pending ones → Pendente (yellow); else OK.
+const estadoOrigem = (ok, pend) => !ok ? '<span class="pill bad">Verificar</span>' : pend ? '<span class="pill wa">Pendente</span>' : '<span class="pill ok">OK</span>';
+
 function renderOrigins() {
   const box = $('origins');
   if (!WB || !RECS.length) { box.innerHTML = ''; return; }
@@ -761,7 +764,7 @@ function renderOrigins() {
   const contaIds = new Set(RECS.map(r => r.ID_INTERNO).filter(Boolean));
   const contaPeriod = RECS.filter(r => inPeriod(r._d));
   const pill = (n, bad) => `<span class="pill ${n === 0 ? 'ok' : bad}">${n}</span>`;
-  const head = (label, sheet, ok) => `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px"><h2 style="margin:0">${esc(label)}</h2><span class="pill ${ok ? 'ok' : 'bad'}">${ok ? 'OK' : 'Verificar'}</span></div>`;
+  const head = (label, sheet, ok, pend = 0) => `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px"><h2 style="margin:0">${esc(label)}</h2>${estadoOrigem(ok, pend)}</div>`;
   const row = (label, value) => `<div class="qrow"><span>${label}</span><span class="num">${value}</span></div>`;
   const list = (label, ids) => ids.length ? `<div class="muted" style="font-size:12px;margin-top:8px">${label} ${ids.map(x => esc(x)).join(', ')}</div>` : '';
   const missingSheet = (label, sheet) => `<div class="card"><h2>${esc(label)}</h2><div class="muted">Separador ${esc(sheet)} não encontrado</div></div>`;
@@ -803,7 +806,7 @@ function renderOrigins() {
     const prefix = all.length ? all[0].id.replace(/\d+$/, '') : '';
     const extra = prefix ? contaPeriod.filter(r => r.ID_INTERNO && r.ID_INTERNO.startsWith(prefix) && !srcAll.has(r.ID_INTERNO)) : [];
     const ok = faltam.length === 0 && extra.length === 0;
-    return `<div class="card">${head(o.label, o.sheet, ok)}${row('Registos na origem', src.length)}${row('Presentes em CONTAORDEM', presentes)}${row('Em falta em CONTAORDEM', pill(faltam.length, 'bad'))}${row('Pendentes (data futura)', `<span class="pill">${pendentes.length}</span>`)}${row('Extra em CONTAORDEM (sem origem)', pill(extra.length, 'wa'))}${list(ehDizimos ? 'Data em falta -' : 'ID em falta -', faltamLabels)}${list('Pendentes (data futura) -', pendentes.map(x => (ehDizimos ? '' : x.id + ' ') + x.d.toLocaleDateString('pt-PT')))}</div>`;
+    return `<div class="card">${head(o.label, o.sheet, ok, pendentes.length)}${row('Registos na origem', src.length)}${row('Presentes em CONTAORDEM', presentes)}${row('Em falta em CONTAORDEM', pill(faltam.length, 'bad'))}${row('Pendentes (data futura)', `<span class="pill">${pendentes.length}</span>`)}${row('Extra em CONTAORDEM (sem origem)', pill(extra.length, 'wa'))}${list(ehDizimos ? 'Data em falta -' : 'ID em falta -', faltamLabels)}${list('Pendentes (data futura) -', pendentes.map(x => (ehDizimos ? '' : x.id + ' ') + x.d.toLocaleDateString('pt-PT')))}</div>`;
   }).join('');
 }
 
@@ -1054,7 +1057,7 @@ function renderVerbo() {
   const pill = (n, bad) => `<span class="pill ${n === 0 ? 'ok' : bad}">${n}</span>`;
   const row = (label, value) => `<div class="qrow"><span>${label}</span><span class="num">${value}</span></div>`;
   box.insertAdjacentHTML('beforeend', `<div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px"><h2 style="margin:0">Verbo Café</h2><span class="pill ${ok ? 'ok' : 'bad'}">${ok ? 'OK' : 'Verificar'}</span></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px"><h2 style="margin:0">Verbo Café</h2>${estadoOrigem(ok, pendentesVC.length)}</div>
       
       ${row('Registos Financeiro na origem', pagos.length)}
       ${row('Presentes em CONTAORDEM', presentes)}
@@ -1099,7 +1102,7 @@ function renderVerboShop() {
   const row = (l, v) => `<div class="qrow"><span>${l}</span><span class="num">${v}</span></div>`;
   const fmt = v => `${v.id || 's/ nº'} (${v.date.slice(8)}/${v.date.slice(5, 7)}/${v.date.slice(0, 4)} · ${eur(v.total)})`;
   box.insertAdjacentHTML('beforeend', `<div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px"><h2 style="margin:0">Verbo Shop</h2><span class="pill ${ok ? 'ok' : 'bad'}">${ok ? 'OK' : 'Verificar'}</span></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px"><h2 style="margin:0">Verbo Shop</h2>${estadoOrigem(ok, pend.length + abertas.length)}</div>
       <div class="muted" style="font-size:12px;margin-bottom:6px">AppVerboShop · DB_VENDAS em dinheiro · ${esc(label)}</div>
       ${row('Vendas em dinheiro na origem', vendas.length)}
       ${row('Presentes em CONTAORDEM', marcadas.filter(v => v.ok).length)}
