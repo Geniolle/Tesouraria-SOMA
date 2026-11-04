@@ -207,7 +207,7 @@ select[aria-label="Medida"]{margin-left:auto}
       </div>
       <div id="monthly" class="monthchart"></div>
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:18px;margin-bottom:8px">
-        <button type="button" id="toggleProg" title="Ocultar" aria-label="Ocultar" style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;color:var(--muted)"><svg id="toggleProgIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .2s ease"><polyline points="6 9 12 15 18 9"></polyline></svg></button><div style="margin-right:auto"><h2 style="margin:0">Progressão dos meses</h2><div style="display:flex;gap:12px;font-size:12px;color:var(--muted);margin-top:4px"><span><span style="display:inline-block;width:10px;height:10px;background:var(--in);border-radius:2px;margin-right:4px"></span>Entradas</span><span><span style="display:inline-block;width:10px;height:10px;background:var(--out);border-radius:2px;margin-right:4px"></span>Saídas</span></div></div>
+        <button type="button" id="toggleProg" title="Ocultar" aria-label="Ocultar" style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;color:var(--muted)"><svg id="toggleProgIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .2s ease"><polyline points="6 9 12 15 18 9"></polyline></svg></button><div style="margin-right:auto"><h2 style="margin:0">Progressão dos meses</h2></div>
         <select onchange="PROG_MODE=this.value;renderProgression()" aria-label="Tipo de progressão">
           <option value="mensal">Mensal (valores)</option>
           <option value="acumulado">Acumulado</option>
@@ -1445,7 +1445,6 @@ function renderMotivos() {
     : !fB.n ? `<div class="muted" style="font-size:13px;margin-bottom:16px">Sem cultos registados em ${nome(MONTH)} na AppFrequenciaMembresia.</div>`
     : `<h2>Frequência nos cultos</h2>
     <div style="overflow-x:auto"><table style="font-size:13px"><thead><tr><th>Indicador</th><th class="num">${nome(prevKey)}</th><th class="num">${nome(MONTH)}</th><th class="num">Δ</th></tr></thead><tbody>
-      ${linha(`Cultos registados (Dom / Qua: ${fA.dom.length}/${fA.qua.length} → ${fB.dom.length}/${fB.qua.length})`, fA.n, fB.n, inteiro)}
       ${linha('Presenças adultas (membros + visitantes)', fA.pres, fB.pres, inteiro)}
       ${linha('Média por culto', mediaCulto(fA), mediaCulto(fB))}
       ${linha('Média por domingo', fA.mDom, fB.mDom)}
@@ -1497,10 +1496,10 @@ $('toggleMV').addEventListener('click', () => {
 // maquina = rental contract in "COMISSOES TPA <maquina>", plano = PLANO DE CONTA of the receipts.
 const RESULTADOS = {
   livraria: { el: 'livraria', resumo: 'livResumo', dados: () => LIVRARIA, fonte: 'AppVerboShop', tpa: '01433272', maquina: '0005346910001', plano: 'RECEITAS DE LIVRARIA',
-    bruto: 'Vendas a preço de capa', custo: 'Custo dos livros vendidos (DB_COMPRAS)', semCusto: 'livro(s) vendido(s) sem compra registada em DB_COMPRAS', top: 'Livros mais vendidos', item: 'Título', resultado: 'Resultado da livraria', vazio: 'Sem vendas da livraria neste período.' },
+    bruto: 'Vendas a preço de capa', custo: 'Custo dos livros vendidos', semCusto: 'livro(s) vendido(s) sem compra registada em DB_COMPRAS', top: 'Livros mais vendidos', item: 'Título', resultado: 'Resultado da livraria', vazio: 'Sem vendas da livraria neste período.' },
   // Café: no product cost line; result = amount received minus TPA fees and rental.
   cafe: { el: 'cafe', resumo: 'cafeResumo', dados: () => CAFE, fonte: 'AppVerboCafé', tpa: '01443426', maquina: '0005346910002', plano: 'RECEITAS DE LANCHONETE',
-    bruto: 'Vendas a preço de tabela', custo: null, custoNoLugarDoDesconto: 'Custo de compra dos produtos vendidos (VC_COMPRAS; doações a custo 0)', semCusto: 'produto(s) vendido(s) sem compra registada em VC_COMPRAS', top: 'Produtos mais vendidos', item: 'Produto', resultado: 'Resultado do Verbo Café', vazio: 'Sem vendas do Verbo Café neste período.' }
+    bruto: 'Vendas a preço de tabela', custo: null, custoNoLugarDoDesconto: 'Custo de compra dos produtos vendidos', semCusto: 'produto(s) vendido(s) sem compra registada em VC_COMPRAS', top: 'Produtos mais vendidos', item: 'Produto', resultado: 'Resultado do Verbo Café', vazio: 'Sem vendas do Verbo Café neste período.' }
 };
 function renderResultado(cfg) {
   const el = $(cfg.el), resumo = $(cfg.resumo), D = cfg.dados();
