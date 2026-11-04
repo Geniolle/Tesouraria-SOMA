@@ -53,15 +53,24 @@ def fetch_bookshop(credentials: Any, spreadsheet_id: str, min_year: int | None) 
             t[1] += qty
     costs = {isbn: round(v / q, 4) for isbn, (v, q) in totals.items() if q}
 
-    sales = []
+    sales, open_sales = [], []
     for r in _table(sheets, spreadsheet_id, "DB_VENDAS"):
-        if r.get("FINALIZAR COMPRA?", "").strip().upper() != "TRUE":
-            continue
         try:
             day = dt.datetime.strptime(r.get("DATA DA VENDA", "").strip()[:10], "%d/%m/%Y").date()
         except ValueError:
             continue
         if min_year and day.year < min_year:
+            continue
+        payment = r.get("FORMA DE PAGAMENTO", "").strip().upper()
+        if r.get("FINALIZAR COMPRA?", "").strip().upper() != "TRUE" or not payment:
+            # Not finalised or no payment form yet: pending, outside the P&L.
+            open_sales.append(
+                {
+                    "id": r.get("Nº DOCNUN", "").strip(),
+                    "date": day.isoformat(),
+                    "total": _num(r.get("TOTAL A PAGAR", "")),
+                }
+            )
             continue
         items = []
         for k in range(1, 6):
@@ -79,9 +88,9 @@ def fetch_bookshop(credentials: Any, spreadsheet_id: str, min_year: int | None) 
             {
                 "id": r.get("Nº DOCNUN", "").strip(),
                 "date": day.isoformat(),
-                "payment": r.get("FORMA DE PAGAMENTO", "").strip().upper(),
+                "payment": payment,
                 "total": _num(r.get("TOTAL A PAGAR", "")),
                 "items": items,
             }
         )
-    return {"costs": costs, "sales": sales}
+    return {"costs": costs, "sales": sales, "open": open_sales}

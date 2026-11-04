@@ -1093,6 +1093,8 @@ function renderVerboShop() {
   const marcadas = vendas.map(v => ({ ...v, ok: presente(v) }));
   const faltam = marcadas.filter(v => !v.ok && v.date <= hoje), pend = marcadas.filter(v => !v.ok && v.date > hoje);
   const ok = faltam.length === 0;
+  // Sales not finalised or without payment form: pending until someone completes them in the app.
+  const abertas = (LIVRARIA.open || []).filter(v => noPeriodo(v.date));
   const pill = (n, cls) => `<span class="pill ${n === 0 ? 'ok' : cls}">${n}</span>`;
   const row = (l, v) => `<div class="qrow"><span>${l}</span><span class="num">${v}</span></div>`;
   const fmt = v => `${v.id || 's/ nº'} (${v.date.slice(8)}/${v.date.slice(5, 7)}/${v.date.slice(0, 4)} · ${eur(v.total)})`;
@@ -1103,7 +1105,9 @@ function renderVerboShop() {
       ${row('Presentes em CONTAORDEM', marcadas.filter(v => v.ok).length)}
       ${row('Em falta em CONTAORDEM', pill(faltam.length, 'bad'))}
       ${pend.length ? row('Pendentes (data futura)', `<span class="pill">${pend.length}</span>`) : ''}
+      ${row('Pendentes (por finalizar / sem forma de pagamento)', `<span class="pill ${abertas.length ? 'wa' : 'ok'}">${abertas.length}</span>`)}
       ${faltam.length ? `<div class="muted" style="font-size:12px;margin-top:8px">Vendas em falta - ${faltam.map(fmt).map(esc).join(', ')}</div>` : ''}
+      ${abertas.length ? `<div class="muted" style="font-size:12px;margin-top:8px">Por finalizar - ${abertas.map(fmt).map(esc).join(', ')}</div>` : ''}
     </div>`);
 }
 
