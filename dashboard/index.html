@@ -511,6 +511,7 @@ function render() {
   renderWeeks();
   renderOrigins();
   renderVerbo();
+  renderVerboShop();
   renderOrigemPlano();
   renderCC();
   renderCustosFixos();
@@ -1063,6 +1064,46 @@ function renderVerbo() {
       ${row('Presentes em CONTAORDEM', `<span class="num">${fin.filter(f => f[normS('ID_INTERNO')] && inPeriod(toDate(f[normS('DATA')])) && contaIds.has(f[normS('ID_INTERNO')])).length}</span>`)}
       ${row('Extra em CONTAORDEM (sem origem)', pill(extra, 'wa'))}
       ${faltam.length ? `<div class="muted" style="font-size:12px;margin-top:8px">ID em falta - ${faltam.map(x => esc(x)).join(', ')}</div>` : ''}
+    </div>`);
+}
+
+// Verbo Shop (bookshop) cash sales from AppVerboShop DB_VENDAS vs CONTAORDEM. There is no shared ID,
+// so a sale is present when its Nº DOCNUN is in an ID_INTERNO/description, or when a RECEITAS DE
+// LIVRARIA entry paid in cash has the same date and amount. Dated after today = pending.
+function renderVerboShop() {
+  const box = $('origins');
+  if (!LIVRARIA) {
+    box.insertAdjacentHTML('beforeend', `<div class="card"><h2>Verbo Shop</h2><div class="muted">Ficheiro AppVerboShop não carregado</div></div>`);
+    return;
+  }
+  const noPeriodo = iso => (MONTH !== 'all' ? iso.slice(0, 7) === MONTH : YEAR === 'all' || iso.slice(0, 4) === YEAR) && (!MIN_YEAR || iso.slice(0, 4) >= MIN_YEAR);
+  const label = MONTH !== 'all' ? `${MESES[+MONTH.slice(5) - 1]} ${MONTH.slice(0, 4)}` : (YEAR !== 'all' ? `Ano ${YEAR}` : 'Todos os períodos');
+  const iso = d => d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` : '';
+  const hoje = iso(new Date());
+  const caixa = RECS.filter(r => r._in && normS(r['PLANO DE CONTA']) === 'RECEITAS DE LIVRARIA' && normS(r['FORMA DE PAGAMENTO']).includes('DINHEIRO'));
+  const usados = new Set();
+  const presente = v => {
+    const i = caixa.findIndex((r, k) => !usados.has(k) && (
+      (v.id && (r.ID_INTERNO === v.id || String(r['DESCRIÇÃO']).includes(v.id))) ||
+      (iso(r._d) === v.date && Math.abs(Math.abs(num(r['IMPORTÂNCIA'])) - v.total) < 0.005)));
+    if (i >= 0) usados.add(i);
+    return i >= 0;
+  };
+  const vendas = LIVRARIA.sales.filter(v => v.payment.includes('DINHEIRO') && noPeriodo(v.date));
+  const marcadas = vendas.map(v => ({ ...v, ok: presente(v) }));
+  const faltam = marcadas.filter(v => !v.ok && v.date <= hoje), pend = marcadas.filter(v => !v.ok && v.date > hoje);
+  const ok = faltam.length === 0;
+  const pill = (n, cls) => `<span class="pill ${n === 0 ? 'ok' : cls}">${n}</span>`;
+  const row = (l, v) => `<div class="qrow"><span>${l}</span><span class="num">${v}</span></div>`;
+  const fmt = v => `${v.id || 's/ nº'} (${v.date.slice(8)}/${v.date.slice(5, 7)}/${v.date.slice(0, 4)} · ${eur(v.total)})`;
+  box.insertAdjacentHTML('beforeend', `<div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px"><h2 style="margin:0">Verbo Shop</h2><span class="pill ${ok ? 'ok' : 'bad'}">${ok ? 'OK' : 'Verificar'}</span></div>
+      <div class="muted" style="font-size:12px;margin-bottom:6px">AppVerboShop · DB_VENDAS em dinheiro · ${esc(label)}</div>
+      ${row('Vendas em dinheiro na origem', vendas.length)}
+      ${row('Presentes em CONTAORDEM', marcadas.filter(v => v.ok).length)}
+      ${row('Em falta em CONTAORDEM', pill(faltam.length, 'bad'))}
+      ${pend.length ? row('Pendentes (data futura)', `<span class="pill">${pend.length}</span>`) : ''}
+      ${faltam.length ? `<div class="muted" style="font-size:12px;margin-top:8px">Vendas em falta - ${faltam.map(fmt).map(esc).join(', ')}</div>` : ''}
     </div>`);
 }
 
@@ -1703,7 +1744,7 @@ $('adminList').addEventListener('click', async e => {
 
 // Card help: what each card is for, for people new to the report.
 const AJUDA = {
-  'Validação das origens': 'Confirma se todos os registos das origens do mês (extratos, dízimos e ofertas, saídas, cartão e Verbo Café) chegaram à CONTAORDEM. "Em falta" a 0 = tudo certo.',
+  'Validação das origens': 'Confirma se todos os registos das origens do mês (extratos, dízimos e ofertas, saídas, cartão, Verbo Café e Verbo Shop) chegaram à CONTAORDEM. "Em falta" a 0 = tudo certo.',
   'Custos fixos do mês': 'Contas de custo fixo (CONSTANTES, TYPE_CC = CUSTO FIXO) e se já foram pagas no mês escolhido. Clique numa conta para ver os lançamentos.',
   'Progressão dos meses': 'Entradas, saídas e saldo de cada mês do ano. O menu à direita alterna entre valores, acumulado e variação face ao mês anterior.',
   'Motivos da variação': 'Explica a diferença entre o mês escolhido e o anterior: dízimos, doadores recorrentes, frequência nos cultos e os centros de custo que mais pesaram.',

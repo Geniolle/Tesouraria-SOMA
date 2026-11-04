@@ -77,6 +77,7 @@ def fetch_bookshop(credentials: Any, spreadsheet_id: str, min_year: int | None) 
                 )
         sales.append(
             {
+                "id": r.get("Nº DOCNUN", "").strip(),
                 "date": day.isoformat(),
                 "payment": r.get("FORMA DE PAGAMENTO", "").strip().upper(),
                 "total": _num(r.get("TOTAL A PAGAR", "")),
