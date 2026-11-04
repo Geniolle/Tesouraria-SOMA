@@ -1080,7 +1080,6 @@ function renderVerboShop() {
     return;
   }
   const noPeriodo = iso => (MONTH !== 'all' ? iso.slice(0, 7) === MONTH : YEAR === 'all' || iso.slice(0, 4) === YEAR) && (!MIN_YEAR || iso.slice(0, 4) >= MIN_YEAR);
-  const label = MONTH !== 'all' ? `${MESES[+MONTH.slice(5) - 1]} ${MONTH.slice(0, 4)}` : (YEAR !== 'all' ? `Ano ${YEAR}` : 'Todos os períodos');
   const iso = d => d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` : '';
   const hoje = iso(new Date());
   const caixa = RECS.filter(r => r._in && normS(r['PLANO DE CONTA']) === 'RECEITAS DE LIVRARIA' && normS(r['FORMA DE PAGAMENTO']).includes('DINHEIRO'));
@@ -1103,12 +1102,11 @@ function renderVerboShop() {
   const fmt = v => `${v.id || 's/ nº'} (${v.date.slice(8)}/${v.date.slice(5, 7)}/${v.date.slice(0, 4)} · ${eur(v.total)})`;
   box.insertAdjacentHTML('beforeend', `<div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px"><h2 style="margin:0">Verbo Shop</h2>${estadoOrigem(ok, pend.length + abertas.length)}</div>
-      <div class="muted" style="font-size:12px;margin-bottom:6px">AppVerboShop · DB_VENDAS em dinheiro · ${esc(label)}</div>
       ${row('Vendas em dinheiro na origem', vendas.length)}
       ${row('Presentes em CONTAORDEM', marcadas.filter(v => v.ok).length)}
       ${row('Em falta em CONTAORDEM', pill(faltam.length, 'bad'))}
       ${pend.length ? row('Pendentes (data futura)', `<span class="pill">${pend.length}</span>`) : ''}
-      ${row('Pendentes (por finalizar / sem forma de pagamento)', `<span class="pill ${abertas.length ? 'wa' : 'ok'}">${abertas.length}</span>`)}
+      ${row('Pendentes (por finalizar)', `<span class="pill ${abertas.length ? 'wa' : 'ok'}">${abertas.length}</span>`)}
       ${faltam.length ? `<div class="muted" style="font-size:12px;margin-top:8px">Vendas em falta - ${faltam.map(fmt).map(esc).join(', ')}</div>` : ''}
       ${abertas.length ? `<div class="muted" style="font-size:12px;margin-top:8px">Por finalizar - ${abertas.map(fmt).map(esc).join(', ')}</div>` : ''}
     </div>`);
