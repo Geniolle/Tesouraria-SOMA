@@ -753,8 +753,10 @@ function renderOrigins() {
   const periodLabel = MONTH !== 'all'
     ? `${MESES[+MONTH.slice(5) - 1]} ${MONTH.slice(0, 4)}`
     : (YEAR !== 'all' ? `Ano ${YEAR}` : 'Todos os períodos');
-  // Rule: OK only when the record exists in the source and in CONTAORDEM; anything else is missing.
-  const elegivel = () => true;
+  // Rule: OK only when the record exists in the source and in CONTAORDEM; anything else is missing,
+  // except records dated after today, which are pending (not due yet).
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const elegivel = x => !x.d || x.d <= hoje;
   const contaIds = new Set(RECS.map(r => r.ID_INTERNO).filter(Boolean));
   const contaPeriod = RECS.filter(r => inPeriod(r._d));
   const pill = (n, bad) => `<span class="pill ${n === 0 ? 'ok' : bad}">${n}</span>`;
@@ -793,13 +795,14 @@ function renderOrigins() {
     const ehDizimos = normS(o.sheet).includes('DIZIMOS');
     const src = all.filter(x => inPeriod(x.d) && (!ehDizimos || !x.tipo || normS(x.tipo) === 'DIZIMOS/OFERTAS'));
     const faltamRec = src.filter(x => !contaIds.has(x.id) && elegivel(x));
+    const pendentes = src.filter(x => !contaIds.has(x.id) && !elegivel(x));
     const faltam = faltamRec.map(x => x.id);
     const faltamLabels = ehDizimos ? faltamRec.map(x => x.d.toLocaleDateString('pt-PT')) : faltam;
     const presentes = src.filter(x => contaIds.has(x.id)).length;
     const prefix = all.length ? all[0].id.replace(/\d+$/, '') : '';
     const extra = prefix ? contaPeriod.filter(r => r.ID_INTERNO && r.ID_INTERNO.startsWith(prefix) && !srcAll.has(r.ID_INTERNO)) : [];
     const ok = faltam.length === 0 && extra.length === 0;
-    return `<div class="card">${head(o.label, o.sheet, ok)}${row('Registos na origem', src.length)}${row('Presentes em CONTAORDEM', presentes)}${row('Em falta em CONTAORDEM', pill(faltam.length, 'bad'))}${row('Extra em CONTAORDEM (sem origem)', pill(extra.length, 'wa'))}${list(ehDizimos ? 'Data em falta -' : 'ID em falta -', faltamLabels)}</div>`;
+    return `<div class="card">${head(o.label, o.sheet, ok)}${row('Registos na origem', src.length)}${row('Presentes em CONTAORDEM', presentes)}${row('Em falta em CONTAORDEM', pill(faltam.length, 'bad'))}${row('Pendentes (data futura)', `<span class="pill">${pendentes.length}</span>`)}${row('Extra em CONTAORDEM (sem origem)', pill(extra.length, 'wa'))}${list(ehDizimos ? 'Data em falta -' : 'ID em falta -', faltamLabels)}${list('Pendentes (data futura) -', pendentes.map(x => (ehDizimos ? '' : x.id + ' ') + x.d.toLocaleDateString('pt-PT')))}</div>`;
   }).join('');
 }
 
@@ -819,8 +822,9 @@ function renderOriginsPrev() {
     if (all === null) return `<div class="card"><h2>${esc(o.label)}</h2><div class="muted">Separador ${esc(o.sheet)} não encontrado</div></div>`;
     const srcAll = new Set(all.map(x => x.id));
     const src = all.filter(x => inPeriod(x.d));
-    // Rule: OK only when the record exists in the source and in CONTAORDEM; anything else is missing.
-    const elegivel = () => true;
+    // Same rule as renderOrigins: records dated after today are pending, not missing.
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    const elegivel = x => !x.d || x.d <= hoje;
     const faltam = src.filter(x => !contaIds.has(x.id) && elegivel(x)).map(x => x.id);
     const presentes = src.length - faltam.length;
     const prefix = all.length ? all[0].id.replace(/\d+$/, '') : '';
@@ -1038,7 +1042,10 @@ function renderVerbo() {
     .map(v => ({ id: v[normS('ID_INTERNO')], d: toDate(v[normS('DATA')]), forma: normS(v[normS('FORMA DE PAGAMENTO')]) }))
     .filter(x => x.id && x.forma === 'DINHEIRO' && inPeriod(x.d));
   const presentes = pagos.filter(x => contaIds.has(x.id)).length;
-  const faltam = pagos.filter(x => !contaIds.has(x.id)).map(x => x.id);
+  // Same rule as the other origins: dated after today = pending, not missing.
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const faltam = pagos.filter(x => !contaIds.has(x.id) && (!x.d || x.d <= hoje)).map(x => x.id);
+  const pendentesVC = pagos.filter(x => !contaIds.has(x.id) && x.d && x.d > hoje);
   const finPeriodo = fin.filter(f => f[normS('ID_INTERNO')] && inPeriod(toDate(f[normS('DATA')]))).length;
   const vendasIds = new Set(vendas.map(v => v[normS('ID_INTERNO')]));
   const extra = contaPeriod.filter(r => r.ID_INTERNO && r.ID_INTERNO.startsWith('VCE') && !vendasIds.has(r.ID_INTERNO)).length;
@@ -1051,6 +1058,7 @@ function renderVerbo() {
       ${row('Registos Financeiro na origem', pagos.length)}
       ${row('Presentes em CONTAORDEM', presentes)}
       ${row('Em falta em CONTAORDEM', pill(faltam.length, 'bad'))}
+      ${pendentesVC.length ? row('Pendentes (data futura)', `<span class="pill">${pendentesVC.length}</span>`) : ''}
       ${row('Financeiro na origem', `<span class="pill">${finPeriodo}</span>`)}
       ${row('Presentes em CONTAORDEM', `<span class="num">${fin.filter(f => f[normS('ID_INTERNO')] && inPeriod(toDate(f[normS('DATA')])) && contaIds.has(f[normS('ID_INTERNO')])).length}</span>`)}
       ${row('Extra em CONTAORDEM (sem origem)', pill(extra, 'wa'))}
