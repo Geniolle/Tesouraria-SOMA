@@ -806,7 +806,7 @@ function renderOrigins() {
     const prefix = all.length ? all[0].id.replace(/\d+$/, '') : '';
     const extra = prefix ? contaPeriod.filter(r => r.ID_INTERNO && r.ID_INTERNO.startsWith(prefix) && !srcAll.has(r.ID_INTERNO)) : [];
     const ok = faltam.length === 0 && extra.length === 0;
-    return `<div class="card">${head(o.label, o.sheet, ok, pendentes.length)}${row('Registos na origem', src.length)}${row('Presentes em CONTAORDEM', presentes)}${row('Em falta em CONTAORDEM', pill(faltam.length, 'bad'))}${row('Pendentes (data futura)', `<span class="pill">${pendentes.length}</span>`)}${row('Extra em CONTAORDEM (sem origem)', pill(extra.length, 'wa'))}${list(ehDizimos ? 'Data em falta -' : 'ID em falta -', faltamLabels)}${list('Pendentes (data futura) -', pendentes.map(x => (ehDizimos ? '' : x.id + ' ') + x.d.toLocaleDateString('pt-PT')))}</div>`;
+    return `<div class="card">${head(o.label, o.sheet, ok, pendentes.length)}${row('Registos na origem', src.length)}${row('Presentes em CONTAORDEM', presentes)}${row('Em falta em CONTAORDEM', pill(faltam.length, 'bad'))}${row('Pendentes (data futura)', `<span class="pill">${pendentes.length}</span>`)}${row('Extra em CONTAORDEM (sem origem)', pill(extra.length, 'wa'))}${list(ehDizimos ? 'Data em falta -' : 'ID em falta -', faltamLabels)}${ehDizimos ? '' : list('Pendentes (data futura) -', pendentes.map(x => x.id + ' ' + x.d.toLocaleDateString('pt-PT')))}</div>`;
   }).join('');
 }
 
