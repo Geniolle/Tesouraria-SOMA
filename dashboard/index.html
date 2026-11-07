@@ -1,0 +1,1853 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#ffffff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Tesouraria">
+<title>Dashboard Tesouraria Verbo Braga</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#1d2433;--muted:#6b7280;--line:#e5e7eb;--in:#16a34a;--out:#dc2626;--acc:#2563eb}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+header{position:sticky;top:0;z-index:5;padding:18px 24px;background:var(--card);border-bottom:1px solid var(--line);display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+h1{font-size:18px;margin:0}
+h2{font-size:14px;margin:0 0 12px}
+main{padding:20px 24px;display:grid;gap:16px;width:100%}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
+.muted{color:var(--muted)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+.kpi .l{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+.kpi .v{font-size:22px;font-weight:600;margin-top:4px;font-variant-numeric:tabular-nums}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:820px){.grid2{grid-template-columns:1fr}}
+.monthchart{display:flex;align-items:flex-end;gap:6px;height:230px;padding-top:8px;border-bottom:1px solid var(--line);overflow-x:auto}
+.mcol{flex:1;min-width:44px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;cursor:pointer}
+.bars{display:flex;gap:3px;align-items:flex-end;height:190px;width:100%;justify-content:center}
+.bar{width:42%;max-width:26px;border-radius:4px 4px 0 0}
+.bar.in{background:var(--in)}
+.bar.out{background:var(--out)}
+.mlabel{font-size:11px;color:var(--muted);margin-top:6px;white-space:nowrap}
+.row{display:grid;grid-template-columns:minmax(110px,1.2fr) 2fr auto;gap:10px;align-items:center;padding:5px 0;font-size:13px}
+.track{background:#eef2f7;border-radius:4px;height:10px;overflow:hidden}
+.fill{height:100%;background:var(--acc)}
+.num{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.qrow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px}
+.pill{display:inline-block;padding:1px 9px;border-radius:999px;font-size:12px;background:#eef2f7;white-space:nowrap}
+.ok{background:#dcfce7;color:#166534}
+.wa{background:#fef3c7;color:#92400e}
+.bad{background:#fee2e2;color:#991b1b}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{color:var(--muted);font-weight:600;position:sticky;top:0;background:#fff}
+.scroll{max-height:420px;overflow:auto}
+select,input,button{font:inherit;padding:6px 10px;border:1px solid #cbd5e1;border-radius:6px;background:#fff}
+button{cursor:pointer}
+.hidden{display:none}
+/* Card order (CSS order only accepts integers). */
+#app > .card, #app > .grid2{order:12}
+#app > #originsCard{order:0}
+#app > #custosFixosCard{order:1}
+#app > .card:has(#weekChart){order:11}
+#app > .card:has(#monthly){order:4}
+#app > #motivosCard{order:5}
+#app > .card:has(#ccProg){order:6}
+#app > #livrariaCard{order:7}
+#app > #cafeCard{order:8}
+#app > #origemPlano{order:9}
+#app > .card:has(#search){order:10}
+#weekTable{display:none}
+#sub{display:none}
+.card:has(#monthly) > h2:first-child,.card:has(#monthly) > div:nth-child(2),.card:has(#monthly) > #monthly{display:none}
+#toggleRows,#toggleWeek{order:-1;margin-left:0 !important;margin-right:4px}
+div:has(> #toggleRows),div:has(> #toggleWeek){justify-content:flex-start !important}
+#search{margin-left:auto}
+select[aria-label="Medida"]{margin-left:auto}
+/* User area in the header. */
+.user{position:relative}
+#userBtn{width:38px;height:38px;padding:0;border-radius:50%;background:#e0ecff;color:#1d4ed8;font-weight:700;border:1px solid #c7dbff}
+#userMenu{position:absolute;right:0;top:46px;width:280px;background:var(--card);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:20px 16px 12px;text-align:center;z-index:10}
+#userMenu .av{width:56px;height:56px;margin:0 auto 10px;border-radius:50%;background:#e0ecff;color:#1d4ed8;font-size:20px;font-weight:700;display:flex;align-items:center;justify-content:center}
+#userMenu hr{border:0;border-top:1px solid var(--line);margin:12px 0 8px}
+#userMenu .av img,#userBtn img{width:100%;height:100%;border-radius:50%;object-fit:cover}
+.menuItem{width:100%;text-align:left;border:0;background:none;padding:8px}
+.menuItem:hover{background:#f5f7fa}
+#pwForm{text-align:left;margin-top:4px}
+#pwForm input{width:100%;margin:4px 0}
+#pwMsg,#fpMsg{font-size:12px;min-height:16px}
+#firstPw{border:1px solid var(--line);border-radius:10px;padding:24px;width:min(360px,calc(100% - 32px))}
+#firstPw::backdrop,#adminDlg::backdrop{background:rgba(15,23,42,.55)}
+#adminDlg{border:1px solid var(--line);border-radius:10px;padding:20px;width:min(760px,calc(100% - 32px))}
+#adminDlg td,#adminDlg th{white-space:nowrap}
+#adminPw{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;margin-bottom:12px}
+#adminPw code{font-size:15px;font-weight:700;user-select:all}
+#firstPw input{width:100%;margin:4px 0 8px}
+/* "?" next to each card title: short description on hover or keyboard focus. */
+.help{position:relative;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;margin-left:6px;border-radius:50%;border:1px solid #cbd5e1;color:var(--muted);font-size:11px;font-weight:700;line-height:1;cursor:help;vertical-align:middle;text-transform:none;letter-spacing:0}
+.help:hover,.help:focus{color:var(--acc);border-color:var(--acc);outline:none}
+#helpTip{position:fixed;display:none;z-index:50;max-width:min(320px,calc(100vw - 16px));padding:8px 10px;border-radius:8px;background:#1d2433;color:#fff;font-size:12px;font-weight:400;line-height:1.4;text-transform:none;letter-spacing:0;box-shadow:0 6px 18px rgba(0,0,0,.18);pointer-events:none}
+/* Wide tables scroll inside their card instead of stretching the page. */
+#app{grid-template-columns:minmax(0,1fr)}
+.card,.grid2>*{min-width:0}
+@media(max-width:640px){
+  header{padding:12px 16px}
+  header>div:last-child{width:100%}
+  header select{flex:1;min-width:0}
+  main{padding:12px}
+  .card{padding:12px}
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .kpis>.card:first-child{grid-column:1/-1}
+  .kpi .v{font-size:18px}
+  #search{min-width:0 !important;width:100%;margin-left:0}
+  #origins{grid-template-columns:minmax(0,1fr) !important}
+  #weekChart>div{grid-template-columns:96px minmax(0,1fr) !important;gap:8px !important}
+  #weekChart .num{min-width:84px !important;font-size:12px}
+  .row{grid-template-columns:minmax(80px,1fr) 1.2fr auto}
+  table{font-size:12px}
+  th,td{padding:5px 6px}
+  td,th{white-space:nowrap}
+  #rows td:nth-child(2),#custosFixos td:nth-child(2){white-space:normal;min-width:160px}
+  .scroll{max-height:60vh}
+  select,input,button{font-size:16px}
+}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Dashboard · Tesouraria Verbo Braga</h1>
+    <div class="muted" id="sub">A carregar dados do Google Drive…</div>
+    <div class="muted" id="status" style="font-size:12px;margin-top:4px"></div>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <select id="year" aria-label="Ano"></select>
+    <select id="month" aria-label="Mês"></select>
+    <button id="refresh" type="button">Atualizar</button>
+    <button id="sendMail" class="hidden" type="button" style="background:#2563eb;border-color:#2563eb;color:#fff">Enviar Email</button>
+    <div class="user">
+      <button id="userBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="userMenu" title="Utilizador">?</button>
+      <div id="userMenu" class="hidden" role="menu">
+        <div class="av" id="userAv">?</div>
+        <div id="userName" style="font-weight:700"></div>
+        <div id="userEmail" class="muted" style="font-size:13px;word-break:break-all"></div>
+        <div id="userRole" class="muted" style="font-size:13px">Diretória</div>
+        <hr>
+        <button id="adminOpen" class="menuItem hidden" type="button" role="menuitem">Gerir contas</button>
+        <button id="pwToggle" class="menuItem" type="button" role="menuitem" aria-expanded="false" aria-controls="pwForm">Mudar senha</button>
+        <form id="pwForm" class="hidden">
+          <input id="pwCur" type="password" autocomplete="current-password" placeholder="Senha atual" aria-label="Senha atual" required>
+          <input id="pwNew" type="password" autocomplete="new-password" placeholder="Nova senha (mín. 10 caracteres)" aria-label="Nova senha" minlength="10" required>
+          <input id="pwNew2" type="password" autocomplete="new-password" placeholder="Repetir nova senha" aria-label="Repetir nova senha" required>
+          <button type="submit" style="width:100%;margin-top:4px">Guardar senha</button>
+          <div id="pwMsg" role="status"></div>
+        </form>
+        <button id="logout" class="menuItem" type="button" role="menuitem">Sair</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<dialog id="firstPw" aria-labelledby="fpTitle">
+  <form id="fpForm">
+    <h2 id="fpTitle" style="font-size:16px;margin:0 0 4px">Defina a sua senha</h2>
+    <p class="muted" style="margin:0 0 12px">É o primeiro acesso com a senha inicial. Escolha uma senha nova para continuar.</p>
+    <label for="fpNew" style="font-weight:600">Nova senha (mín. 10 caracteres)</label>
+    <input id="fpNew" type="password" autocomplete="new-password" minlength="10" required>
+    <label for="fpNew2" style="font-weight:600">Repetir nova senha</label>
+    <input id="fpNew2" type="password" autocomplete="new-password" required>
+    <button type="submit" style="width:100%;margin-top:4px">Guardar e continuar</button>
+    <div id="fpMsg" role="alert" style="color:var(--out);margin-top:8px"></div>
+  </form>
+</dialog>
+
+<dialog id="adminDlg" aria-labelledby="adminTitle">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+    <h2 id="adminTitle" style="font-size:16px;margin:0">Gerir contas · Diretória</h2>
+    <button id="adminClose" type="button" style="margin-left:auto">Fechar</button>
+  </div>
+  <div id="adminPw" class="hidden" role="status"></div>
+  <div id="adminList" style="overflow-x:auto"></div>
+  <p class="muted" style="font-size:12px;margin:12px 0 0">Membros com DIRETÓRIA = TRUE na BP SERVICE. A senha gerada aparece só uma vez e é pedida a troca no primeiro acesso.</p>
+</dialog>
+
+<main>
+  <div id="app" class="hidden" style="display:grid;gap:16px">
+    <div class="kpis" id="kpis"></div>
+
+    <div id="origemPlano" class="card" style="order:0.5">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><button type="button" id="toggleOrigemPlano" title="Ocultar" aria-label="Ocultar" style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;color:var(--muted)"><svg id="toggleOrigemPlanoIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .2s ease"><polyline points="6 9 12 15 18 9"></polyline></svg></button><h2 style="margin:0">Origem das receitas e despesas por plano de contas</h2></div>
+      <div id="origemPlanoBody" style="overflow-x:auto"></div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px">
+        <h2 style="margin:0">Análise por semana do mês </h2>
+        <button type="button" id="toggleWeek" title="Ocultar" aria-label="Ocultar" style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;color:var(--muted);margin-left:auto"><svg id="toggleWeekIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .2s ease"><polyline points="6 9 12 15 18 9"></polyline></svg></button>
+        <select onchange="WEEK_MODE=this.value;renderWeeks()" aria-label="Medida">
+          <option value="total">Total do período</option>
+          <option value="media">Média por mês</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:12px;font-size:12px;color:var(--muted);margin-bottom:6px">
+        <span><span style="display:inline-block;width:10px;height:10px;background:var(--in);border-radius:2px;margin-right:4px"></span>Entradas</span>
+        <span><span style="display:inline-block;width:10px;height:10px;background:var(--out);border-radius:2px;margin-right:4px"></span>Saídas</span>
+      </div>
+      
+      <div id="weekChart" class="monthchart" style="height:300px"></div>
+      <div id="weekInsight" class="muted" style="font-size:12px;margin-top:10px"></div>
+      <div id="weekTable" style="margin-top:12px;overflow-x:auto"></div>
+    </div>
+
+    <div class="card" style="order:0.6">
+      <h2>Entradas vs saídas por mês <span class="muted" style="font-weight:400">(clique numa coluna para filtrar)</span></h2>
+      <div style="display:none;gap:12px;font-size:12px;color:var(--muted);margin-bottom:8px">
+        <span><span style="display:inline-block;width:10px;height:10px;background:var(--in);border-radius:2px;margin-right:4px"></span>Entradas</span>
+        <span><span style="display:inline-block;width:10px;height:10px;background:var(--out);border-radius:2px;margin-right:4px"></span>Saídas</span>
+      </div>
+      <div id="monthly" class="monthchart"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:18px;margin-bottom:8px">
+        <button type="button" id="toggleProg" title="Ocultar" aria-label="Ocultar" style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;color:var(--muted)"><svg id="toggleProgIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .2s ease"><polyline points="6 9 12 15 18 9"></polyline></svg></button><div style="margin-right:auto"><h2 style="margin:0">Progressão dos meses</h2></div>
+        <select onchange="PROG_MODE=this.value;renderProgression()" aria-label="Tipo de progressão">
+          <option value="mensal">Mensal (valores)</option>
+          <option value="acumulado">Acumulado</option>
+          <option value="variacao">Variação % face ao mês anterior</option>
+        </select>
+      </div>
+      <div id="prog" style="overflow-x:auto"></div>
+    </div>
+
+    <div id="custosFixosCard" class="card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <button type="button" id="toggleCF" title="Ocultar" aria-label="Ocultar" style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;color:var(--muted)"><svg id="toggleCFIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .2s ease"><polyline points="6 9 12 15 18 9"></polyline></svg></button><h2 style="margin:0">Custos fixos do mês</h2>
+        <span id="cfResumo" style="margin-left:auto"></span>
+      </div>
+      <div id="custosFixos" style="overflow-x:auto"></div>
+    </div>
+
+    <div id="motivosCard" class="card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <button type="button" id="toggleMV" title="Ocultar" aria-label="Ocultar" style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;color:var(--muted)"><svg id="toggleMVIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .2s ease"><polyline points="6 9 12 15 18 9"></polyline></svg></button><h2 style="margin:0">Motivos da variação</h2>
+        <span id="mvResumo" class="muted" style="margin-left:auto;font-size:12px"></span>
+      </div>
+      <div id="motivos"></div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+        <button type="button" id="toggleCC" title="Ocultar" aria-label="Ocultar" style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;color:var(--muted)"><svg id="toggleCCIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .2s ease"><polyline points="6 9 12 15 18 9"></polyline></svg></button><h2 style="margin:0">Progressão Centro de Custo</h2>
+      </div>
+      <div id="ccProg" style="overflow-x:auto"></div>
+    </div>
+
+    <div id="livrariaCard" class="card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <button type="button" id="toggleLIV" title="Ocultar" aria-label="Ocultar" style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;color:var(--muted)"><svg id="toggleLIVIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .2s ease"><polyline points="6 9 12 15 18 9"></polyline></svg></button><h2 style="margin:0">Livraria · Resultado de vendas</h2>
+        <span id="livResumo" class="muted" style="margin-left:auto;font-size:12px"></span>
+      </div>
+      <div id="livraria"></div>
+    </div>
+
+    <div id="cafeCard" class="card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <button type="button" id="toggleCAFE" title="Ocultar" aria-label="Ocultar" style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;color:var(--muted)"><svg id="toggleCAFEIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .2s ease"><polyline points="6 9 12 15 18 9"></polyline></svg></button><h2 style="margin:0">Verbo Café · Resultado de vendas</h2>
+        <span id="cafeResumo" class="muted" style="margin-left:auto;font-size:12px"></span>
+      </div>
+      <div id="cafe"></div>
+    </div>
+
+    <div class="grid2">
+      <div class="card"><h2>Top 8 planos de conta (volume)</h2><div id="byPlano"></div></div>
+      <div class="card">
+        <h2>Forma de pagamento</h2><div id="byForma"></div>
+        <h2 style="margin-top:18px">Caixa</h2><div id="byCaixa"></div>
+      </div>
+    </div>
+
+    <div id="originsCard" class="card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><button type="button" id="toggleOrig" title="Ocultar" aria-label="Ocultar" style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;color:var(--muted)"><svg id="toggleOrigIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .2s ease"><polyline points="6 9 12 15 18 9"></polyline></svg></button><h2 style="margin:0">Validação das origens</h2></div>
+      <div id="origins" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px"></div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+        <h2 style="margin:0">Lançamentos <span id="count" class="muted" style="font-weight:400"></span></h2>
+        <button type="button" id="toggleRows" title="Ocultar linhas" aria-label="Ocultar linhas" style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;color:var(--muted)"><svg id="toggleIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .2s ease"><polyline points="6 9 12 15 18 9"></polyline></svg></button>
+        <input id="search" placeholder="Pesquisar descrição, plano, ID…" style="min-width:260px">
+      </div>
+      <div class="scroll" id="rowsWrap">
+        <table>
+          <thead><tr><th>Data mov.</th><th>Descrição</th><th>Tipo</th><th>Plano de conta</th><th>Caixa</th><th class="num">Valor</th><th>ID</th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <div class="muted" id="more" style="margin-top:6px;font-size:12px"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+const FILE_ID = '1poVWJGSBb13_2S1YKEzvFmkB9Ru0ZVzfQ0OEcMkfOZw';
+const SHEET_NAME = 'CONTAORDEM';
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const eur = n => n.toLocaleString('pt-PT', {style:'currency', currency:'EUR'});
+const MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+
+let RECS = [];
+let MIN_YEAR = null; // first year a non-admin may see (from /api/me); null = every year
+let MONTH = 'all';
+let YEAR = 'all';
+
+function setStatus(msg) { $('status').textContent = msg; }
+
+function num(s) {
+  s = String(s ?? '').trim().replace(/[€\s ]/g, '');
+  if (!s) return 0;
+  if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+  const v = parseFloat(s);
+  return isNaN(v) ? 0 : v;
+}
+
+function toDate(s) {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})(?:[ T]+(\d{2}):(\d{2})(?::(\d{2}))?)?/.exec(String(s ?? '').trim());
+  if (!m) return null;
+  return new Date(+m[3], +m[2]-1, +m[1], +(m[4]||0), +(m[5]||0), +(m[6]||0));
+}
+
+function regDate(rec) {
+  const m = /Registrado\(a\) em:\s*(\d{2}\/\d{2}\/\d{4})\s*(?:às\s*)?(\d{2}:\d{2}:\d{2})/.exec(rec['DADOS DOC'] || '');
+  return m ? toDate(m[1] + ' ' + m[2]) : null;
+}
+
+function monthKey(d) {
+  return d ? d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') : '';
+}
+
+// Procura a string base64 do ficheiro no payload devolvido pelo conector (formato não verificado).
+function extractB64(payload) {
+  if (typeof payload === 'string') return payload.replace(/^data:[^,]*,/, '');
+  let best = '';
+  const walk = v => {
+    if (typeof v === 'string') { if (v.length > best.length && /^[A-Za-z0-9+/=\s]+$/.test(v.slice(0, 200))) best = v; }
+    else if (v && typeof v === 'object') Object.values(v).forEach(walk);
+  };
+  walk(payload);
+  if (best.length < 1000) throw new Error('Formato de resposta do conector não reconhecido');
+  return best.replace(/\s/g, '');
+}
+
+function buildRecords(rows, wb) {
+  const origemExt = {};
+  const wsE = wb && wb.Sheets['T_EXTRATO'];
+  if (wsE) {
+    const ex = XLSX.utils.sheet_to_json(wsE, { header: 1, raw: false, defval: '' });
+    const hE = ex[0].map(h => String(h).trim());
+    const iId = hE.indexOf('ID_INTERNO'), iImp = hE.indexOf('IMPORTÂNCIA');
+    ex.slice(1).forEach(r => { if (r[iId]) origemExt[String(r[iId]).trim()] = num(r[iImp]); });
+  }
+  const head = rows.shift().map(h => String(h).trim());
+  RECS = rows.filter(r => r.some(x => x !== '' && x != null)).map(r => {
+    const o = {};
+    head.forEach((h, i) => o[h] = String(r[i] ?? '').trim());
+    return o;
+  });
+  RECS.forEach(rec => {
+    rec._d = toDate(rec['DATA MOV.']);
+    rec._m = monthKey(rec._d);
+    rec._y = rec._d ? String(rec._d.getFullYear()) : '';
+    rec._v = Math.abs(num(rec['IMPORTÂNCIA']));
+    rec._in = /^entrada/i.test((rec.TIPO || '').trim());
+    if (/^MVV$/i.test((rec.TIPO || '').trim())) {
+      const imp = origemExt[rec.ID_INTERNO];
+      rec._in = !!imp && imp > 0;
+      rec._v = imp ? Math.abs(imp) : 0;
+    } else if (!rec._in && !/^sa.da/i.test((rec.TIPO || '').trim())) rec._v = 0;
+  });
+}
+
+async function loadFromDrive() {
+  setStatus('A ligar ao Google Drive…');
+  $('refresh').disabled = true;
+  try {
+    const getXlsx = async url => {
+      const r = await fetch(url, { cache: 'no-store' });
+      if (r.status === 401) { location.href = 'login'; return new Promise(() => {}); }
+      if (!r.ok) throw new Error('Servidor respondeu ' + r.status + ' em ' + url);
+      return XLSX.read(await r.arrayBuffer(), { type: 'array' });
+    };
+    if (typeof XLSX === 'undefined') throw new Error('Biblioteca XLSX não carregou');
+    const wb = await getXlsx('api/main.xlsx');
+    WB = wb;
+    try { WB2 = await getXlsx('api/vc.xlsx'); } catch (e) { WB2 = null; }
+    try { const r = await fetch('api/livraria', { cache: 'no-store' }); LIVRARIA = r.ok ? await r.json() : null; } catch (e) { LIVRARIA = null; }
+    try { const r = await fetch('api/cafe', { cache: 'no-store' }); CAFE = r.ok ? await r.json() : null; } catch (e) { CAFE = null; }
+    try { const r = await fetch('api/frequencia', { cache: 'no-store' }); FREQ = r.ok ? (await r.json()).cultos : null; } catch (e) { FREQ = null; }
+    const ws = wb.Sheets[SHEET_NAME];
+    if (!ws) throw new Error('Separador ' + SHEET_NAME + ' não encontrado');
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
+    buildRecords(rows, wb);
+    if (MIN_YEAR) RECS = RECS.filter(r => r._y >= MIN_YEAR);
+    const now = new Date();
+    const curYear = String(now.getFullYear());
+    const curMonth = curYear + '-' + String(now.getMonth() + 1).padStart(2, '0');
+    YEAR = curYear;
+    MONTH = curMonth;
+    render();
+    setStatus('Atualizado às ' + new Date().toLocaleTimeString('pt-PT'));
+  } catch (e) {
+    setStatus('Erro ao carregar: ' + (e && e.message ? e.message : e));
+  } finally {
+    $('refresh').disabled = false;
+  }
+}
+
+$('refresh').addEventListener('click', loadFromDrive);
+// Page actions sent to the audit log (server keeps a whitelist).
+const track = (action, detail = '') => fetch('api/event', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, detail }) }).catch(() => {});
+$('month').addEventListener('change', e => { MONTH = e.target.value; render(); track('periodo', MONTH === 'all' ? YEAR : MONTH); });
+$('year').addEventListener('change', e => { YEAR = e.target.value; MONTH = 'all'; render(); track('periodo', YEAR); });
+// Card interactions for the audit log: open/close, dropdown choices, drill-down clicks.
+// Nearest heading above the element (some cards hold two sections with their own h2).
+const cardName = el => {
+  for (let n = el; n && n.id !== 'app'; n = n.parentElement) {
+    const h = n.querySelector('h2');
+    if (h) return h.textContent.trim();
+  }
+  return '';
+};
+$('app').addEventListener('click', e => {
+  const tog = e.target.closest('button[id^="toggle"]');
+  if (tog) {
+    // Each toggle handler updates its title first; read it after they ran.
+    setTimeout(() => track('card', `${cardName(tog)} · ${tog.title === 'Ocultar' ? 'abriu' : tog.title === 'Mostrar' ? 'fechou' : 'clicou'}`));
+    return;
+  }
+  const alvo = e.target.closest('.cf-row, .cc-cell, .cc-label, [data-m], [data-y]');
+  if (!alvo) return;
+  const quem = alvo.dataset.c || alvo.closest('tr')?.firstElementChild?.textContent || '';
+  const mes = alvo.dataset.m ? `${MESES[+alvo.dataset.m.slice(5) - 1]} ${alvo.dataset.m.slice(0, 4)}` : alvo.dataset.y || '';
+  track('clique', [cardName(alvo), quem.trim(), mes].filter(Boolean).join(' · '));
+}, true); // capture: read the element before the card's own handler re-renders it
+$('app').addEventListener('change', e => {
+  const sel = e.target.closest('select');
+  if (sel) track('opcao', `${cardName(sel)} · ${sel.options[sel.selectedIndex]?.text || sel.value}`);
+});
+$('search').addEventListener('input', renderTable);
+
+let ORIG_OPEN = true;
+$('toggleOrig').addEventListener('click', () => {
+  ORIG_OPEN = !ORIG_OPEN;
+  $('origins').style.display = ORIG_OPEN ? 'grid' : 'none';
+  $('toggleOrigIcon').style.transform = ORIG_OPEN ? 'rotate(0deg)' : 'rotate(-90deg)';
+  $('toggleOrig').title = ORIG_OPEN ? 'Ocultar' : 'Mostrar';
+  $('toggleOrig').setAttribute('aria-label', $('toggleOrig').title);
+});
+
+let WEEK_OPEN = true;
+$('toggleWeek').addEventListener('click', () => {
+  WEEK_OPEN = !WEEK_OPEN;
+  const legend = $('weekChart').previousElementSibling;
+  legend.style.display = WEEK_OPEN ? 'flex' : 'none';
+  $('weekChart').style.display = WEEK_OPEN ? 'block' : 'none';
+  $('weekInsight').style.display = WEEK_OPEN ? 'block' : 'none';
+  $('toggleWeekIcon').style.transform = WEEK_OPEN ? 'rotate(0deg)' : 'rotate(-90deg)';
+  $('toggleWeek').title = WEEK_OPEN ? 'Ocultar' : 'Mostrar';
+  $('toggleWeek').setAttribute('aria-label', $('toggleWeek').title);
+});
+
+let ROWS_OPEN = true;
+$('toggleRows').addEventListener('click', () => {
+  ROWS_OPEN = !ROWS_OPEN;
+  $('rowsWrap').classList.toggle('hidden', !ROWS_OPEN);
+  $('more').classList.toggle('hidden', !ROWS_OPEN);
+  $('toggleIcon').style.transform = ROWS_OPEN ? 'rotate(0deg)' : 'rotate(-90deg)';
+  $('toggleRows').title = ROWS_OPEN ? 'Ocultar linhas' : 'Mostrar linhas';
+  $('toggleRows').setAttribute('aria-label', $('toggleRows').title);
+});
+
+function filtered() {
+  return RECS.filter(r => (YEAR === 'all' || r._y === YEAR) && (MONTH === 'all' || r._m === MONTH));
+}
+
+function groupSum(arr, keyFn, valFn) {
+  const map = {};
+  arr.forEach(r => { const k = keyFn(r) || '(vazio)'; map[k] = (map[k] || 0) + valFn(r); });
+  return Object.entries(map).sort((a, b) => b[1] - a[1]);
+}
+
+function renderBars(id, entries) {
+  if (!entries.length) { $(id).innerHTML = '<span class="muted">Sem dados</span>'; return; }
+  const max = entries[0][1] || 1;
+  $(id).innerHTML = entries.map(([k, v]) =>
+    `<div class="row"><div>${esc(k)}</div><div class="track"><div class="fill" style="width:${(v/max*100).toFixed(1)}%"></div></div><div class="num">${eur(v)}</div></div>`
+  ).join('');
+}
+
+function render() {
+  if (!RECS.length) return;
+  $('app').classList.remove('hidden');
+  const months = [...new Set(RECS.map(r => r._m).filter(Boolean))].sort();
+  const sel = $('month');
+  const ysel = $('year');
+  // Current month is always selectable, even before its first record.
+  const cur = monthKey(new Date());
+  const yearsList = [...new Set([...RECS.map(r => r._y).filter(Boolean), cur.slice(0, 4), ...(YEAR !== 'all' ? [YEAR] : [])])].sort();
+  ysel.innerHTML = '<option value="all">Todos os anos</option>' +
+    yearsList.map(y => `<option value="${y}">${y}</option>`).join('');
+  ysel.value = YEAR;
+  const monthsOfYear = [...new Set([...RECS.filter(r => YEAR === 'all' || r._y === YEAR).map(r => r._m).filter(Boolean), ...(YEAR === 'all' || cur.startsWith(YEAR) ? [cur] : []), ...(MONTH !== 'all' ? [MONTH] : [])])].sort();
+  sel.innerHTML = '<option value="all">Todos os meses</option>' +
+    monthsOfYear.map(m => `<option value="${m}">${MESES[+m.slice(5)-1]} ${m.slice(0,4)}</option>`).join('');
+  sel.value = MONTH;
+  const f = filtered();
+  REPORTE = { resultados: {} };
+  $('sub').textContent = `${RECS.length} lançamentos · ${months.length} meses · ${f.length} no filtro atual`;
+  kpis(f);
+  ajudaKpis();
+  monthly(months);
+  renderProgression();
+  renderWeeks();
+  renderOrigins();
+  renderVerbo();
+  renderVerboShop();
+  renderOrigemPlano();
+  renderCC();
+  renderCustosFixos();
+  renderMotivos();
+  renderLivraria();
+  renderCafe();
+  breakdown(f);
+  renderTable();
+}
+
+function kpis(f) {
+  const ent = f.filter(r => r._in).reduce((s, r) => s + r._v, 0);
+  const sai = f.filter(r => !r._in).reduce((s, r) => s + r._v, 0);
+  const val = f.filter(r => r.STATUS === 'VALIDADO').length;
+  const pct = f.length ? val / f.length * 100 : 0;
+  const lancamentos = f.filter(r => r._in || /^sa.da/i.test((r.TIPO || '').trim())).length;
+  REPORTE.resumo = { lancamentos, entradas: ent, saidas: sai, saldo: ent - sai, validado: pct };
+  const card = (l, v, color='') => `<div class="card kpi"><div class="l">${l}</div><div class="v" style="${color}">${v}</div></div>`;
+  $('kpis').innerHTML =
+    card('Lançamentos', lancamentos) +
+    card('Entradas', eur(ent), 'color:var(--in)') +
+    card('Saídas', eur(sai), 'color:var(--out)') +
+    card('Saldo', eur(ent - sai)) +
+    card('% validado', pct.toFixed(1) + '%');
+}
+
+function monthly(months) {
+  if (!months.length) { $('monthly').innerHTML = '<span class="muted">Sem datas válidas</span>'; return; }
+  const agg = {};
+  months.forEach(m => agg[m] = {in: 0, out: 0});
+  RECS.forEach(r => { if (agg[r._m]) agg[r._m][r._in ? 'in' : 'out'] += r._v; });
+  const max = Math.max(1, ...months.flatMap(m => [agg[m].in, agg[m].out]));
+  $('monthly').innerHTML = months.map(m => {
+    const a = agg[m];
+    const hi = (a.in / max * 190).toFixed(1), ho = (a.out / max * 190).toFixed(1);
+    return `<div class="mcol" data-m="${m}" title="${eur(a.in)} entradas · ${eur(a.out)} saídas">
+      <div class="bars"><div class="bar in" style="height:${hi}px"></div><div class="bar out" style="height:${ho}px"></div></div>
+      <div class="mlabel">${MESES[+m.slice(5)-1]} ${m.slice(2,4)}</div></div>`;
+  }).join('');
+  document.querySelectorAll('#monthly .mcol').forEach(el => el.addEventListener('click', () => {
+    MONTH = el.dataset.m; YEAR = MONTH.slice(0, 4); render();
+  }));
+}
+
+let PROG_MODE = 'mensal';
+
+function progAgg() {
+  const scope = RECS.filter(r => YEAR === 'all' || r._y === YEAR);
+  const months = YEAR === 'all'
+    ? [...new Set(scope.map(r => r._m).filter(Boolean))].sort()
+    : Array.from({ length: 12 }, (_, i) => `${YEAR}-${String(i + 1).padStart(2, '0')}`);
+  const agg = months.map(m => ({ m, in: 0, out: 0 }));
+  const idx = Object.fromEntries(months.map((m, i) => [m, i]));
+  scope.forEach(r => { const i = idx[r._m]; if (i !== undefined) agg[i][r._in ? 'in' : 'out'] += r._v; });
+  return agg;
+}
+
+function renderProgression() {
+  const el = $('prog');
+  const agg = progAgg().filter(a => (YEAR === 'all' || a.m.slice(0, 4) === YEAR));
+  if (!agg.length) { el.innerHTML = '<span class="muted">Sem dados</span>'; return; }
+  let cumIn = 0, cumOut = 0, prev = null;
+  const rows = agg.map(a => {
+    cumIn += a.in; cumOut += a.out;
+    const saldo = a.in - a.out;
+    const row = {
+      m: a.m, in: a.in, out: a.out, saldo,
+      cumIn, cumOut, cumSaldo: cumIn - cumOut,
+      vIn: prev && prev.in ? (a.in - prev.in) / prev.in * 100 : null,
+      vOut: prev && prev.out ? (a.out - prev.out) / prev.out * 100 : null,
+      vSaldo: prev && prev.saldo ? (saldo - prev.saldo) / Math.abs(prev.saldo) * 100 : null
+    };
+    prev = { in: a.in, out: a.out, saldo };
+    return row;
+  });
+  const pct = v => v === null ? '—' : (v > 0 ? '+' : '') + v.toFixed(1) + '%';
+  const metrics = PROG_MODE === 'acumulado'
+    ? [['Entradas acum.', r => r.cumIn, 'var(--in)', eur], ['Saídas acum.', r => r.cumOut, 'var(--out)', eur], ['Saldo acum.', r => r.cumSaldo, null, eur]]
+    : PROG_MODE === 'variacao'
+      ? [['Var. entradas', r => r.vIn, null, pct], ['Var. saídas', r => r.vOut, null, pct], ['Var. saldo', r => r.vSaldo, null, pct]]
+      : [['Entradas', r => r.in, 'var(--in)', eur], ['Saídas', r => r.out, 'var(--out)', eur], ['Saldo', r => r.saldo, null, eur]];
+  const hl = m => m === MONTH ? 'background:#eff6ff;' : '';
+  el.innerHTML = `<table><thead><tr><th>Indicador</th>${rows.map(r =>
+    `<th class="num" style="${hl(r.m)}white-space:nowrap">${MESES[+r.m.slice(5) - 1]} ${r.m.slice(0, 4)}</th>`
+  ).join('')}</tr></thead><tbody>${metrics.map(([label, fn, color, f]) =>
+    `<tr><td style="white-space:nowrap${color ? ';color:' + color : ''}">${label}</td>${rows.map(r =>
+      `<td class="num" style="${label.startsWith('Saldo') ? 'color:' + (fn(r) < 0 ? 'var(--out)' : 'var(--in)') + ';' : ''}${hl(r.m)}">${f(fn(r))}</td>`
+    ).join('')}</tr>`
+  ).join('')}</tbody></table>`;
+}
+
+let WEEK_MODE = 'total';
+
+function weekOf(d) { return Math.min(5, Math.floor((d.getDate() - 1) / 7) + 1); }
+
+function renderWeeks() {
+  const f = filtered().filter(r => r._d);
+  const tot = {}, meses = {};
+  [1, 2, 3, 4, 5].forEach(w => { tot[w] = { in: 0, out: 0 }; meses[w] = new Set(); });
+  f.forEach(r => { const w = weekOf(r._d); tot[w][r._in ? 'in' : 'out'] += r._v; meses[w].add(r._m); });
+  const isMedia = WEEK_MODE === 'media';
+  const val = (w, k) => isMedia ? (meses[w].size ? tot[w][k] / meses[w].size : 0) : tot[w][k];
+  const saldo = w => val(w, 'in') - val(w, 'out');
+  const names = { 1: '1.ª semana', 2: '2.ª semana', 3: '3.ª semana', 4: '4.ª semana', 5: '5.ª semana' };
+  const diasLbl = { 1: '1–7', 2: '8–14', 3: '15–21', 4: '22–28', 5: '29–31' };
+  const W = [1, 2, 3, 4, 5];
+  const active = W.filter(w => meses[w].size > 0);
+  if (!active.length) {
+    $('weekChart').innerHTML = '<span class="muted">Sem dados</span>';
+    $('weekTable').innerHTML = '';
+    $('weekInsight').textContent = '';
+    return;
+  }
+  const max = Math.max(1, ...active.flatMap(w => [val(w, 'in'), val(w, 'out')]));
+  const topIn = active.reduce((a, b) => val(b, 'in') > val(a, 'in') ? b : a);
+  const topOut = active.reduce((a, b) => val(b, 'out') > val(a, 'out') ? b : a);
+  $('weekInsight').textContent = `Semana com mais entradas: ${names[topIn]} (${eur(val(topIn, 'in'))}) · Semana com mais saídas: ${names[topOut]} (${eur(val(topOut, 'out'))}) · ${isMedia ? 'média por mês' : 'total do período'}`;
+  const c = $('weekChart');
+  c.style.cssText = 'display:' + (WEEK_OPEN ? 'block' : 'none') + ';height:auto;border-bottom:none;overflow:visible';
+  const bar = (v, color) => `<div style="display:flex;align-items:center;gap:8px"><div style="flex:1;height:14px;background:#eef2f7;border-radius:4px;overflow:hidden"><div style="height:100%;width:${(v / max * 100).toFixed(1)}%;background:${color}"></div></div><span class="num" style="min-width:110px;color:${color}">${eur(v)}</span></div>`;
+  c.innerHTML = W.map(w => {
+    const n = meses[w].size;
+    const left = `<div><div style="font-weight:600">${names[w]}</div><div class="muted" style="font-size:12px">${diasLbl[w]} · ${n ? n + (n === 1 ? ' mês' : ' meses') : 'sem ocorrências'}</div></div>`;
+    const right = n ? `<div style="display:grid;gap:6px">${bar(val(w, 'in'), 'var(--in)')}${bar(val(w, 'out'), 'var(--out)')}</div>` : '<div></div>';
+    return `<div style="display:grid;grid-template-columns:150px 1fr;gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)">${left}${right}</div>`;
+  }).join('');
+  const sfx = isMedia ? ' (média)' : '';
+  $('weekTable').innerHTML = `<table><thead><tr><th>Semana</th><th>Dias</th><th class="num">Meses</th><th class="num">Entradas${sfx}</th><th class="num">Saídas${sfx}</th><th class="num">Saldo${sfx}</th></tr></thead><tbody>${W.map(w => meses[w].size ?
+    `<tr><td>${names[w]}</td><td>${diasLbl[w]}</td><td class="num">${meses[w].size}</td><td class="num" style="color:var(--in)">${eur(val(w, 'in'))}</td><td class="num" style="color:var(--out)">${eur(val(w, 'out'))}</td><td class="num">${eur(saldo(w))}</td></tr>` :
+    `<tr><td>${names[w]}</td><td>${diasLbl[w]}</td><td class="num muted" colspan="4">Sem ocorrências</td></tr>`
+  ).join('')}</tbody></table>`;
+}
+
+function renderWeeksOld() {
+  const f = filtered().filter(r => r._d);
+  const tot = {}, meses = {};
+  [1, 2, 3, 4, 5].forEach(w => { tot[w] = { in: 0, out: 0 }; meses[w] = new Set(); });
+  f.forEach(r => { const w = weekOf(r._d); tot[w][r._in ? 'in' : 'out'] += r._v; meses[w].add(r._m); });
+  const isMedia = WEEK_MODE === 'media';
+  const val = (w, k) => isMedia ? (meses[w].size ? tot[w][k] / meses[w].size : 0) : tot[w][k];
+  const saldo = w => val(w, 'in') - val(w, 'out');
+  const names = { 1: '1.ª semana', 2: '2.ª semana', 3: '3.ª semana', 4: '4.ª semana', 5: '5.ª semana' };
+  const diasLbl = { 1: '1–7', 2: '8–14', 3: '15–21', 4: '22–28', 5: '29–31' };
+  const W = [1, 2, 3, 4, 5];
+  const active = W.filter(w => meses[w].size > 0);
+  if (!active.length) {
+    $('weekChart').innerHTML = '<span class="muted">Sem dados</span>';
+    $('weekTable').innerHTML = '';
+    $('weekInsight').textContent = '';
+    return;
+  }
+  const max = Math.max(1, ...active.flatMap(w => [val(w, 'in'), val(w, 'out')]));
+  const topIn = active.reduce((a, b) => val(b, 'in') > val(a, 'in') ? b : a);
+  const topOut = active.reduce((a, b) => val(b, 'out') > val(a, 'out') ? b : a);
+  $('weekInsight').textContent = `Semana com mais entradas: ${names[topIn]} (${eur(val(topIn, 'in'))}) · Semana com mais saídas: ${names[topOut]} (${eur(val(topOut, 'out'))}) · ${isMedia ? 'média por mês' : 'total do período'}`;
+  $('weekChart').innerHTML = W.map(w => {
+    const n = meses[w].size;
+    if (!n) return `<div class="mcol"><div class="bars"></div><div class="mlabel">${names[w]}</div><div class="mlabel">sem dados</div></div>`;
+    const hi = (val(w, 'in') / max * 190).toFixed(1), ho = (val(w, 'out') / max * 190).toFixed(1);
+    return `<div class="mcol" title="Entradas ${eur(val(w, 'in'))} · Saídas ${eur(val(w, 'out'))}">
+      <div style="display:flex;gap:3px;width:100%;justify-content:center;font-size:11px;font-variant-numeric:tabular-nums;margin-bottom:4px"><span style="flex:1;text-align:center;color:var(--in);white-space:nowrap">${Math.round(val(w, 'in')).toLocaleString('pt-PT')} €</span><span style="flex:1;text-align:center;color:var(--out);white-space:nowrap">${Math.round(val(w, 'out')).toLocaleString('pt-PT')} €</span></div>
+      <div class="bars"><div class="bar in" style="height:${hi}px"></div><div class="bar out" style="height:${ho}px"></div></div>
+      <div class="mlabel" style="color:var(--ink);font-weight:600;font-size:12px;margin-top:8px">${names[w]} · ${diasLbl[w]}</div><div class="mlabel">${n} ${n === 1 ? 'mês' : 'meses'}</div></div>`;
+  }).join('');
+  const sfx = isMedia ? ' (média)' : '';
+  $('weekTable').innerHTML = `<table><thead><tr><th>Semana</th><th>Dias</th><th class="num">Meses</th><th class="num">Entradas${sfx}</th><th class="num">Saídas${sfx}</th><th class="num">Saldo${sfx}</th></tr></thead><tbody>${W.map(w => meses[w].size ?
+    `<tr><td>${names[w]}</td><td>${diasLbl[w]}</td><td class="num">${meses[w].size}</td><td class="num" style="color:var(--in)">${eur(val(w, 'in'))}</td><td class="num" style="color:var(--out)">${eur(val(w, 'out'))}</td><td class="num">${eur(saldo(w))}</td></tr>` :
+    `<tr><td>${names[w]}</td><td>${diasLbl[w]}</td><td class="num muted" colspan="4">Sem ocorrências</td></tr>`
+  ).join('')}</tbody></table>`;
+}
+
+let WB = null;
+
+const ORIGENS = [
+  { sheet: 'T_EXTRATO', idHeader: 'ID_INTERNO', label: 'Extratos bancários' },
+  { sheet: 'DÍZIMOS/OFERTAS', idHeader: 'ID_INTERNO', label: 'Dízimos e ofertas' },
+  { sheet: 'SAÍDAS', idHeader: 'ID_INTERNO', label: 'Saídas' },
+  { sheet: 'CARTÃO', idHeader: 'ID_INTERNO', label: 'Cartão' }
+];
+
+function readSheetIds(name, idHeader) {
+  const ws = WB ? WB.Sheets[name] : null;
+  if (!ws) return null;
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
+  if (!rows.length) return [];
+  let i = rows[0].map(h => String(h).trim()).indexOf(idHeader);
+  if (i < 0) i = 0;
+  return rows.slice(1).map(r => String(r[i] ?? '').trim()).filter(Boolean);
+}
+
+const normS = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().trim();
+
+function findSheet(name) {
+  if (!WB) return null;
+  const t = normS(name).replace(/[^A-Z0-9]/g, '');
+  const k = WB.SheetNames.find(n => normS(n).replace(/[^A-Z0-9]/g, '') === t);
+  return k ? WB.Sheets[k] : null;
+}
+
+function colIndex(head, names) {
+  const H = head.map(normS);
+  for (const n of names) { const i = H.indexOf(normS(n)); if (i >= 0) return i; }
+  return -1;
+}
+
+function readSheetRecords(name, idNames, dateNames) {
+  const ws = findSheet(name);
+  if (!ws) return null;
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
+  if (!rows.length) return [];
+  const head = rows[0].map(h => String(h));
+  let ci = colIndex(head, idNames);
+  if (ci < 0) ci = 0;
+  const di = colIndex(head, dateNames);
+  const ti = colIndex(head, ['TIPO']);
+  return rows.slice(1)
+    .map(r => ({ id: String(r[ci] ?? '').trim(), d: di >= 0 ? toDate(r[di]) : null, tipo: ti >= 0 ? String(r[ti] ?? '').trim() : '' }))
+    .filter(x => x.id);
+}
+
+function readTable(name) {
+  const ws = findSheet(name);
+  if (!ws) return null;
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
+  if (!rows.length) return [];
+  const head = rows[0].map(h => normS(h));
+  return rows.slice(1).map(r => {
+    const o = {};
+    head.forEach((h, i) => { if (h && !(h in o)) o[h] = String(r[i] ?? '').trim(); });
+    return o;
+  });
+}
+
+const dkey = d => d ? `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}` : '';
+
+// Validation badge: missing records → Verificar (red); only pending ones → Pendente (yellow); else OK.
+const estadoOrigem = (ok, pend) => !ok ? '<span class="pill bad">Verificar</span>' : pend ? '<span class="pill wa">Pendente</span>' : '<span class="pill ok">OK</span>';
+
+function renderOrigins() {
+  const box = $('origins');
+  if (!WB || !RECS.length) { box.innerHTML = ''; return; }
+  const inPeriod = d => !d
+    ? (YEAR === 'all' && MONTH === 'all' && !MIN_YEAR)
+    : (YEAR === 'all' || String(d.getFullYear()) === YEAR) && (MONTH === 'all' || monthKey(d) === MONTH) && (!MIN_YEAR || String(d.getFullYear()) >= MIN_YEAR);
+  const periodLabel = MONTH !== 'all'
+    ? `${MESES[+MONTH.slice(5) - 1]} ${MONTH.slice(0, 4)}`
+    : (YEAR !== 'all' ? `Ano ${YEAR}` : 'Todos os períodos');
+  // Rule: OK only when the record exists in the source and in CONTAORDEM; anything else is missing,
+  // except records dated after today, which are pending (not due yet).
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const elegivel = x => !x.d || x.d <= hoje;
+  const contaIds = new Set(RECS.map(r => r.ID_INTERNO).filter(Boolean));
+  const contaPeriod = RECS.filter(r => inPeriod(r._d));
+  const pill = (n, bad) => `<span class="pill ${n === 0 ? 'ok' : bad}">${n}</span>`;
+  const head = (label, sheet, ok, pend = 0) => `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px"><h2 style="margin:0">${esc(label)}</h2>${estadoOrigem(ok, pend)}</div>`;
+  const row = (label, value) => `<div class="qrow"><span>${label}</span><span class="num">${value}</span></div>`;
+  const list = (label, ids) => ids.length ? `<div class="muted" style="font-size:12px;margin-top:8px">${label} ${ids.map(x => esc(x)).join(', ')}</div>` : '';
+  const missingSheet = (label, sheet) => `<div class="card"><h2>${esc(label)}</h2><div class="muted">Separador ${esc(sheet)} não encontrado</div></div>`;
+
+  box.innerHTML = ORIGENS.map(o => {
+    if (o.sheet === 'CARTÃO') {
+      const cart = readTable(o.sheet);
+      const sai = readTable('SAÍDAS');
+      if (cart === null) return missingSheet(o.label, o.sheet);
+      if (sai === null) return missingSheet(o.label, 'SAÍDAS');
+      const idx = {};
+      sai.forEach(s => {
+        const k = dkey(toDate(s[normS('DATA')])) + '|' + Math.abs(num(s[normS('VALOR DA COMPRA')])).toFixed(2);
+        (idx[k] = idx[k] || []).push(s[normS('ID_INTERNO')]);
+      });
+      const src = cart
+        .map(c => ({ id: c[normS(o.idHeader)], d: toDate(c[normS('DATA MOV.')]), v: Math.abs(num(c[normS('DÉBITO EUR (+)')]) || num(c[normS('CRÉDITO EUR (-)')])) }))
+        .filter(x => x.id && inPeriod(x.d));
+      const pares = [], naoEnc = [];
+      src.forEach(x => {
+        const lst = idx[dkey(x.d) + '|' + x.v.toFixed(2)];
+        if (lst && lst.length) pares.push({ sid: lst.shift(), x }); else naoEnc.push(x.id);
+      });
+      const presentes = pares.filter(p => contaIds.has(p.sid)).length;
+      const faltam = pares.filter(p => !contaIds.has(p.sid) && elegivel(p.x)).map(p => p.sid);
+      const ok = naoEnc.length === 0 && faltam.length === 0;
+      return `<div class="card">${head(o.label, o.sheet, ok)}${row('Registos na origem', src.length)}${row('Presentes em CONTAORDEM', presentes)}${row('Em falta em CONTAORDEM', pill(faltam.length, 'bad'))}${row('Não encontrados em SAÍDAS', pill(naoEnc.length, 'bad'))}${list('Não encontrados em SAÍDAS -', naoEnc)}${list('ID em falta -', faltam)}</div>`;
+    }
+    const all = readSheetRecords(o.sheet, [o.idHeader, 'ID_INTERNO'], ['DATA MOV.', 'DATA MOV', 'DATA']);
+    if (all === null) return missingSheet(o.label, o.sheet);
+    const srcAll = new Set(all.map(x => x.id));
+    const ehDizimos = normS(o.sheet).includes('DIZIMOS');
+    const src = all.filter(x => inPeriod(x.d) && (!ehDizimos || !x.tipo || normS(x.tipo) === 'DIZIMOS/OFERTAS'));
+    const faltamRec = src.filter(x => !contaIds.has(x.id) && elegivel(x));
+    const pendentes = src.filter(x => !contaIds.has(x.id) && !elegivel(x));
+    const faltam = faltamRec.map(x => x.id);
+    const faltamLabels = ehDizimos ? faltamRec.map(x => x.d.toLocaleDateString('pt-PT')) : faltam;
+    const presentes = src.filter(x => contaIds.has(x.id)).length;
+    const prefix = all.length ? all[0].id.replace(/\d+$/, '') : '';
+    const extra = prefix ? contaPeriod.filter(r => r.ID_INTERNO && r.ID_INTERNO.startsWith(prefix) && !srcAll.has(r.ID_INTERNO)) : [];
+    const ok = faltam.length === 0 && extra.length === 0;
+    return `<div class="card">${head(o.label, o.sheet, ok, pendentes.length)}${row('Registos na origem', src.length)}${row('Presentes em CONTAORDEM', presentes)}${row('Em falta em CONTAORDEM', pill(faltam.length, 'bad'))}${row('Pendentes (data futura)', `<span class="pill">${pendentes.length}</span>`)}${row('Extra em CONTAORDEM (sem origem)', pill(extra.length, 'wa'))}${list(ehDizimos ? 'Data em falta -' : 'ID em falta -', faltamLabels)}${ehDizimos ? '' : list('Pendentes (data futura) -', pendentes.map(x => x.id + ' ' + x.d.toLocaleDateString('pt-PT')))}</div>`;
+  }).join('');
+}
+
+function renderOriginsPrev() {
+  const box = $('origins');
+  if (!WB || !RECS.length) { box.innerHTML = ''; return; }
+  const inPeriod = d => !d
+    ? (YEAR === 'all' && MONTH === 'all' && !MIN_YEAR)
+    : (YEAR === 'all' || String(d.getFullYear()) === YEAR) && (MONTH === 'all' || monthKey(d) === MONTH) && (!MIN_YEAR || String(d.getFullYear()) >= MIN_YEAR);
+  const periodLabel = MONTH !== 'all'
+    ? `${MESES[+MONTH.slice(5) - 1]} ${MONTH.slice(0, 4)}`
+    : (YEAR !== 'all' ? `Ano ${YEAR}` : 'Todos os períodos');
+  const contaIds = new Set(RECS.map(r => r.ID_INTERNO).filter(Boolean));
+  const contaPeriod = RECS.filter(r => inPeriod(r._d));
+  box.innerHTML = ORIGENS.map(o => {
+    const all = readSheetRecords(o.sheet, [o.idHeader, 'ID_INTERNO'], ['DATA MOV.', 'DATA MOV', 'DATA']);
+    if (all === null) return `<div class="card"><h2>${esc(o.label)}</h2><div class="muted">Separador ${esc(o.sheet)} não encontrado</div></div>`;
+    const srcAll = new Set(all.map(x => x.id));
+    const src = all.filter(x => inPeriod(x.d));
+    // Same rule as renderOrigins: records dated after today are pending, not missing.
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    const elegivel = x => !x.d || x.d <= hoje;
+    const faltam = src.filter(x => !contaIds.has(x.id) && elegivel(x)).map(x => x.id);
+    const presentes = src.length - faltam.length;
+    const prefix = all.length ? all[0].id.replace(/\d+$/, '') : '';
+    const extra = prefix ? contaPeriod.filter(r => r.ID_INTERNO && r.ID_INTERNO.startsWith(prefix) && !srcAll.has(r.ID_INTERNO)) : [];
+    const ok = faltam.length === 0 && extra.length === 0;
+    return `<div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px">
+        <h2 style="margin:0">${esc(o.label)}</h2>
+        <span class="pill ${ok ? 'ok' : 'bad'}">${ok ? 'OK' : 'Verificar'}</span>
+      </div>
+      <div class="muted" style="font-size:12px;margin-bottom:6px">Separador ${esc(o.sheet)} · ${esc(periodLabel)}</div>
+      <div class="qrow"><span>Registos na origem</span><span class="num">${src.length}</span></div>
+      <div class="qrow"><span>Presentes em CONTAORDEM</span><span class="num" style="color:var(--in)">${presentes}</span></div>
+      <div class="qrow"><span>Em falta em CONTAORDEM</span><span class="pill ${faltam.length ? 'bad' : 'ok'}">${faltam.length}</span></div>
+      <div class="qrow"><span>Extra em CONTAORDEM (sem origem)</span><span class="pill ${extra.length ? 'wa' : 'ok'}">${extra.length}</span></div>
+      ${faltam.length ? `<div class="muted" style="font-size:12px;margin-top:8px">ID em falta - ${faltam.map(x => esc(x)).join(', ')}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function renderOriginsOld() {
+  const box = $('origins');
+  if (!WB || !RECS.length) { box.innerHTML = ''; return; }
+  const contaIds = new Set(RECS.map(r => r.ID_INTERNO).filter(Boolean));
+  box.innerHTML = ORIGENS.map(o => {
+    const src = readSheetIds(o.sheet, o.idHeader);
+    if (src === null) return `<div class="card"><h2>${esc(o.label)}</h2><div class="muted">Separador ${esc(o.sheet)} não encontrado</div></div>`;
+    const srcSet = new Set(src);
+    const faltam = src.filter(id => !contaIds.has(id));
+    const presentes = src.length - faltam.length;
+    const prefix = src.length ? src[0].replace(/\d+$/, '') : '';
+    const extra = prefix ? RECS.filter(r => r.ID_INTERNO && r.ID_INTERNO.startsWith(prefix) && !srcSet.has(r.ID_INTERNO)) : [];
+    const ok = faltam.length === 0 && extra.length === 0;
+    return `<div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px">
+        <h2 style="margin:0">${esc(o.label)}</h2>
+        <span class="pill ${ok ? 'ok' : 'bad'}">${ok ? 'OK' : 'Verificar'}</span>
+      </div>
+      <div class="muted" style="font-size:12px;margin-bottom:6px">Separador ${esc(o.sheet)}</div>
+      <div class="qrow"><span>Registos na origem</span><span class="num">${src.length}</span></div>
+      <div class="qrow"><span>Presentes em CONTAORDEM</span><span class="num" style="color:var(--in)">${presentes}</span></div>
+      <div class="qrow"><span>Em falta em CONTAORDEM</span><span class="pill ${faltam.length ? 'bad' : 'ok'}">${faltam.length}</span></div>
+      <div class="qrow"><span>Extra em CONTAORDEM (sem origem)</span><span class="pill ${extra.length ? 'wa' : 'ok'}">${extra.length}</span></div>
+      ${faltam.length ? `<div class="muted" style="font-size:12px;margin-top:8px">Ex.: ${faltam.slice(0, 5).map(x => esc(x)).join(', ')}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+let CC_SEL = null;
+$('ccProg').addEventListener('click', e => {
+  if (e.target.closest('.cc-label')) { CC_SEL = null; renderCC(); return; }
+  const td = e.target.closest('.cc-cell');
+  if (!td) return;
+  const sel = { c: td.dataset.c, m: td.dataset.m };
+  CC_SEL = (CC_SEL && CC_SEL.c === sel.c && CC_SEL.m === sel.m) ? null : sel;
+  renderCC();
+});
+
+// Card records have _v = 0 globally (avoid double counting); this card shows their real amount.
+const ccV = r => normS(r.TIPO) === 'CARTAO' ? Math.abs(num(r['IMPORTÂNCIA'])) : r._v;
+
+// DOC. SOMA as a link to the record in SOMA; non-numeric values (e.g. "Transferido") stay plain text.
+const SOMA_URL = 'https://verbodavida.info/IVV/?mod=ivv&exec=entradas_saidas_dados&ID=';
+const docSoma = v => {
+  const doc = String(v ?? '').trim();
+  return /^\d+$/.test(doc) ? `<a href="${SOMA_URL}${doc}" target="_blank" rel="noopener noreferrer">${doc}</a>` : esc(doc);
+};
+
+function ccDet(c, n) {
+  const recs = RECS.filter(r => r._m === CC_SEL.m && (YEAR === 'all' || r._y === YEAR) && normS(r.TIPO) !== 'TRANSFERENCIA' && (r['CENTRO DE CUSTO'] || '(vazio)') === c).sort((a, b) => (a._d || 0) - (b._d || 0));
+  const soma = recs.reduce((s, r) => s + (r._in ? ccV(r) : -ccV(r)), 0);
+  const linhas = recs.map(x => `<tr><td>${esc(x['DATA MOV.'])}</td><td>${esc(x['DESCRIÇÃO'])}</td><td>${esc(x.TIPO)}</td><td>${esc(x.ID_INTERNO)}</td><td>${docSoma(x['DOC. SOMA'])}</td><td>${esc(x.PROCESSO)}</td><td class="num" style="color:${x._in ? 'var(--in)' : 'var(--out)'}">${x._in ? '+' : '−'}${eur(ccV(x))}</td><td>${esc(x.STATUS)}</td></tr>`).join('');
+  return `<tr class="cc-det"><td colspan="${n}" style="padding:8px 16px;background:#fbfcfd"><div class="muted" style="font-size:12px;margin-bottom:6px">${MESES[+CC_SEL.m.slice(5) - 1]} ${CC_SEL.m.slice(0, 4)} · ${recs.length} lançamentos · soma ${eur(soma)}</div>${recs.length ? `<div style="overflow-x:auto"><table style="font-size:12px"><thead><tr><th>Data mov.</th><th>Descrição</th><th>Tipo</th><th>ID</th><th>DOC. SOMA</th><th>Processo</th><th class="num">Valor</th><th>Status</th></tr></thead><tbody>${linhas}</tbody></table></div>` : '<span class="muted">Sem lançamentos</span>'}${c.startsWith('20.20.08') ? cartaoRef(CC_SEL.m) : ''}</td></tr>`;
+}
+
+// Card payment line: the individual CARTÃO sheet movements of the month, for reference only
+// (not added to the cost-centre totals, which already hold the payment from the bank statement).
+function cartaoRef(mk) {
+  const rows = (readTable('CARTÃO') || []).map(r => ({ ...r, _d: toDate(r['DATA MOV.']) })).filter(r => r._d && monthKey(r._d) === mk).sort((a, b) => a._d - b._d);
+  const deb = r => num(r['DEBITO EUR (+)']), cred = r => num(r['CREDITO EUR (-)']);
+  const total = rows.reduce((t, r) => t + deb(r) - cred(r), 0);
+  const linhas = rows.map(r => `<tr><td>${esc(r['DATA MOV.'])}</td><td>${esc(r['DESCRICAO'])}</td><td>${esc(r['PAIS'])}</td><td>${esc(r['ID_INTERNO'])}</td><td class="num">${deb(r) ? eur(deb(r)) : ''}</td><td class="num">${cred(r) ? eur(cred(r)) : ''}</td></tr>`).join('');
+  return `<div style="margin-top:12px;padding-top:8px;border-top:1px dashed var(--line)"><div class="muted" style="font-size:12px;margin-bottom:6px"><b>Movimentos do cartão (sheet CARTÃO)</b> · ${rows.length} movimentos · ${eur(total)} · só referência, não entram nos valores acima</div>${rows.length ? `<div style="overflow-x:auto"><table style="font-size:12px"><thead><tr><th>Data mov.</th><th>Descrição</th><th>País</th><th>ID</th><th class="num">Débito</th><th class="num">Crédito</th></tr></thead><tbody>${linhas}</tbody></table></div>` : '<span class="muted">Sem movimentos do cartão neste mês</span>'}</div>`;
+}
+
+function renderCC() {
+  const el = $('ccProg');
+  const scope = RECS.filter(r => r._m && (YEAR === 'all' || r._y === YEAR) && normS(r.TIPO) !== 'TRANSFERENCIA');
+  const months = YEAR === 'all'
+    ? [...new Set(scope.map(r => r._m))].sort()
+    : Array.from({ length: 12 }, (_, i) => `${YEAR}-${String(i + 1).padStart(2, '0')}`);
+  if (!months.length) { el.innerHTML = '<span class="muted">Sem dados</span>'; return; }
+  const cc = {};
+  scope.forEach(r => {
+    const c = r['CENTRO DE CUSTO'] || '(vazio)';
+    cc[c] = cc[c] || {};
+    cc[c][r._m] = (cc[c][r._m] || 0) + (r._in ? ccV(r) : -ccV(r));
+  });
+  const tot = c => months.reduce((s, m) => s + (cc[c][m] || 0), 0);
+  const centros = Object.keys(cc).sort((a, b) => a.localeCompare(b, 'pt'));
+  REPORTE.centros = centros.filter(c => cc[c][MONTH] !== undefined).map(c => ({ nome: c, valor: cc[c][MONTH] }));
+  const hl = m => m === MONTH ? 'background:#eff6ff;' : '';
+  const cor = v => v >= 0 ? 'var(--in)' : 'var(--out)';
+  const cel = (v, m, c) => v === undefined
+    ? `<td class="num muted" style="${hl(m)}">—</td>`
+    : `<td class="num cc-cell" data-c="${esc(c)}" data-m="${m}" style="color:${cor(v)};cursor:pointer;${hl(m)}">${eur(v)}</td>`;
+  const totMes = m => centros.reduce((s, c) => s + (cc[c][m] || 0), 0);
+  const totGeral = centros.reduce((s, c) => s + tot(c), 0);
+  el.innerHTML = `<table><thead><tr><th>Centro de custo</th>${months.map(m => `<th class="num" style="${hl(m)}white-space:nowrap">${MESES[+m.slice(5) - 1]} ${m.slice(0, 4)}</th>`).join('')}<th class="num">Total</th></tr></thead><tbody>${centros.map(c => `<tr><td class="cc-label" style="white-space:nowrap;cursor:pointer">${esc(c)}</td>${months.map(m => cel(cc[c][m], m, c)).join('')}<td class="num" style="font-weight:700;color:${cor(tot(c))}">${eur(tot(c))}</td></tr>${CC_SEL && CC_SEL.c === c ? ccDet(c, months.length + 2) : ''}`).join('')}<tr style="font-weight:700;background:#f5f7fa"><td>Total</td>${months.map(m => `<td class="num" style="color:${cor(totMes(m))};${hl(m)}">${eur(totMes(m))}</td>`).join('')}<td class="num" style="color:${cor(totGeral)}">${eur(totGeral)}</td></tr></tbody></table>`;
+}
+
+function yearly() {
+  const years = [...new Set(RECS.map(r => r._y).filter(Boolean))].sort();
+  if (!years.length) { $('yearly').innerHTML = '<span class="muted">Sem datas válidas</span>'; $('yearRows').innerHTML = ''; return; }
+  const agg = {};
+  years.forEach(y => agg[y] = {in: 0, out: 0, n: 0});
+  RECS.forEach(r => { if (agg[r._y]) { agg[r._y][r._in ? 'in' : 'out'] += r._v; agg[r._y].n++; } });
+  const max = Math.max(1, ...years.flatMap(y => [agg[y].in, agg[y].out]));
+  $('yearly').innerHTML = years.map(y => {
+    const a = agg[y];
+    const sel = YEAR === y ? 'outline:2px solid var(--acc);outline-offset:4px;border-radius:6px;' : '';
+    return `<div class="mcol" data-y="${y}" style="${sel}" title="${eur(a.in)} entradas · ${eur(a.out)} saídas">
+      <div class="bars" style="height:150px"><div class="bar in" style="height:${(a.in/max*150).toFixed(1)}px"></div><div class="bar out" style="height:${(a.out/max*150).toFixed(1)}px"></div></div>
+      <div class="mlabel">${y}</div></div>`;
+  }).join('');
+  document.querySelectorAll('#yearly .mcol').forEach(el => el.addEventListener('click', () => {
+    YEAR = YEAR === el.dataset.y ? 'all' : el.dataset.y; MONTH = 'all'; render();
+  }));
+  let prev = null;
+  $('yearRows').innerHTML = years.map(y => {
+    const a = agg[y], saldo = a.in - a.out;
+    const v = (cur, old) => (prev && old) ? ((cur - old) / Math.abs(old) * 100).toFixed(1) + '%' : '—';
+    const row = `<tr><td>${y}</td><td class="num" style="color:var(--in)">${eur(a.in)}</td><td class="num">${v(a.in, prev && prev.in)}</td><td class="num" style="color:var(--out)">${eur(a.out)}</td><td class="num">${v(a.out, prev && prev.out)}</td><td class="num">${eur(saldo)}</td><td class="num">${a.n}</td></tr>`;
+    prev = a;
+    return row;
+  }).join('');
+}
+
+function matrix() {
+  const years = [...new Set(RECS.map(r => r._y).filter(Boolean))].sort();
+  if (!years.length) { $('matrix').innerHTML = ''; return; }
+  const cell = {};
+  RECS.forEach(r => { if (!r._y) return; const k = r._y + '|' + (r._d.getMonth() + 1); cell[k] = (cell[k] || 0) + (r._in ? r._v : -r._v); });
+  const head = '<tr><th>Mês</th>' + years.map(y => `<th class="num">${y}</th>`).join('') + '</tr>';
+  const body = MESES.map((mn, i) => `<tr><td>${mn}</td>` + years.map(y => {
+    const k = y + '|' + (i + 1);
+    if (!(k in cell)) return '<td class="num muted">—</td>';
+    const v = cell[k];
+    return `<td class="num" style="color:${v >= 0 ? 'var(--in)' : 'var(--out)'}">${eur(v)}</td>`;
+  }).join('') + '</tr>').join('');
+  $('matrix').innerHTML = `<table><thead>${head}</thead><tbody>${body}</tbody></table>`;
+}
+
+function breakdown(f) {
+  renderBars('byPlano', groupSum(f, r => r['PLANO DE CONTA'], r => r._v).slice(0, 8));
+  renderBars('byForma', groupSum(f, r => r['FORMA DE PAGAMENTO'], r => r._v).slice(0, 8));
+  renderBars('byCaixa', groupSum(f, r => r['CAIXA'], r => r._v).slice(0, 8));
+}
+
+function renderTable() {
+  const q = $('search').value.trim().toLowerCase();
+  const list = filtered()
+    .filter(r => r._in || /^sa.da/i.test((r.TIPO || '').trim()))
+    .filter(r => !q || [r['DESCRIÇÃO'], r['PLANO DE CONTA'], r.ID_INTERNO, r['DESCRIÇÃO SOMA']].join(' ').toLowerCase().includes(q))
+    .sort((a, b) => (b._d || 0) - (a._d || 0));
+  $('count').textContent = '';
+  $('sub').textContent = `Lançamentos ${list.length}`;
+  $('rows').innerHTML = list.slice(0, 300).map(r => `<tr>
+    <td>${esc(r['DATA MOV.'])}</td>
+    <td>${esc(r['DESCRIÇÃO'])}</td>
+    <td>${esc(r.TIPO)}</td>
+    <td>${esc(r['PLANO DE CONTA'])}</td>
+    <td>${esc(r.CAIXA)}</td>
+    <td class="num" style="color:${r._in ? 'var(--in)' : 'var(--out)'}">${r._in ? '+' : '−'}${eur(r._v)}</td>
+    
+    <td class="muted">${esc(r.ID_INTERNO)}</td>
+  </tr>`).join('');
+  $('more').textContent = list.length > 300 ? `A mostrar 300 de ${list.length}. Use a pesquisa para filtrar.` : '';
+}
+
+let WB2 = null;
+let CAFE = null; // AppVerboCafé: same shape as LIVRARIA, plus donations
+let LIVRARIA = null; // AppVerboShop: {costs: {isbn: avg cost}, sales: [{date, payment, total, items}]}
+let REPORT_TEST = false; // server test mode: the summary email goes only to the admin
+let REPORTE = {}; // figures of the selected month for the emailed PDF, filled by the render functions
+let FREQ = null; // AppFrequenciaMembresia: [{date, tipo, mem, vis, cri}]
+const VC_FILE_ID = '11sUHhTzKaV21uX_FpBOEnJxNpFjUn6EHEiU79Pe3jXU';
+
+function readTableIn(wb, name) {
+  if (!wb) return null;
+  const t = normS(name).replace(/[^A-Z0-9]/g, '');
+  const k = wb.SheetNames.find(n => normS(n).replace(/[^A-Z0-9]/g, '') === t);
+  if (!k) return null;
+  const rows = XLSX.utils.sheet_to_json(wb.Sheets[k], { header: 1, raw: false, defval: '' });
+  if (!rows.length) return [];
+  const head = rows[0].map(h => normS(h));
+  return rows.slice(1).map(r => {
+    const o = {};
+    head.forEach((h, i) => { if (h && !(h in o)) o[h] = String(r[i] ?? '').trim(); });
+    return o;
+  });
+}
+
+function renderVerbo() {
+  const box = $('origins');
+  if (!WB2) {
+    box.insertAdjacentHTML('beforeend', `<div class="card"><h2>Verbo Café</h2><div class="muted">Ficheiro AppVerboCafé não carregado</div></div>`);
+    return;
+  }
+  const inPeriod = d => !d
+    ? (YEAR === 'all' && MONTH === 'all' && !MIN_YEAR)
+    : (YEAR === 'all' || String(d.getFullYear()) === YEAR) && (MONTH === 'all' || monthKey(d) === MONTH) && (!MIN_YEAR || String(d.getFullYear()) >= MIN_YEAR);
+  const periodLabel = MONTH !== 'all'
+    ? `${MESES[+MONTH.slice(5) - 1]} ${MONTH.slice(0, 4)}`
+    : (YEAR !== 'all' ? `Ano ${YEAR}` : 'Todos os períodos');
+  const contaIds = new Set(RECS.map(r => r.ID_INTERNO).filter(Boolean));
+  const contaPeriod = RECS.filter(r => inPeriod(r._d));
+  const vendas = readTableIn(WB2, 'VC_VENDAS');
+  const fin = readTableIn(WB2, 'Financeiro');
+  const missing = (label, sheet) => `<div class="card"><h2>${esc(label)}</h2><div class="muted">Separador ${esc(sheet)} não encontrado</div></div>`;
+  if (vendas === null) return box.insertAdjacentHTML('beforeend', missing('Verbo Café', 'VC_VENDAS'));
+  if (fin === null) return box.insertAdjacentHTML('beforeend', missing('Verbo Café', 'Financeiro'));
+
+  const pagos = vendas
+    .map(v => ({ id: v[normS('ID_INTERNO')], d: toDate(v[normS('DATA')]), forma: normS(v[normS('FORMA DE PAGAMENTO')]) }))
+    .filter(x => x.id && x.forma === 'DINHEIRO' && inPeriod(x.d));
+  const presentes = pagos.filter(x => contaIds.has(x.id)).length;
+  // Same rule as the other origins: dated after today = pending, not missing.
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const faltam = pagos.filter(x => !contaIds.has(x.id) && (!x.d || x.d <= hoje)).map(x => x.id);
+  const pendentesVC = pagos.filter(x => !contaIds.has(x.id) && x.d && x.d > hoje);
+  const finPeriodo = fin.filter(f => f[normS('ID_INTERNO')] && inPeriod(toDate(f[normS('DATA')]))).length;
+  const vendasIds = new Set(vendas.map(v => v[normS('ID_INTERNO')]));
+  const extra = contaPeriod.filter(r => r.ID_INTERNO && r.ID_INTERNO.startsWith('VCE') && !vendasIds.has(r.ID_INTERNO)).length;
+  const ok = faltam.length === 0;
+  const pill = (n, bad) => `<span class="pill ${n === 0 ? 'ok' : bad}">${n}</span>`;
+  const row = (label, value) => `<div class="qrow"><span>${label}</span><span class="num">${value}</span></div>`;
+  box.insertAdjacentHTML('beforeend', `<div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px"><h2 style="margin:0">Verbo Café</h2>${estadoOrigem(ok, pendentesVC.length)}</div>
+      
+      ${row('Registos Financeiro na origem', pagos.length)}
+      ${row('Presentes em CONTAORDEM', presentes)}
+      ${row('Em falta em CONTAORDEM', pill(faltam.length, 'bad'))}
+      ${pendentesVC.length ? row('Pendentes (data futura)', `<span class="pill">${pendentesVC.length}</span>`) : ''}
+      ${row('Financeiro na origem', `<span class="pill">${finPeriodo}</span>`)}
+      ${row('Presentes em CONTAORDEM', `<span class="num">${fin.filter(f => f[normS('ID_INTERNO')] && inPeriod(toDate(f[normS('DATA')])) && contaIds.has(f[normS('ID_INTERNO')])).length}</span>`)}
+      ${row('Extra em CONTAORDEM (sem origem)', pill(extra, 'wa'))}
+      ${faltam.length ? `<div class="muted" style="font-size:12px;margin-top:8px">ID em falta - ${faltam.map(x => esc(x)).join(', ')}</div>` : ''}
+    </div>`);
+}
+
+// Verbo Shop (bookshop) cash sales from AppVerboShop DB_VENDAS vs CONTAORDEM. There is no shared ID,
+// so a sale is present when its Nº DOCNUN is in an ID_INTERNO/description, or when a RECEITAS DE
+// LIVRARIA entry paid in cash has the same date and amount. Dated after today = pending.
+function renderVerboShop() {
+  const box = $('origins');
+  if (!LIVRARIA) {
+    box.insertAdjacentHTML('beforeend', `<div class="card"><h2>Verbo Shop</h2><div class="muted">Ficheiro AppVerboShop não carregado</div></div>`);
+    return;
+  }
+  const noPeriodo = iso => (MONTH !== 'all' ? iso.slice(0, 7) === MONTH : YEAR === 'all' || iso.slice(0, 4) === YEAR) && (!MIN_YEAR || iso.slice(0, 4) >= MIN_YEAR);
+  const iso = d => d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` : '';
+  const hoje = iso(new Date());
+  const caixa = RECS.filter(r => r._in && normS(r['PLANO DE CONTA']) === 'RECEITAS DE LIVRARIA' && normS(r['FORMA DE PAGAMENTO']).includes('DINHEIRO'));
+  const usados = new Set();
+  const presente = v => {
+    const i = caixa.findIndex((r, k) => !usados.has(k) && (
+      (v.id && (r.ID_INTERNO === v.id || String(r['DESCRIÇÃO']).includes(v.id))) ||
+      (iso(r._d) === v.date && Math.abs(Math.abs(num(r['IMPORTÂNCIA'])) - v.total) < 0.005)));
+    if (i >= 0) usados.add(i);
+    return i >= 0;
+  };
+  const vendas = LIVRARIA.sales.filter(v => v.payment.includes('DINHEIRO') && noPeriodo(v.date));
+  const marcadas = vendas.map(v => ({ ...v, ok: presente(v) }));
+  const faltam = marcadas.filter(v => !v.ok && v.date <= hoje), pend = marcadas.filter(v => !v.ok && v.date > hoje);
+  const ok = faltam.length === 0;
+  // Sales not finalised or without payment form: pending until someone completes them in the app.
+  const abertas = (LIVRARIA.open || []).filter(v => noPeriodo(v.date));
+  const pill = (n, cls) => `<span class="pill ${n === 0 ? 'ok' : cls}">${n}</span>`;
+  const row = (l, v) => `<div class="qrow"><span>${l}</span><span class="num">${v}</span></div>`;
+  const fmt = v => `${v.id || 's/ nº'} (${v.date.slice(8)}/${v.date.slice(5, 7)}/${v.date.slice(0, 4)} · ${eur(v.total)})`;
+  box.insertAdjacentHTML('beforeend', `<div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px"><h2 style="margin:0">Verbo Shop</h2>${estadoOrigem(ok, pend.length + abertas.length)}</div>
+      ${row('Vendas em dinheiro na origem', vendas.length)}
+      ${row('Presentes em CONTAORDEM', marcadas.filter(v => v.ok).length)}
+      ${row('Em falta em CONTAORDEM', pill(faltam.length, 'bad'))}
+      ${pend.length ? row('Pendentes (data futura)', `<span class="pill">${pend.length}</span>`) : ''}
+      ${row('Pendentes (por finalizar)', `<span class="pill ${abertas.length ? 'wa' : 'ok'}">${abertas.length}</span>`)}
+      ${faltam.length ? `<div class="muted" style="font-size:12px;margin-top:8px">Vendas em falta - ${faltam.map(fmt).map(esc).join(', ')}</div>` : ''}
+      ${abertas.length ? `<div class="muted" style="font-size:12px;margin-top:8px">Por finalizar - ${abertas.map(fmt).map(esc).join(', ')}</div>` : ''}
+    </div>`);
+}
+
+function renderOrigemPlano() {
+  const body = $('origemPlanoBody');
+  const f = filtered();
+  if (!f.length) { body.innerHTML = '<span class="muted">Sem dados</span>'; return; }
+  const grupos = { rec: {}, desp: {} };
+  f.forEach(r => {
+    if (!r._in && r._v === 0) return;
+    const tipo = r._in ? 'rec' : 'desp';
+    const plano = r['PLANO DE CONTA'] || '(vazio)';
+    const origem = r.PROCESSO || '(vazio)';
+    const g = grupos[tipo];
+    if (!g[plano]) g[plano] = { v: 0, n: 0, origens: {} };
+    g[plano].v += r._v;
+    g[plano].n++;
+    g[plano].origens[origem] = (g[plano].origens[origem] || 0) + 1;
+  });
+  const render = (tipo, titulo, color, band) => {
+    const g = grupos[tipo];
+    const planos = Object.keys(g).sort((a, b) => g[b].v - g[a].v);
+    const total = planos.reduce((s, p) => s + g[p].v, 0);
+    const count = planos.reduce((s, p) => s + g[p].n, 0);
+    let html = `<tr style="background:${band}"><td style="font-weight:700;color:${color}">${titulo}</td><td></td><td class="num" style="font-weight:700;color:${color}">${eur(total)}</td><td class="num" style="font-weight:700">${count}</td></tr>`;
+    planos.forEach(p => {
+      const origens = Object.keys(g[p].origens).sort((a, b) => g[p].origens[b] - g[p].origens[a]).join(', ');
+      html += `<tr><td>↳ ${esc(p)}</td><td class="muted" style="font-size:12px">${esc(origens)}</td><td class="num">${eur(g[p].v)}</td><td class="num">${g[p].n}</td></tr>`;
+    });
+    return html;
+  };
+  body.innerHTML = `<table><thead><tr><th>Plano de conta</th><th>Origem (PROCESSO)</th><th class="num">Valor</th><th class="num">Lançamentos</th></tr></thead><tbody>${render('rec', 'ENTRADAS', 'var(--in)', '#e6f4ea')}${render('desp', 'SAÍDAS', 'var(--out)', '#fce8e6')}</tbody></table>`;
+}
+
+function renderOrigemPlanoV3() {
+  const body = $('origemPlanoBody');
+  const f = filtered();
+  if (!f.length) { body.innerHTML = '<span class="muted">Sem dados</span>'; return; }
+  const grupos = { rec: {}, desp: {} };
+  f.forEach(r => {
+    if (!r._in && r._v === 0) return;
+    const tipo = r._in ? 'rec' : 'desp';
+    const plano = r['PLANO DE CONTA'] || '(vazio)';
+    const origem = r.PROCESSO || '(vazio)';
+    const g = grupos[tipo];
+    if (!g[plano]) g[plano] = { v: 0, n: 0, origens: {} };
+    g[plano].v += r._v;
+    g[plano].n++;
+    if (!g[plano].origens[origem]) g[plano].origens[origem] = { v: 0, n: 0 };
+    g[plano].origens[origem].v += r._v;
+    g[plano].origens[origem].n++;
+  });
+  const render = (tipo, titulo, color) => {
+    const g = grupos[tipo];
+    const planos = Object.keys(g).sort((a, b) => g[b].v - g[a].v);
+    const total = planos.reduce((s, p) => s + g[p].v, 0);
+    const count = planos.reduce((s, p) => s + g[p].n, 0);
+    let html = `<tr style="background:#f8fafc"><td style="font-weight:700;color:${color}">${titulo}</td><td></td><td class="num" style="font-weight:700;color:${color}">${eur(total)}</td><td class="num" style="font-weight:700">${count}</td></tr>`;
+    planos.forEach(p => {
+      html += `<tr><td style="padding-left:20px">${esc(p)}</td><td></td><td class="num" style="color:${color}">${eur(g[p].v)}</td><td class="num">${g[p].n}</td></tr>`;
+      Object.keys(g[p].origens).sort((a, b) => g[p].origens[b].v - g[p].origens[a].v).forEach(o => {
+        const od = g[p].origens[o];
+        html += `<tr><td></td><td style="padding-left:28px;color:var(--muted)">↳ ${esc(o)}</td><td class="num" style="color:${color}">${eur(od.v)}</td><td class="num">${od.n}</td></tr>`;
+      });
+    });
+    return html;
+  };
+  body.innerHTML = `<table><thead><tr><th>Grupo / Conta de plano</th><th>Origem (PROCESSO)</th><th class="num">Valor</th><th class="num">Lançamentos</th></tr></thead><tbody>${render('rec', 'Receitas', 'var(--in)')}${render('desp', 'Despesas', 'var(--out)')}</tbody></table>`;
+}
+
+function renderOrigemPlanoV2() {
+  const body = $('origemPlanoBody');
+  const f = filtered();
+  if (!f.length) { body.innerHTML = '<span class="muted">Sem dados</span>'; return; }
+  const tree = {};
+  f.forEach(r => {
+    if (!r._in && r._v === 0) return;
+    const plano = r['PLANO DE CONTA'] || '(vazio)';
+    const origem = r.PROCESSO || '(vazio)';
+    const tipo = r._in ? 'rec' : 'desp';
+    if (!tree[plano]) tree[plano] = { rec: {}, desp: {}, rT: 0, dT: 0, n: 0 };
+    const node = tree[plano];
+    if (!node[tipo][origem]) node[tipo][origem] = { v: 0, n: 0 };
+    node[tipo][origem].v += r._v;
+    node[tipo][origem].n++;
+    node[tipo === 'rec' ? 'rT' : 'dT'] += r._v;
+    node.n++;
+  });
+  const cnt = obj => Object.values(obj).reduce((s, x) => s + x.n, 0);
+  const block = (titulo, obj, total, color) => {
+    if (!Object.keys(obj).length) return '';
+    const origens = Object.keys(obj).sort((a, b) => obj[b].v - obj[a].v).map(o =>
+      `<tr><td></td><td style="padding-left:28px;color:var(--muted)">↳ ${esc(o)}</td><td class="num" style="color:${color}">${eur(obj[o].v)}</td><td class="num">${obj[o].n}</td></tr>`
+    ).join('');
+    return `<tr><td></td><td style="font-weight:600;color:${color}">${titulo}</td><td class="num" style="color:${color};font-weight:600">${eur(total)}</td><td class="num" style="font-weight:600">${cnt(obj)}</td></tr>` + origens;
+  };
+  const planos = Object.keys(tree).sort((a, b) => (tree[b].rT + tree[b].dT) - (tree[a].rT + tree[a].dT));
+  let totR = 0, totD = 0, totN = 0, rows = '';
+  planos.forEach(p => {
+    const t = tree[p];
+    totR += t.rT; totD += t.dT; totN += t.n;
+    rows += `<tr style="background:#f8fafc"><td style="font-weight:600">${esc(p)}</td><td></td><td></td><td class="num" style="font-weight:600">${t.n}</td></tr>`;
+    rows += block('Receitas', t.rec, t.rT, 'var(--in)') + block('Despesas', t.desp, t.dT, 'var(--out)');
+  });
+  body.innerHTML = `<table><thead><tr><th>Plano de conta</th><th>Subprocesso / Origem (PROCESSO)</th><th class="num">Valor</th><th class="num">Lançamentos</th></tr></thead><tbody>${rows}</tbody><tfoot><tr><th>Total receitas</th><th></th><th class="num" style="color:var(--in)">${eur(totR)}</th><th class="num">${totN}</th></tr><tr><th>Total despesas</th><th></th><th class="num" style="color:var(--out)">${eur(totD)}</th><th></th></tr></tfoot></table>`;
+}
+
+function renderOrigemPlanoPrev() {
+  const body = $('origemPlanoBody');
+  const f = filtered();
+  if (!f.length) { body.innerHTML = '<span class="muted">Sem dados</span>'; return; }
+  const planoTot = {};
+  const map = {};
+  f.forEach(r => {
+    const plano = r['PLANO DE CONTA'] || '(vazio)';
+    const origem = r.PROCESSO || '(vazio)';
+    const k = plano + '||' + origem;
+    if (!map[k]) map[k] = { plano, origem, rec: 0, desp: 0, n: 0 };
+    if (r._in) map[k].rec += r._v; else map[k].desp += r._v;
+    map[k].n++;
+    planoTot[plano] = (planoTot[plano] || 0) + r._v;
+  });
+  const rows = Object.values(map).sort((a, b) => (planoTot[b.plano] - planoTot[a.plano]) || a.origem.localeCompare(b.origem));
+  let last = null, totRec = 0, totDesp = 0, totN = 0;
+  const lines = rows.map(x => {
+    const novo = x.plano !== last;
+    last = x.plano;
+    totRec += x.rec; totDesp += x.desp; totN += x.n;
+    return `<tr>
+      <td style="font-weight:${novo ? 600 : 400};color:${novo ? 'var(--ink)' : 'var(--muted)'}">${novo ? esc(x.plano) : ''}</td>
+      <td>${esc(x.origem)}</td>
+      <td class="num" style="color:var(--in)">${x.rec ? eur(x.rec) : '—'}</td>
+      <td class="num" style="color:var(--out)">${x.desp ? eur(x.desp) : '—'}</td>
+      <td class="num">${x.n}</td>
+    </tr>`;
+  }).join('');
+  body.innerHTML = `<table><thead><tr><th>Plano de conta</th><th>Origem (PROCESSO)</th><th class="num">Receitas</th><th class="num">Despesas</th><th class="num">Lançamentos</th></tr></thead><tbody>${lines}</tbody><tfoot><tr><th>Total</th><th></th><th class="num" style="color:var(--in)">${eur(totRec)}</th><th class="num" style="color:var(--out)">${eur(totDesp)}</th><th class="num">${totN}</th></tr></tfoot></table>`;
+}
+
+let ORIGEM_PLANO_OPEN = true;
+$('toggleOrigemPlano').addEventListener('click', () => {
+  ORIGEM_PLANO_OPEN = !ORIGEM_PLANO_OPEN;
+  $('origemPlanoBody').style.display = ORIGEM_PLANO_OPEN ? 'block' : 'none';
+  $('toggleOrigemPlanoIcon').style.transform = ORIGEM_PLANO_OPEN ? 'rotate(0deg)' : 'rotate(-90deg)';
+  $('toggleOrigemPlano').title = ORIGEM_PLANO_OPEN ? 'Ocultar' : 'Mostrar';
+  $('toggleOrigemPlano').setAttribute('aria-label', $('toggleOrigemPlano').title);
+});
+
+function renderOrigemPlano() {
+  const body = $('origemPlanoBody');
+  const f = filtered();
+  if (!f.length) { body.innerHTML = '<span class="muted">Sem dados</span>'; return; }
+  const detalhe = recs => {
+    const linhas = recs.slice().sort((a, b) => (b._d || 0) - (a._d || 0)).slice(0, 300).map(x =>
+      `<tr><td>${esc(x['DATA MOV.'])}</td><td>${esc(x['DESCRIÇÃO'])}</td><td>${esc(x.ID_INTERNO)}</td><td>${esc(x.PROCESSO)}</td><td class="num" style="color:${x._in ? 'var(--in)' : 'var(--out)'}">${x._in ? '+' : '−'}${eur(x._v)}</td><td>${esc(x.STATUS)}</td></tr>`
+    ).join('');
+    const mais = recs.length > 300 ? `<div class="muted" style="font-size:12px;margin-top:6px">A mostrar 300 de ${recs.length} lançamentos.</div>` : '';
+    return `<table style="font-size:12px"><thead><tr><th>Data mov.</th><th>Descrição</th><th>ID</th><th>Processo</th><th class="num">Valor</th><th>Status</th></tr></thead><tbody>${linhas}</tbody></table>${mais}`;
+  };
+  const formaCat = r => {
+    const fp = normS(r['FORMA DE PAGAMENTO'] || '');
+    if (fp.includes('DOA')) return 'DOAÇÕES';
+    if (fp.includes('DIZIMO') || fp.includes('OFERTA')) return 'DÍZIMOS E OFERTAS';
+    if (fp.includes('TRANSF')) return 'TRANSFERÊNCIA BANCÁRIA';
+    if (fp.includes('DINHEIRO')) return 'DINHEIRO';
+    return 'OUTRAS FORMAS';
+  };
+  const FORMA_ORDEM = ['DOAÇÕES', 'DÍZIMOS E OFERTAS', 'TRANSFERÊNCIA BANCÁRIA', 'DINHEIRO', 'OUTRAS FORMAS'];
+  const grupos = { rec: {}, desp: {} };
+  f.forEach(r => {
+    if (!r._in && r._v === 0) return;
+    const tipo = r._in ? 'rec' : 'desp';
+    const cat = tipo === 'rec' ? formaCat(r) : 'TODAS';
+    const plano = r['PLANO DE CONTA'] || '(vazio)';
+    const origem = r.PROCESSO || '(vazio)';
+    const cg = grupos[tipo][cat] = grupos[tipo][cat] || { v: 0, n: 0, planos: {} };
+    cg.v += r._v;
+    cg.n++;
+    const g = cg.planos;
+    if (!g[plano]) g[plano] = { v: 0, n: 0, origens: {}, recs: [] };
+    g[plano].v += r._v;
+    g[plano].n++;
+    g[plano].origens[origem] = (g[plano].origens[origem] || 0) + 1;
+    g[plano].recs.push(r);
+  });
+  const planoRows = g => Object.keys(g).sort((a, b) => g[b].v - g[a].v).map(p => {
+    const origens = Object.keys(g[p].origens).sort((a, b) => g[p].origens[b] - g[p].origens[a]).join(', ');
+    return `<tr class="plano-row" style="cursor:pointer"><td>↳ ${esc(p)}</td><td class="muted" style="font-size:12px">${esc(origens)}</td><td class="num">${eur(g[p].v)}</td><td class="num">${g[p].n}</td></tr>`
+      + `<tr class="plano-det" style="display:none"><td colspan="4" style="padding:8px 16px;background:#fbfcfd">${detalhe(g[p].recs)}</td></tr>`;
+  }).join('');
+  const totalRow = (titulo, color, band, cg) => `<tr style="background:${band}"><td style="font-weight:700;color:${color}">${titulo}</td><td></td><td class="num" style="font-weight:700;color:${color}">${eur(cg.v)}</td><td class="num" style="font-weight:700">${cg.n}</td></tr>`;
+  const subRow = (titulo, cg) => `<tr style="background:#f5f7fa"><td style="font-weight:600;padding-left:16px">${esc(titulo)}</td><td></td><td class="num" style="font-weight:600">${eur(cg.v)}</td><td class="num" style="font-weight:600">${cg.n}</td></tr>`;
+  const recs = Object.values(grupos.rec);
+  const recTot = { v: recs.reduce((s, c) => s + c.v, 0), n: recs.reduce((s, c) => s + c.n, 0) };
+  const desp = grupos.desp.TODAS || { v: 0, n: 0, planos: {} };
+  let corpo = totalRow('ENTRADAS', 'var(--in)', '#e6f4ea', recTot);
+  FORMA_ORDEM.forEach(cat => { if (grupos.rec[cat]) corpo += subRow(cat, grupos.rec[cat]) + planoRows(grupos.rec[cat].planos); });
+  corpo += totalRow('SAÍDAS', 'var(--out)', '#fce8e6', desp) + planoRows(desp.planos);
+  body.innerHTML = `<table><thead><tr><th>Plano de conta</th><th>Origem (PROCESSO)</th><th class="num">Valor</th><th class="num">Lançamentos</th></tr></thead><tbody>${corpo}</tbody></table>`;
+}
+
+$('origemPlanoBody').addEventListener('click', e => {
+  const tr = e.target.closest('tr.plano-row');
+  if (!tr) return;
+  const det = tr.nextElementSibling;
+  if (det && det.classList.contains('plano-det')) det.style.display = det.style.display === 'none' ? 'table-row' : 'none';
+});
+
+let PROG_OPEN = true;
+$('toggleProg').addEventListener('click', () => {
+  PROG_OPEN = !PROG_OPEN;
+  $('prog').style.display = PROG_OPEN ? 'block' : 'none';
+  $('toggleProgIcon').style.transform = PROG_OPEN ? 'rotate(0deg)' : 'rotate(-90deg)';
+  $('toggleProg').title = PROG_OPEN ? 'Ocultar' : 'Mostrar';
+  $('toggleProg').setAttribute('aria-label', $('toggleProg').title);
+});
+
+// Same rule as Apps Script DashboardCustosMensaisAnuais v11: accounts with
+// TYPE_CC = "CUSTO FIXO" in CONSTANTES are paid when they appear in
+// CONTAORDEM in the month; "Mês anterior" is the previous month's total.
+function renderCustosFixos() {
+  const el = $('custosFixos'), resumo = $('cfResumo');
+  const cons = readTable('CONSTANTES');
+  if (cons === null) { el.innerHTML = '<span class="muted">Separador CONSTANTES não encontrado</span>'; resumo.innerHTML = ''; return; }
+  const contas = [...new Set(cons.filter(r => normS(r['TYPE_CC']) === 'CUSTO FIXO').map(r => r['PLANO DE CONTA']).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'pt'));
+  if (MONTH === 'all') { el.innerHTML = '<span class="muted">Selecione um mês para validar os custos fixos.</span>'; resumo.innerHTML = ''; return; }
+  const [y, m] = MONTH.split('-').map(Number);
+  const prevKey = monthKey(new Date(y, m - 2, 1));
+  const agg = Object.fromEntries(contas.map(c => [c, { qtd: 0, pago: 0, prev: 0 }]));
+  RECS.forEach(r => {
+    const a = agg[r['PLANO DE CONTA']];
+    if (!a) return;
+    const v = Math.abs(num(r['IMPORTÂNCIA']));
+    if (r._m === MONTH) { a.qtd++; a.pago += v; }
+    else if (r._m === prevKey) a.prev += v;
+  });
+  const pagos = contas.filter(c => agg[c].qtd > 0).length;
+  resumo.innerHTML = `<span class="pill ${pagos === contas.length ? 'ok' : 'bad'}">${pagos}/${contas.length} pagos</span>`;
+  const tot = k => contas.reduce((s, c) => s + agg[c][k], 0);
+  const emFalta = contas.filter(c => !agg[c].qtd);
+  REPORTE.custos = { pagas: pagos, contas: contas.length, pago: tot('pago'), em_falta: emFalta };
+  el.innerHTML = `<table><thead><tr><th>Estado</th><th>Plano de conta</th><th class="num">Mês atual</th><th class="num">Mês anterior</th></tr></thead><tbody>${contas.map(c => {
+    const a = agg[c];
+    return `<tr class="cf-row" data-c="${esc(c)}" style="cursor:pointer"><td><span class="pill ${a.qtd ? 'ok' : 'bad'}">${a.qtd ? '✅ Pago' : '❌ Em falta'}</span></td><td>${esc(c)}</td><td class="num">${a.qtd ? eur(a.pago) : '—'}</td><td class="num">${a.prev ? eur(a.prev) : '—'}</td></tr>${CF_SEL === c ? cfDet(c) : ''}`;
+  }).join('')}<tr style="font-weight:700;background:#f5f7fa"><td></td><td>Total</td><td class="num">${eur(tot('pago'))}</td><td class="num">${eur(tot('prev'))}</td></tr></tbody></table>`;
+}
+
+// Drill-down: records of the selected account in the selected month.
+let CF_SEL = null;
+$('custosFixos').addEventListener('click', e => {
+  const tr = e.target.closest('.cf-row');
+  if (!tr) return;
+  CF_SEL = CF_SEL === tr.dataset.c ? null : tr.dataset.c;
+  renderCustosFixos();
+});
+
+function cfDet(c) {
+  const recs = RECS.filter(r => r['PLANO DE CONTA'] === c && r._m === MONTH).sort((a, b) => (b._d || 0) - (a._d || 0));
+  const linhas = recs.map(x => `<tr><td>${esc(x['DATA MOV.'])}</td><td>${esc(x['DESCRIÇÃO'])}</td><td>${esc(x.TIPO)}</td><td>${esc(x.ID_INTERNO)}</td><td>${esc(x.PROCESSO)}</td><td class="num" style="color:${x._in ? 'var(--in)' : 'var(--out)'}">${x._in ? '+' : '−'}${eur(x._v)}</td><td>${esc(x.STATUS)}</td></tr>`).join('');
+  return `<tr class="cf-det"><td colspan="4" style="padding:8px 16px;background:#fbfcfd"><div class="muted" style="font-size:12px;margin-bottom:6px">${esc(c)} · ${MESES[+MONTH.slice(5) - 1]} ${MONTH.slice(0, 4)} · ${recs.length} lançamentos</div>${recs.length ? `<div style="overflow-x:auto"><table style="font-size:12px"><thead><tr><th>Data mov.</th><th>Descrição</th><th>Tipo</th><th>ID</th><th>Processo</th><th class="num">Valor</th><th>Status</th></tr></thead><tbody>${linhas}</tbody></table></div>` : '<span class="muted">Sem lançamentos</span>'}</td></tr>`;
+}
+
+// "Motivos da variação": selected month vs previous one, same base as
+// "Progressão dos meses" (_in / _v, records with _v = 0 ignored).
+function renderMotivos() {
+  const el = $('motivos'), resumo = $('mvResumo');
+  if (MONTH === 'all') { el.innerHTML = '<span class="muted">Selecione um mês para ver os motivos da variação.</span>'; resumo.innerHTML = ''; return; }
+  const [y, m] = MONTH.split('-').map(Number);
+  const prevKey = monthKey(new Date(y, m - 2, 1));
+  const nome = k => `${MESES[+k.slice(5) - 1]} ${k.slice(0, 4)}`;
+  resumo.textContent = `${nome(MONTH)} vs ${nome(prevKey)}`;
+  const sel = (mk, inn) => RECS.filter(r => r._m === mk && r._in === inn && r._v > 0);
+  const st = a => { const s = a.reduce((x, r) => x + r._v, 0); return { n: a.length, s, t: a.length ? s / a.length : 0 }; };
+  // No % when the sign flips (e.g. negative saldo turning positive): it would be meaningless.
+  const pct = (a, b) => a * b > 0 ? ((b - a) / Math.abs(a) * 100) : null;
+  const fp = v => v === null ? '—' : (v > 0 ? '+' : '') + v.toFixed(1) + '%';
+  const fd = v => (v > 0 ? '+' : '') + eur(v);
+  const cor = (v, bom) => Math.abs(v) < 0.005 ? '' : `color:${(v > 0) === bom ? 'var(--in)' : 'var(--out)'}`;
+  const inA = sel(prevKey, true), inB = sel(MONTH, true), outA = sel(prevKey, false), outB = sel(MONTH, false);
+  const iA = st(inA), iB = st(inB), oA = st(outA), oB = st(outB);
+  const vazio = [[MONTH, iB.n + oB.n], [prevKey, iA.n + oA.n]].find(([, n]) => !n);
+  if (vazio) { el.innerHTML = `<span class="muted">Sem dados em ${nome(vazio[0])} para comparar.</span>`; return; }
+  const grp = (a, k) => a.reduce((o, r) => { const g = r[k] || '(vazio)'; (o[g] = o[g] || []).push(r); return o; }, {});
+  const cmp = (a, b, k) => { const ga = grp(a, k), gb = grp(b, k); return [...new Set([...Object.keys(ga), ...Object.keys(gb)])].map(g => ({ g, a: st(ga[g] || []), b: st(gb[g] || []) })).map(x => ({ ...x, d: x.b.s - x.a.s })); };
+  const tbl = (rows, bom) => `<table style="font-size:13px"><thead><tr><th>Centro de custo</th><th class="num">Nº</th><th class="num">Ticket médio</th><th class="num">Δ €</th></tr></thead><tbody>${rows.map(x =>
+    `<tr><td>${esc(x.g)}${x.a.n ? '' : ' <span class="pill">sem mov. no mês anterior</span>'}</td><td class="num" style="white-space:nowrap">${x.a.n} → ${x.b.n}</td><td class="num" style="white-space:nowrap">${eur(x.a.t)} → ${eur(x.b.t)}</td><td class="num" style="font-weight:600;white-space:nowrap;${cor(x.d, bom)}">${fd(x.d)}</td></tr>`).join('')}</tbody></table>`;
+  const kpi = (l, a, b, bom) => `<div class="kpi"><div class="l">${l}</div><div class="v" style="${cor(b - a, bom)}">${fd(b - a)}</div><div class="muted" style="font-size:12px">${eur(a)} → ${eur(b)} · ${fp(pct(a, b))}</div></div>`;
+
+  // Count and ticket of entries use tithes only: small café sales would distort them.
+  const dzA = inA.filter(r => normS(r['CENTRO DE CUSTO']).includes('DIZIMOS')), dzB = inB.filter(r => normS(r['CENTRO DE CUSTO']).includes('DIZIMOS'));
+  const zA = st(dzA), zB = st(dzB);
+  // Recurring donors: gave tithes in more than 3 months of the selected year. Identified by
+  // DESCRIÇÃO, so only bank transfers count (cash entries share generic descriptions).
+  const porDescricao = r => !normS(r['FORMA DE PAGAMENTO']).includes('DINHEIRO');
+  // The bank changed the format in Aug 2026 ("TRF.CREDNOME" -> "TRF.CRED  NOME"): compare letters only.
+  const doador = r => normS(r['DESCRIÇÃO']).replace(/[^A-Z0-9]/g, '').replace(/^(TRFCRED|TRIPS|TRF)/, '');
+  const mesesDoador = {};
+  RECS.filter(r => r._in && r._v > 0 && r._y === String(y) && porDescricao(r) && normS(r['CENTRO DE CUSTO']).includes('DIZIMOS'))
+    .forEach(r => (mesesDoador[doador(r)] ??= new Set()).add(r._m));
+  const recorrentes = new Set(Object.keys(mesesDoador).filter(k => mesesDoador[k].size > 3));
+  const doRec = a => a.filter(r => porDescricao(r) && recorrentes.has(doador(r)));
+  const deram = a => new Set(doRec(a).map(doador)).size;
+  const rA = st(doRec(dzA)), rB = st(doRec(dzB)), nRecA = deram(dzA), nRecB = deram(dzB);
+  const inCC = cmp(inA, inB, 'CENTRO DE CUSTO').sort((p, q) => Math.abs(q.d) - Math.abs(p.d));
+
+  const outCC = cmp(outA, outB, 'CENTRO DE CUSTO');
+  const piores = outCC.filter(x => x.d > 0.005).sort((p, q) => q.d - p.d).slice(0, 5);
+  const melhores = outCC.filter(x => x.d < -0.005).sort((p, q) => p.d - q.d).slice(0, 5);
+
+
+  // Attendance (adults = members + visitors) next to tithes in cash vs transfer.
+  const freq = mk => {
+    const c = (FREQ || []).filter(x => x.tipo === 'CULTO' && x.date.slice(0, 7) === mk);
+    const dia = d => c.filter(x => new Date(x.date + 'T12:00').getDay() === d);
+    const media = a => a.length ? a.reduce((t, x) => t + x.mem + x.vis, 0) / a.length : 0;
+    return { n: c.length, dom: dia(0), qua: dia(3), pres: c.reduce((t, x) => t + x.mem + x.vis, 0), vis: c.reduce((t, x) => t + x.vis, 0), cri: c.reduce((t, x) => t + x.cri, 0), mDom: media(dia(0)), mQua: media(dia(3)) };
+  };
+  const fA = freq(prevKey), fB = freq(MONTH);
+  const din = a => a.filter(r => normS(r['FORMA DE PAGAMENTO']).includes('DINHEIRO')).reduce((t, r) => t + r._v, 0);
+  const dinA = din(dzA), dinB = din(dzB), trfA = zA.s - dinA, trfB = zB.s - dinB;
+  // Sundays/Wednesdays of the month (up to today) with no attendance row at all.
+  const registados = new Set((FREQ || []).map(x => x.date));
+  const hoje = new Date().toISOString().slice(0, 10), semReg = [];
+  for (let d = new Date(y, m - 1, 1, 12); d.getMonth() === m - 1; d.setDate(d.getDate() + 1)) {
+    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    if ((d.getDay() === 0 || d.getDay() === 3) && iso <= hoje && !registados.has(iso)) semReg.push(`${d.getDate()}/${m} (${d.getDay() ? 'Qua' : 'Dom'})`);
+  }
+  const outros = (FREQ || []).filter(x => x.date.slice(0, 7) === MONTH && x.tipo && x.tipo !== 'CULTO')
+    .map(x => `${+x.date.slice(8)}/${m} ${x.tipo.charAt(0) + x.tipo.slice(1).toLowerCase()}`);
+  const mediaCulto = (f => f.n ? f.pres / f.n : 0);
+  const linha = (rot, a, b, f = v => v.toFixed(1).replace('.', ','), bom = true) =>
+    `<tr><td>${rot}</td><td class="num">${f(a)}</td><td class="num">${f(b)}</td><td class="num" style="${cor(b - a, bom)}">${fp(pct(a, b))}</td></tr>`;
+  const inteiro = v => String(Math.round(v));
+  const freqHtml = !FREQ ? '<div class="muted" style="font-size:13px;margin-bottom:16px">Frequência indisponível (AppFrequenciaMembresia).</div>'
+    : !fB.n ? `<div class="muted" style="font-size:13px;margin-bottom:16px">Sem cultos registados em ${nome(MONTH)} na AppFrequenciaMembresia.</div>`
+    : `<h2>Frequência nos cultos</h2>
+    <div style="overflow-x:auto"><table style="font-size:13px"><thead><tr><th>Indicador</th><th class="num">${nome(prevKey)}</th><th class="num">${nome(MONTH)}</th><th class="num">Δ</th></tr></thead><tbody>
+      ${linha('Presenças adultas (membros + visitantes)', fA.pres, fB.pres, inteiro)}
+      ${linha('Média por culto', mediaCulto(fA), mediaCulto(fB))}
+      ${linha('Média por domingo', fA.mDom, fB.mDom)}
+      ${linha('Média por quarta', fA.mQua, fB.mQua)}
+      ${linha('Visitantes', fA.vis, fB.vis, inteiro)}
+      ${linha('Crianças', fA.cri, fB.cri, inteiro)}
+      ${linha('Dízimos em dinheiro (entregues no culto)', dinA, dinB, eur)}
+      ${linha('Dízimos por transferência', trfA, trfB, eur)}
+    </tbody></table></div>
+    ${semReg.length ? `<div style="font-size:12px;margin:8px 0 0;padding:8px 10px;border-radius:8px;background:#fff7ed">⚠️ Sem registo de frequência: ${semReg.join(', ')}. As presenças do mês podem estar abaixo do real.</div>` : ''}
+    ${outros.length ? `<div class="muted" style="font-size:12px;margin:8px 0 0">Outros registos no mês (não contam como culto): ${esc(outros.join(', '))}.</div>` : ''}
+    <div class="muted" style="font-size:12px;margin:6px 0 16px">A frequência acompanha as ofertas em dinheiro; as transferências não dependem de a pessoa ir ao culto nessa semana.</div>`;
+  const fraseFreq = FREQ && fA.n && fB.n
+    ? ` <b>Frequência</b> por culto ${fp(pct(mediaCulto(fA), mediaCulto(fB)))}; dinheiro nos cultos ${fp(pct(dinA, dinB))}; transferências ${fp(pct(trfA, trfB))}.`
+    : '';
+  const dn = zB.n - zA.n;
+  const frase = `<b>Entradas ${fp(pct(iA.s, iB.s))}</b>: dízimos e ofertas com ${dn === 0 ? 'o mesmo nº de lançamentos' : `${dn > 0 ? 'mais' : 'menos'} lançamentos (${dn > 0 ? '+' : ''}${dn})`} e ticket médio ${fp(pct(zA.t, zB.t))}${recorrentes.size ? `; deram ${nRecB} dos ${recorrentes.size} doadores recorrentes (mês anterior: ${nRecA})` : ''}. `
+    + `<b>Saídas ${fp(pct(oA.s, oB.s))}</b>: ${oB.s > oA.s ? 'os gastos subiram este mês' : oB.s < oA.s ? 'os gastos desceram este mês' : 'os gastos mantiveram-se'}.`;
+
+  el.innerHTML = `
+    <div style="background:#f5f7fa;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:13px">${frase}${fraseFreq}</div>
+    <div class="kpis" style="margin-bottom:16px">${kpi('Entradas', iA.s, iB.s, true)}${kpi('Saídas', oA.s, oB.s, false)}${kpi('Saldo', iA.s - oA.s, iB.s - oB.s, true)}</div>
+    <h2 style="color:var(--in);background:#f1f3f5;padding:6px 10px;border-radius:6px;margin:16px 0 8px">Entradas</h2>
+    <div style="font-size:13px;font-weight:600;margin:6px 0 8px">Dízimos e ofertas</div>
+    <div style="overflow-x:auto">${tbl(inCC, true)}</div>
+    <div style="font-size:13px;margin:10px 0 16px">Doadores recorrentes <span class="muted">(deram dízimos em mais de 3 meses de ${y}, por transferência; identificados pela descrição)</span>:
+      dos <b>${recorrentes.size}</b> recorrentes, em ${nome(MONTH)} deram <b>${nRecB}</b> (${nome(prevKey)}: ${nRecA}) ·
+      ticket médio <b>${eur(rA.t)} → ${eur(rB.t)}</b> <span style="${cor(rB.t - rA.t, true)}">(${fp(pct(rA.t, rB.t))})</span></div>
+    ${freqHtml}
+    <h2 style="color:var(--out);background:#f1f3f5;padding:6px 10px;border-radius:6px;margin:16px 0 8px">Saídas</h2>
+    <div style="font-size:13px;margin:6px 0 10px">Nº de lançamentos: <b>${oA.n} → ${oB.n}</b> (${oB.s === oA.s ? 'o valor gasto foi igual' : `o valor gasto foi ${oB.s > oA.s ? 'maior' : 'menor'} <b style="${cor(oB.s - oA.s, false)}">${eur(Math.abs(oB.s - oA.s))}</b>`})</div>
+    <div class="grid2">
+      <div style="overflow-x:auto"><div class="muted" style="font-size:12px;margin-bottom:4px">Pioraram o resultado (gastou-se mais)</div>${piores.length ? tbl(piores, false) : '<span class="muted">Nenhum</span>'}</div>
+      <div style="overflow-x:auto"><div class="muted" style="font-size:12px;margin-bottom:4px">Melhoraram o resultado (gastou-se menos)</div>${melhores.length ? tbl(melhores, false) : '<span class="muted">Nenhum</span>'}</div>
+    </div>`;
+}
+
+let MV_OPEN = true;
+$('toggleMV').addEventListener('click', () => {
+  MV_OPEN = !MV_OPEN;
+  $('motivos').style.display = MV_OPEN ? 'block' : 'none';
+  $('toggleMVIcon').style.transform = MV_OPEN ? 'rotate(0deg)' : 'rotate(-90deg)';
+  $('toggleMV').title = MV_OPEN ? 'Ocultar' : 'Mostrar';
+  $('toggleMV').setAttribute('aria-label', $('toggleMV').title);
+});
+
+// Sales P&L cards (bookshop and café): app sales + purchase costs, plus what came in on the
+// TPA machine and its fees from CONTAORDEM. tpa = terminal code in FECHO/COMISS descriptions,
+// maquina = rental contract in "COMISSOES TPA <maquina>", plano = PLANO DE CONTA of the receipts.
+const RESULTADOS = {
+  livraria: { nome: 'Livraria', el: 'livraria', resumo: 'livResumo', dados: () => LIVRARIA, fonte: 'AppVerboShop', tpa: '01433272', maquina: '0005346910001', plano: 'RECEITAS DE LIVRARIA',
+    bruto: 'Vendas a preço de capa', custo: 'Custo dos livros vendidos', semCusto: 'livro(s) vendido(s) sem compra registada em DB_COMPRAS', top: 'Livros mais vendidos', item: 'Título', resultado: 'Resultado da livraria', vazio: 'Sem vendas da livraria neste período.' },
+  // Café: no product cost line; result = amount received minus TPA fees and rental.
+  cafe: { nome: 'Verbo Café', el: 'cafe', resumo: 'cafeResumo', dados: () => CAFE, fonte: 'AppVerboCafé', tpa: '01443426', maquina: '0005346910002', plano: 'RECEITAS DE LANCHONETE',
+    bruto: 'Vendas a preço de tabela', custo: null, custoNoLugarDoDesconto: 'Custo de compra dos produtos vendidos', semCusto: 'produto(s) vendido(s) sem compra registada em VC_COMPRAS', top: 'Produtos mais vendidos', item: 'Produto', resultado: 'Resultado do Verbo Café', vazio: 'Sem vendas do Verbo Café neste período.' }
+};
+function renderResultado(cfg) {
+  const el = $(cfg.el), resumo = $(cfg.resumo), D = cfg.dados();
+  if (!D) { el.innerHTML = `<span class="muted">Dados indisponíveis (${cfg.fonte}).</span>`; resumo.textContent = ''; return; }
+  const noPeriodo = iso => MONTH !== 'all' ? iso.slice(0, 7) === MONTH : YEAR === 'all' || iso.slice(0, 4) === YEAR;
+  resumo.textContent = MONTH !== 'all' ? `${MESES[+MONTH.slice(5) - 1]} ${MONTH.slice(0, 4)}` : YEAR === 'all' ? 'Todos os anos' : `Ano ${YEAR}`;
+  const vendas = D.sales.filter(v => noPeriodo(v.date));
+  const doacoes = (D.donations || []).filter(v => noPeriodo(v.date)).reduce((t, v) => t + v.amount, 0);
+  let bruto = 0, liquido = 0, recebido = 0, custo = 0, tpaApp = 0, nTpaApp = 0, dinApp = 0, nDinApp = 0, semCusto = 0;
+  const artigos = {}, formas = {};
+  // Café sales carry TOTAL RECEBIDO (credit sales = 0); bookshop sales count the amount to pay.
+  const temRecebido = D.sales.some(v => v.received !== undefined);
+  const rec = v => v.received ?? v.total;
+  vendas.forEach(v => {
+    const b = v.items.reduce((t, i) => t + i.price * i.qty, 0);
+    bruto += b; liquido += v.total; recebido += rec(v);
+    const f = formas[v.payment || '(sem forma)'] ??= { n: 0, pagar: 0, recebido: 0 };
+    f.n++; f.pagar += v.total; f.recebido += rec(v);
+    if (v.payment.includes('TPA')) { tpaApp += rec(v); nTpaApp++; }
+    if (v.payment.includes('DINHEIRO')) { dinApp += rec(v); nDinApp++; }
+    v.items.forEach(i => {
+      const c = D.costs[i.key];
+      if (c === undefined) semCusto += i.qty; else custo += c * i.qty;
+      const a = artigos[i.title] ??= { qty: 0, receita: 0, custo: 0 };
+      a.qty += i.qty;
+      a.receita += b ? i.price * i.qty * rec(v) / b : 0; // sale discount spread over its items
+      a.custo += (c ?? 0) * i.qty;
+    });
+  });
+  const chave = r => normS(r['DESCRIÇÃO']).replace(/[^A-Z0-9]/g, '');
+  const banco = RECS.filter(r => r._m && noPeriodo(r._m + '-01'));
+  const valor = r => Math.abs(num(r['IMPORTÂNCIA']));
+  const soma = p => banco.filter(r => chave(r).startsWith(p)).reduce((t, r) => t + valor(r), 0);
+  // What actually came in: CONTAORDEM entries on the receipts plan (TPA closings + cash).
+  const receitas = banco.filter(r => r._in && normS(r['PLANO DE CONTA']) === cfg.plano).sort((a, b) => (a._d || 0) - (b._d || 0));
+  const nFechos = receitas.filter(r => chave(r).startsWith('FECHOTPA' + cfg.tpa)).length;
+  const totalReceitas = receitas.reduce((t, r) => t + valor(r), 0);
+  // Everything on the receipts plan that is not a TPA closing (cash sales and other entries).
+  const outrasReceitas = receitas.filter(r => !chave(r).startsWith('FECHOTPA' + cfg.tpa));
+  const dinheiro = outrasReceitas.reduce((t, r) => t + valor(r), 0), difDin = dinheiro - dinApp;
+  const fechos = soma('FECHOTPA' + cfg.tpa), comissoes = soma('COMISSTPA' + cfg.tpa), aluguer = soma('COMISSOESTPA' + cfg.maquina);
+  const comCusto = !!cfg.custo;
+  // Café: purchase cost of the products sold replaces the discount line and is deducted from the result.
+  const custoCompra = cfg.custoNoLugarDoDesconto ? custo : 0;
+  const margem = recebido - (comCusto ? custo : 0), resultado = margem - custoCompra - comissoes - aluguer;
+  const pctM = recebido ? margem / recebido * 100 : 0;
+  const linha = (rot, v, forte = false, sinal = '') => `<tr${forte ? ' style="font-weight:700;background:#f5f7fa"' : ''}><td>${rot}</td><td class="num" style="${forte ? `color:${v < 0 ? 'var(--out)' : 'var(--in)'}` : ''}">${sinal}${eur(Math.abs(v))}</td></tr>`;
+  const top = Object.entries(artigos).sort((a, b) => b[1].receita - a[1].receita).slice(0, 8);
+  const dif = fechos - tpaApp;
+  REPORTE.resultados[cfg.el] = { nome: cfg.nome, vendas: recebido, custo, tpa: comissoes + aluguer, resultado };
+  if (!vendas.length && !fechos && !aluguer && !receitas.length) { el.innerHTML = `<span class="muted">${cfg.vazio}</span>`; return; }
+  el.innerHTML = `
+    <div class="grid2">
+      <div style="overflow-x:auto">
+        <table style="font-size:13px"><tbody>
+          <tr><td>Vendas registadas na app</td><td class="num">${vendas.length}</td></tr>
+          ${linha(cfg.bruto, bruto)}
+          ${cfg.custoNoLugarDoDesconto ? linha(cfg.custoNoLugarDoDesconto, custo, false, '− ') : linha('Descontos dados', bruto - liquido, false, bruto - liquido >= 0 ? '− ' : '+ ')}
+          ${cfg.custoNoLugarDoDesconto
+            // Café: net sales = list-price sales − purchase cost; then what is still to receive.
+            // "Por receber" here is list price − received (credit, missing received value or discount),
+            // so the chain ends on received − purchase cost, the base of the result.
+            ? `${linha('Vendas líquidas', bruto - custo, true)}${linha('Por receber (crédito, sem valor recebido ou desconto)', bruto - recebido, false, bruto - recebido >= 0 ? '− ' : '+ ')}${linha('Valor líquido recebido', recebido - custo, true)}`
+            : `${linha('Vendas líquidas', liquido, true)}${temRecebido ? `${linha('Por receber (crédito ou sem valor recebido)', liquido - recebido, false, liquido - recebido >= 0 ? '− ' : '+ ')}${linha('Total recebido', recebido, true)}` : ''}`}
+          ${comCusto ? `${linha(cfg.custo, custo, false, '− ')}${linha(`Margem bruta (${pctM.toFixed(1).replace('.', ',')}%)`, margem, true)}` : ''}
+          ${linha('Comissões TPA (por venda)', comissoes, false, '− ')}
+          ${linha('Aluguer da máquina TPA', aluguer, false, '− ')}
+          ${linha(cfg.resultado, resultado, true, resultado < 0 ? '− ' : '')}
+        </tbody></table>
+        ${Object.keys(formas).length ? `<div class="muted" style="font-size:12px;margin:10px 0 4px">Por forma de pagamento</div>
+        <table style="font-size:12px"><thead><tr><th>Forma</th><th class="num">Vendas</th><th class="num">A pagar</th>${temRecebido ? '<th class="num">Recebido</th>' : ''}</tr></thead><tbody>${Object.entries(formas).sort((a, b) => b[1].pagar - a[1].pagar).map(([k, f]) =>
+          `<tr><td>${esc(k)}</td><td class="num">${f.n}</td><td class="num">${eur(f.pagar)}</td>${temRecebido ? `<td class="num" style="${f.recebido < f.pagar - 0.005 ? 'color:var(--out)' : ''}">${eur(f.recebido)}</td>` : ''}</tr>`).join('')}</tbody></table>` : ''}
+        ${doacoes ? `<div class="muted" style="font-size:12px;margin-top:6px">Doações registadas na app no período: ${eur(doacoes)} (fora do resultado de vendas).</div>` : ''}
+        ${(comCusto || cfg.custoNoLugarDoDesconto) && semCusto ? `<div class="muted" style="font-size:12px;margin-top:6px">${semCusto} ${cfg.semCusto}: custo contado como 0.</div>` : ''}
+
+      </div>
+      <div style="overflow-x:auto"><div class="muted" style="font-size:12px;margin-bottom:4px">${cfg.top}</div>${top.length ? `<table style="font-size:12px"><thead><tr><th>${cfg.item}</th><th class="num">Qtd</th><th class="num">Receita</th>${comCusto ? '<th class="num">Custo</th><th class="num">Margem</th>' : ''}</tr></thead><tbody>${top.map(([t, a]) =>
+        `<tr><td>${esc(t)}</td><td class="num">${a.qty}</td><td class="num">${eur(a.receita)}</td>${comCusto ? `<td class="num">${eur(a.custo)}</td><td class="num" style="color:${a.receita - a.custo < 0 ? 'var(--out)' : 'var(--in)'}">${eur(a.receita - a.custo)}</td>` : ''}</tr>`).join('')}</tbody></table>` : '<span class="muted">Sem vendas</span>'}</div>
+    </div>
+    <div style="font-size:12px;margin-top:8px;padding:8px 10px;border-radius:8px;display:flex;flex-wrap:wrap;gap:4px 24px;background:${Math.abs(dif) > 1 || Math.abs(difDin) > 1 ? '#fff7ed' : '#f0fdf4'}">
+          <span><b>Entrou na máquina TPA:</b> ${nFechos} fecho(s) · <b>${eur(fechos)}</b> | <b>Registado na app:</b> ${nTpaApp} venda(s) TPA · <b>${eur(tpaApp)}</b>${Math.abs(dif) > 1 ? ` · ⚠️ diferença de <b>${eur(dif)}</b>` : ' · ✅ batem certo'}</span>
+          <span><b>Dinheiro e outras entradas:</b> ${outrasReceitas.length} lançamento(s) · <b>${eur(dinheiro)}</b> | <b>Registado na app:</b> ${nDinApp} venda(s) em dinheiro · <b>${eur(dinApp)}</b>${Math.abs(difDin) > 1 ? ` · ⚠️ diferença de <b>${eur(difDin)}</b>` : ' · ✅ batem certo'}</span>
+          <span><b>Total na CONTAORDEM:</b> ${eur(fechos + dinheiro)}</span>
+          ${Math.abs(dif) > 1 || Math.abs(difDin) > 1 ? '<span class="muted">Diferenças: vendas por registar na app ou lançamento contado noutro mês.</span>' : ''}
+        </div>
+        <details style="margin-top:10px"><summary class="muted" style="font-size:12px;cursor:pointer">Receitas na CONTAORDEM (plano ${cfg.plano}): ${receitas.length} lançamento(s) · ${eur(totalReceitas)} <span style="color:var(--acc)">(mostrar / ocultar)</span></summary>
+        ${receitas.length ? `<div style="max-height:260px;overflow:auto"><table style="font-size:12px"><thead><tr><th>Data mov.</th><th>Descrição</th><th>Forma</th><th class="num">Valor</th></tr></thead><tbody>${receitas.map(r =>
+          `<tr><td>${esc(r['DATA MOV.'])}</td><td>${esc(r['DESCRIÇÃO'])}</td><td>${esc(r['FORMA DE PAGAMENTO'])}</td><td class="num">${eur(valor(r))}</td></tr>`).join('')}</tbody></table></div>` : '<span class="muted" style="font-size:12px">Sem lançamentos</span>'}
+        </details>`;
+}
+const renderLivraria = () => renderResultado(RESULTADOS.livraria);
+const renderCafe = () => renderResultado(RESULTADOS.cafe);
+
+let CAFE_OPEN = true;
+$('toggleCAFE').addEventListener('click', () => {
+  CAFE_OPEN = !CAFE_OPEN;
+  $('cafe').style.display = CAFE_OPEN ? 'block' : 'none';
+  $('toggleCAFEIcon').style.transform = CAFE_OPEN ? 'rotate(0deg)' : 'rotate(-90deg)';
+  $('toggleCAFE').title = CAFE_OPEN ? 'Ocultar' : 'Mostrar';
+  $('toggleCAFE').setAttribute('aria-label', $('toggleCAFE').title);
+});
+
+let LIV_OPEN = true;
+$('toggleLIV').addEventListener('click', () => {
+  LIV_OPEN = !LIV_OPEN;
+  $('livraria').style.display = LIV_OPEN ? 'block' : 'none';
+  $('toggleLIVIcon').style.transform = LIV_OPEN ? 'rotate(0deg)' : 'rotate(-90deg)';
+  $('toggleLIV').title = LIV_OPEN ? 'Ocultar' : 'Mostrar';
+  $('toggleLIV').setAttribute('aria-label', $('toggleLIV').title);
+});
+
+let CF_OPEN = true;
+$('toggleCF').addEventListener('click', () => {
+  CF_OPEN = !CF_OPEN;
+  $('custosFixos').style.display = CF_OPEN ? 'block' : 'none';
+  $('toggleCFIcon').style.transform = CF_OPEN ? 'rotate(0deg)' : 'rotate(-90deg)';
+  $('toggleCF').title = CF_OPEN ? 'Ocultar' : 'Mostrar';
+  $('toggleCF').setAttribute('aria-label', $('toggleCF').title);
+});
+
+let CC_OPEN = true;
+$('toggleCC').addEventListener('click', () => {
+  CC_OPEN = !CC_OPEN;
+  $('ccProg').style.display = CC_OPEN ? 'block' : 'none';
+  $('toggleCCIcon').style.transform = CC_OPEN ? 'rotate(0deg)' : 'rotate(-90deg)';
+  $('toggleCC').title = CC_OPEN ? 'Ocultar' : 'Mostrar';
+  $('toggleCC').setAttribute('aria-label', $('toggleCC').title);
+});
+
+// User area: profile of the logged-in Diretória member (BP SERVICE, see server.py).
+async function loadUser() {
+  try {
+    const r = await fetch('api/me', { cache: 'no-store' });
+    if (r.status === 401) { location.href = 'login'; return; }
+    if (!r.ok) return true;
+    const u = await r.json();
+    MUST_PW = !!u.must_change;
+    MIN_YEAR = u.min_year || null;
+    $('userRole').textContent = u.admin ? 'Administrador' : 'Diretória';
+    $('adminOpen').classList.toggle('hidden', !u.admin);
+    $('sendMail').classList.toggle('hidden', !u.admin);
+    REPORT_TEST = !!u.report_test;
+    if (MUST_PW) { $('firstPw').showModal(); $('fpNew').focus(); }
+    const nome = u.name || u.email || '';
+    const ini = nome.split(/\s+/).filter(Boolean).map(w => w[0]).filter((_, i, a) => i === 0 || i === a.length - 1).join('').toUpperCase() || '?';
+    $('userBtn').textContent = $('userAv').textContent = ini;
+    $('userBtn').title = nome;
+    $('userName').textContent = nome;
+    $('userEmail').textContent = u.email || '';
+    // Photo only when Drive serves it; otherwise the initials stay.
+    const img = new Image();
+    img.alt = '';
+    img.onload = () => { $('userBtn').replaceChildren(img.cloneNode()); $('userAv').replaceChildren(img); };
+    if (!u.must_change) img.src = 'api/photo';
+    return !u.must_change;
+  } catch (e) { return true; /* menu keeps its placeholder */ }
+}
+const menuAberto = open => {
+  $('userMenu').classList.toggle('hidden', !open);
+  $('userBtn').setAttribute('aria-expanded', String(open));
+};
+$('userBtn').addEventListener('click', e => { e.stopPropagation(); menuAberto($('userMenu').classList.contains('hidden')); });
+document.addEventListener('click', e => { if (!e.target.closest('.user')) menuAberto(false); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') menuAberto(false); });
+$('userMenu').addEventListener('click', e => e.stopPropagation());
+$('logout').addEventListener('click', async () => {
+  try { await fetch('api/logout', { method: 'POST' }); } finally { location.href = 'login'; }
+});
+$('pwToggle').addEventListener('click', () => {
+  const open = $('pwForm').classList.toggle('hidden') === false;
+  $('pwToggle').setAttribute('aria-expanded', String(open));
+  if (open) $('pwCur').focus();
+});
+$('pwForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const msg = $('pwMsg');
+  if ($('pwNew').value !== $('pwNew2').value) { msg.style.color = 'var(--out)'; msg.textContent = 'As senhas novas não coincidem.'; return; }
+  const r = await fetch('api/password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ current: $('pwCur').value, new: $('pwNew').value }) }).catch(() => null);
+  const ok = r && r.ok;
+  msg.style.color = ok ? 'var(--in)' : 'var(--out)';
+  msg.textContent = ok ? 'Senha alterada.' : ((r && (await r.json().catch(() => ({}))).error) || 'Sem ligação ao servidor.');
+  if (ok) $('pwForm').reset();
+});
+
+// Mandatory first-access password change: the dialog cannot be dismissed
+// (Chrome may still close it on Escape, so it reopens while the change is pending).
+let MUST_PW = false;
+$('firstPw').addEventListener('cancel', e => e.preventDefault());
+$('firstPw').addEventListener('close', () => { if (MUST_PW) $('firstPw').showModal(); });
+$('fpForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const msg = $('fpMsg');
+  if ($('fpNew').value !== $('fpNew2').value) { msg.textContent = 'As senhas não coincidem.'; return; }
+  const r = await fetch('api/password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ new: $('fpNew').value }) }).catch(() => null);
+  if (r && r.ok) { MUST_PW = false; $('firstPw').close(); loadUser(); loadFromDrive(); return; }
+  msg.textContent = (r && (await r.json().catch(() => ({}))).error) || 'Sem ligação ao servidor.';
+});
+
+// Admin: account list per Diretória member, create/reset with a one-time password.
+const quando = t => t ? new Date(t * 1000).toLocaleString('pt-PT', { dateStyle: 'short', timeStyle: 'medium' }) : '—';
+async function loadAdmin() {
+  const r = await fetch('api/admin/users', { cache: 'no-store' }).catch(() => null);
+  if (!r || !r.ok) { $('adminList').innerHTML = '<span class="muted">Não foi possível carregar as contas.</span>'; return; }
+  const { users } = await r.json();
+  $('adminList').innerHTML = `<table><thead><tr><th>Nome</th><th>Email</th><th>Estado</th><th>Último acesso</th><th></th></tr></thead><tbody>${users.map(u => {
+    const estado = !u.has_account ? '<span class="pill">Sem conta</span>' : u.must_change ? '<span class="pill" style="background:#fef3c7">Senha inicial</span>' : '<span class="pill ok">Ativa</span>';
+    return `<tr><td><button type="button" class="adminHist" data-email="${esc(u.email)}" aria-expanded="false" style="border:0;background:none;padding:0;color:var(--acc);text-decoration:underline;cursor:pointer">${esc(u.name)}</button></td><td>${esc(u.email)}</td><td>${estado}</td><td>${quando(u.last_login)}</td><td><button type="button" class="adminReset" data-email="${esc(u.email)}">${u.has_account ? 'Nova senha' : 'Criar conta'}</button></td></tr>`;
+  }).join('')}</tbody></table>`;
+}
+const ACOES = {
+  login: 'Entrou no site', login_falhado: 'Tentativa de login falhada', logout: 'Saiu',
+  dados: 'Carregou os dados', periodo: 'Mudou o período para', gerir_contas: 'Abriu Gerir contas',
+  card: 'Card', opcao: 'Escolheu a opção', clique: 'Clicou em',
+  senha_alterada: 'Alterou a senha', senha_inicial_trocada: 'Definiu a senha no primeiro acesso',
+  email_resumo: 'Enviou o resumo por email', email_resumo_falhou: 'Falhou o envio do resumo',
+  admin_nova_senha: 'Gerou senha inicial para', senha_reposta: 'Senha reposta pelo administrador'
+};
+// Click on a name: that user's history (newest first) in a row below.
+$('adminList').addEventListener('click', async e => {
+  const b = e.target.closest('.adminHist');
+  if (!b) return;
+  const tr = b.closest('tr'), aberto = tr.nextElementSibling?.classList.contains('hist');
+  $('adminList').querySelectorAll('tr.hist').forEach(x => x.remove());
+  $('adminList').querySelectorAll('.adminHist').forEach(x => x.setAttribute('aria-expanded', 'false'));
+  if (aberto) return;
+  b.setAttribute('aria-expanded', 'true');
+  const row = document.createElement('tr');
+  row.className = 'hist';
+  row.innerHTML = '<td colspan="5" class="muted" style="background:#fbfcfd">A carregar…</td>';
+  tr.after(row);
+  const r = await fetch('api/admin/events?email=' + encodeURIComponent(b.dataset.email), { cache: 'no-store' }).catch(() => null);
+  const ev = r && r.ok ? (await r.json()).events : null;
+  row.firstElementChild.innerHTML = !ev ? 'Não foi possível carregar o histórico.' : !ev.length ? 'Sem registos.'
+    : `<div style="max-height:320px;overflow:auto"><table style="font-size:12px"><thead><tr><th>Data e hora</th><th>Ação</th><th>Detalhe</th><th>IP</th></tr></thead><tbody>${ev.map(x =>
+      `<tr><td>${quando(x.ts)}</td><td>${esc(ACOES[x.action] || x.action)}</td><td>${esc(x.detail)}</td><td>${esc(x.ip)}</td></tr>`).join('')}</tbody></table></div>`;
+});
+$('adminOpen').addEventListener('click', () => { track('gerir_contas'); menuAberto(false); $('adminPw').classList.add('hidden'); $('adminDlg').showModal(); loadAdmin(); });
+$('adminClose').addEventListener('click', () => $('adminDlg').close());
+$('adminList').addEventListener('click', async e => {
+  const b = e.target.closest('.adminReset');
+  if (!b || !confirm(`Gerar uma nova senha inicial para ${b.dataset.email}? A senha atual deixa de funcionar.`)) return;
+  const r = await fetch('api/admin/reset', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: b.dataset.email }) }).catch(() => null);
+  const d = r ? await r.json().catch(() => ({})) : {};
+  $('adminPw').classList.remove('hidden');
+  $('adminPw').innerHTML = r && r.ok
+    ? `Senha inicial de <b>${esc(d.email)}</b>: <code>${esc(d.password)}</code><br><span class="muted" style="font-size:12px">Copie agora: não volta a ser mostrada.</span>`
+    : `<span style="color:var(--out)">${esc(d.error || 'Sem ligação ao servidor.')}</span>`;
+  loadAdmin();
+});
+
+// Admin: email the selected month's PDF summary to everyone listed in Gerir contas.
+$('sendMail').addEventListener('click', async () => {
+  if (MONTH === 'all') { alert('Escolha um mês para enviar o resumo.'); return; }
+  const { resumo, custos, centros, resultados } = REPORTE;
+  if (!custos || !resultados.livraria || !resultados.cafe) { alert('Faltam dados deste mês (custos fixos, livraria ou Verbo Café). Atualize e tente de novo.'); return; }
+  const lista = await fetch('api/admin/users', { cache: 'no-store' }).catch(() => null);
+  if (!lista || !lista.ok) { alert('Não foi possível carregar as contas.'); return; }
+  const pessoas = REPORT_TEST ? [{ name: `${$('userName').textContent} (TESTE: só o administrador)` }] : (await lista.json()).users;
+  if (!pessoas.length) { alert('Não há destinatários.'); return; }
+  const label = `${MESES[+MONTH.slice(5) - 1]} ${MONTH.slice(0, 4)}`;
+  if (!confirm(`Enviar o resumo de ${label} para ${pessoas.length} pessoa(s)?\n\n${pessoas.map(u => u.name).join('\n')}`)) return;
+  const b = $('sendMail');
+  b.disabled = true; b.textContent = 'A enviar…';
+  const r = await fetch('api/admin/report-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ month: MONTH, label, resumo, custos, centros: centros || [], resultados: [resultados.livraria, resultados.cafe] }) }).catch(() => null);
+  const d = r ? await r.json().catch(() => ({})) : {};
+  b.disabled = false; b.textContent = 'Enviar Email';
+  alert(r && r.ok ? `Email enviado para ${d.sent} pessoa(s).` : d.error || 'Sem ligação ao servidor.');
+});
+
+// Card help: what each card is for, for people new to the report.
+const AJUDA = {
+  'Validação das origens': 'Confirma se todos os registos das origens do mês (extratos, dízimos e ofertas, saídas, cartão, Verbo Café e Verbo Shop) chegaram à CONTAORDEM. "Em falta" a 0 = tudo certo.',
+  'Custos fixos do mês': 'Contas de custo fixo (CONSTANTES, TYPE_CC = CUSTO FIXO) e se já foram pagas no mês escolhido. Clique numa conta para ver os lançamentos.',
+  'Progressão dos meses': 'Entradas, saídas e saldo de cada mês do ano. O menu à direita alterna entre valores, acumulado e variação face ao mês anterior.',
+  'Motivos da variação': 'Explica a diferença entre o mês escolhido e o anterior: dízimos, doadores recorrentes, frequência nos cultos e os centros de custo que mais pesaram.',
+  'Verbo Café · Resultado de vendas': 'Demonstração de resultados do Verbo Café no período: vendas registadas na app (AppVerboCafé), descontos, valor recebido, comissões e aluguer da máquina TPA. Compara também os fechos TPA no banco (RECEITAS DE LANCHONETE) com as vendas registadas.',
+  'Livraria · Resultado de vendas': 'Demonstração de resultados da livraria no período: vendas registadas na app (AppVerboShop), descontos, custo dos livros (DB_COMPRAS), comissões e aluguer da máquina TPA. Compara também os fechos TPA no banco com as vendas registadas.',
+  'Progressão Centro de Custo': 'Resultado de cada centro de custo por mês. Clique numa célula para ver os lançamentos; na linha do cartão aparecem também as compras do cartão.',
+  'Origem das receitas e despesas por plano de contas': 'Entradas e saídas do período agrupadas por forma de pagamento, plano de contas e processo de origem.',
+  'Lançamentos': 'Lista de todos os lançamentos do período escolhido, com pesquisa.',
+  'Análise por semana do mês': 'Compara as semanas do mês para ver em que semana entra e sai mais dinheiro.',
+  'Entradas vs saídas por mês': 'Gráfico de entradas e saídas por mês. Clique numa coluna para filtrar o dashboard por esse mês.',
+  'Top 8 planos de conta (volume)': 'Os 8 planos de conta com mais dinheiro movimentado no período.',
+  'Forma de pagamento': 'Dinheiro movimentado por forma de pagamento (transferência, dinheiro, ...).',
+  'Caixa': 'Dinheiro movimentado por conta ou caixa.',
+  // KPI tiles at the top
+  'Lançamentos (kpi)': 'Número de entradas e saídas registadas na CONTAORDEM no período escolhido.',
+  'Entradas (kpi)': 'Total de dinheiro que entrou no período escolhido.',
+  'Saídas (kpi)': 'Total de dinheiro que saiu no período escolhido.',
+  'Saldo (kpi)': 'Entradas menos saídas do período escolhido.',
+  '% validado (kpi)': 'Percentagem de lançamentos do período com STATUS = VALIDADO.'
+};
+function ajuda(el, texto) {
+  if (!texto || el.querySelector('.help')) return;
+  const i = document.createElement('span');
+  i.className = 'help';
+  i.tabIndex = 0;
+  i.textContent = '?';
+  i.dataset.tip = texto;
+  i.setAttribute('role', 'img');
+  i.setAttribute('aria-label', 'Ajuda: ' + texto);
+  el.insertBefore(i, el.querySelector('span') || null); // before any muted suffix like "(clique…)"
+}
+document.querySelectorAll('#app h2').forEach(h => {
+  const t = h.firstChild?.textContent.trim() || '';
+  ajuda(h, AJUDA[Object.keys(AJUDA).find(k => t === k || t.startsWith(k))]);
+});
+// One floating tooltip, kept inside the viewport (shows on hover, keyboard focus or tap).
+const tip = document.createElement('div');
+tip.id = 'helpTip';
+tip.setAttribute('role', 'tooltip');
+document.body.append(tip);
+const mostrarAjuda = e => {
+  const h = e.target.closest?.('.help');
+  if (!h) return;
+  tip.textContent = h.dataset.tip;
+  tip.style.display = 'block';
+  const r = h.getBoundingClientRect();
+  tip.style.left = Math.max(8, Math.min(r.left, innerWidth - tip.offsetWidth - 8)) + 'px';
+  tip.style.top = (r.bottom + 6 + tip.offsetHeight > innerHeight ? r.top - tip.offsetHeight - 6 : r.bottom + 6) + 'px';
+};
+const esconderAjuda = e => { if (!e || e.target.closest?.('.help')) tip.style.display = 'none'; };
+document.addEventListener('mouseover', mostrarAjuda);
+document.addEventListener('focusin', mostrarAjuda);
+document.addEventListener('mouseout', esconderAjuda);
+document.addEventListener('focusout', esconderAjuda);
+addEventListener('scroll', () => esconderAjuda(), { passive: true });
+function ajudaKpis() {
+  document.querySelectorAll('#kpis .kpi .l').forEach(l => ajuda(l, AJUDA[l.textContent.trim() + ' (kpi)']));
+}
+
+loadUser().then(ok => { if (ok) loadFromDrive(); });
+</script>
+</body>
+</html>
