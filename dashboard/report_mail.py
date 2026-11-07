@@ -23,7 +23,7 @@ def build_message(
 ) -> EmailMessage:
     resumo = report["resumo"]
     message = EmailMessage()
-    message["Subject"] = f"Resumo Tesouraria · {report['label']}"
+    message["Subject"] = f"Fecho de contas Tesouraria · {report['label']}"
     message["From"] = sender
     message["To"] = ", ".join(recipients)
     lines = [
