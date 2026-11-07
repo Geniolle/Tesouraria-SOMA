@@ -58,7 +58,7 @@ def validate_report(data: dict) -> dict:
                 for k in ("lancamentos", "entradas", "saidas", "saldo", "validado")
             },
             "custos": {
-                **{k: _num(custos[k]) for k in ("pagas", "contas", "pago", "estimado")},
+                **{k: _num(custos[k]) for k in ("pagas", "contas", "pago")},
                 "em_falta": [_text(c) for c in _rows(custos["em_falta"])],
             },
             "centros": [
@@ -156,10 +156,7 @@ def _custos(p: _Page, c: dict) -> None:
     p.y -= 17
     p.note(f"Pago {eur(c['pago'])}")
     if c["em_falta"]:
-        p.note(
-            f"Em falta {eur(c['estimado'])} (estimativa pelo mês anterior): "
-            + ", ".join(c["em_falta"])
-        )
+        p.note("Em falta: " + ", ".join(c["em_falta"]))
 
 
 def _centros(p: _Page, centros: list[dict]) -> None:

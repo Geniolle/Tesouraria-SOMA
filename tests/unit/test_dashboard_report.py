@@ -24,7 +24,6 @@ def report(**changes: object) -> dict:
             "pagas": 9,
             "contas": 12,
             "pago": 5100,
-            "estimado": 1700,
             "em_falta": ["ÁGUA", "LUZ"],
         },
         "centros": [{"nome": "Dízimos", "valor": 14200}, {"nome": "Missões", "valor": -1710}],
@@ -69,7 +68,7 @@ def test_pdf_handles_many_centres_and_empty_month() -> None:
     zeros = dict.fromkeys(("lancamentos", "entradas", "saidas", "saldo", "validado"), 0)
     empty = report(
         resumo=zeros,
-        custos={"pagas": 0, "contas": 0, "pago": 0, "estimado": 0, "em_falta": []},
+        custos={"pagas": 0, "contas": 0, "pago": 0, "em_falta": []},
         centros=[],
     )
     assert build_pdf(validate_report(empty)).startswith(b"%PDF")

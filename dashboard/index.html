@@ -1364,7 +1364,7 @@ function renderCustosFixos() {
   resumo.innerHTML = `<span class="pill ${pagos === contas.length ? 'ok' : 'bad'}">${pagos}/${contas.length} pagos</span>`;
   const tot = k => contas.reduce((s, c) => s + agg[c][k], 0);
   const emFalta = contas.filter(c => !agg[c].qtd);
-  REPORTE.custos = { pagas: pagos, contas: contas.length, pago: tot('pago'), estimado: emFalta.reduce((s, c) => s + agg[c].prev, 0), em_falta: emFalta };
+  REPORTE.custos = { pagas: pagos, contas: contas.length, pago: tot('pago'), em_falta: emFalta };
   el.innerHTML = `<table><thead><tr><th>Estado</th><th>Plano de conta</th><th class="num">Mês atual</th><th class="num">Mês anterior</th></tr></thead><tbody>${contas.map(c => {
     const a = agg[c];
     return `<tr class="cf-row" data-c="${esc(c)}" style="cursor:pointer"><td><span class="pill ${a.qtd ? 'ok' : 'bad'}">${a.qtd ? '✅ Pago' : '❌ Em falta'}</span></td><td>${esc(c)}</td><td class="num">${a.qtd ? eur(a.pago) : '—'}</td><td class="num">${a.prev ? eur(a.prev) : '—'}</td></tr>${CF_SEL === c ? cfDet(c) : ''}`;
