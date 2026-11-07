@@ -16,7 +16,8 @@ from reportlab.lib.utils import simpleSplit
 from reportlab.pdfgen import canvas
 
 GREEN, RED = HexColor("#16a34a"), HexColor("#dc2626")
-AMBER, TRACK = HexColor("#f59e0b"), HexColor("#e5e7eb")
+BLUE, ORANGE = HexColor("#2563eb"), HexColor("#f97316")
+YELLOW, TRACK = HexColor("#facc15"), HexColor("#e5e7eb")
 INK, MUTED = HexColor("#1d2433"), HexColor("#64748b")
 MARGIN = 40
 WIDTH = A4[0] - 2 * MARGIN
@@ -185,30 +186,36 @@ def _centros(p: _Page, centros: list[dict]) -> None:
 
 
 def _resultados(p: _Page, resultados: list[dict]) -> None:
-    p.section("Livraria e Verbo Café", 30 + 34 * len(resultados))
-    x = MARGIN
-    for label, color in (("Custo", RED), ("TPA", AMBER), ("Resultado", GREEN)):
-        p.bar(x, 10, color)
-        p.text(x + 14, label, 8.5, MUTED)
-        x += 80
-    p.y -= 18
-    top = max(1.0, *(max(r["vendas"], r["custo"] + r["tpa"]) for r in resultados))
+    p.section("Livraria e Verbo Café", 48 * len(resultados))
+
+    def parts(r: dict) -> tuple:
+        result = GREEN if r["resultado"] >= 0 else RED
+        return (
+            ("Recebido", r["vendas"], BLUE, eur(r["vendas"])),
+            ("Aluguer e comissões TPA", r["tpa"], ORANGE, eur(r["tpa"])),
+            ("Pagamentos", r["custo"], YELLOW, eur(r["custo"])),
+            ("Resultado", r["resultado"], result, signed(r["resultado"])),
+        )
+
+    # Same scale for both lines; every segment is its own amount, not a share of the sales.
+    top = max(1.0, *(sum(abs(v) for _, v, _, _ in parts(r)) for r in resultados))
     scale = (WIDTH - 80) / top
+    column = (WIDTH - 80) / 4
     for r in resultados:
-        p.text(MARGIN, r["nome"])
+        p.need(48)
+        p.text(MARGIN, r["nome"], bold=True)
         x = MARGIN + 80
-        for value, color in (
-            (r["custo"], RED),
-            (r["tpa"], AMBER),
-            (max(r["resultado"], 0), GREEN),
-        ):
-            p.bar(x, value * scale, color)
-            x += value * scale
-        p.y -= 14
-        p.text(MARGIN + 80, f"Recebido {eur(r['vendas'])}", 8.5, MUTED)
-        color = GREEN if r["resultado"] >= 0 else RED
-        p.text(MARGIN + WIDTH, f"Resultado {signed(r['resultado'])}", 9, color, True, True)
-        p.y -= 20
+        for _, value, color, _ in parts(r):
+            p.bar(x, abs(value) * scale, color)
+            x += abs(value) * scale
+        p.y -= 17
+        for i, (label, _, color, _) in enumerate(parts(r)):
+            p.bar(MARGIN + 80 + i * column, 8, color)
+            p.text(MARGIN + 92 + i * column, label, 8, MUTED)
+        p.y -= 12
+        for i, (_, _, _, shown) in enumerate(parts(r)):
+            p.text(MARGIN + 92 + i * column, shown, 9, bold=True)
+        p.y -= 24
 
 
 def build_pdf(report: dict) -> bytes:
