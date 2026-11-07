@@ -15,7 +15,8 @@ BP_SERVICE_SPREADSHEET_ID, DASHBOARD_DB_PATH.
 Optional: DASHBOARD_PORT (default 8090), DASHBOARD_ADMIN_EMAILS (comma-separated
 Diretória emails that may manage accounts from the page), DASHBOARD_USER_MIN_YEAR
 (first year non-admins see, default 2026), LIVRARIA_SPREADSHEET_ID (AppVerboShop,
-for the bookshop P&L card), DASHBOARD_PUBLIC_URL (link in the summary email).
+for the bookshop P&L card), DASHBOARD_PUBLIC_URL (link in the summary email),
+DASHBOARD_REPORT_TEST=true (summary email goes only to the admin who sends it).
 The admin's "Enviar Email" uses GMAIL_ACCOUNT_EMAIL and GMAIL_CREDENTIALS_PATH
 (same Gmail token as the Extrato process); both are required.
 """
@@ -81,6 +82,7 @@ ADMINS = {
 GMAIL_ACCOUNT = _require("GMAIL_ACCOUNT_EMAIL")
 GMAIL_TOKEN_PATH = _require("GMAIL_CREDENTIALS_PATH")
 PUBLIC_URL = os.environ.get("DASHBOARD_PUBLIC_URL", "").strip().strip('"')
+REPORT_TEST = os.environ.get("DASHBOARD_REPORT_TEST", "").strip().strip('"').lower() == "true"
 # One summary email at a time, so a repeated request cannot send it twice in parallel.
 _mail_lock = threading.Lock()
 
@@ -190,7 +192,13 @@ class Handler(BaseHTTPRequestHandler):
             min_year = None if admin else USER_MIN_YEAR
             self._json(
                 200,
-                {**self._public(user), "must_change": must, "admin": admin, "min_year": min_year},
+                {
+                    **self._public(user),
+                    "must_change": must,
+                    "admin": admin,
+                    "min_year": min_year,
+                    "report_test": admin and REPORT_TEST,
+                },
             )
         elif STORE.must_change(user["email"]):
             # Initial password: no data until it has been replaced.
@@ -340,7 +348,8 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             self._json(400, {"error": "Dados do resumo inválidos."})
             return
-        recipients = active_emails(DIRECTORY.members(), STORE.accounts())
+        members, accounts = DIRECTORY.members(), STORE.accounts()
+        recipients = [user["email"]] if REPORT_TEST else active_emails(members, accounts)
         if not recipients:
             self._json(400, {"error": "Não há contas ativas."})
             return

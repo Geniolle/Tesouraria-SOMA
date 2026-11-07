@@ -1016,6 +1016,7 @@ function renderTable() {
 let WB2 = null;
 let CAFE = null; // AppVerboCafé: same shape as LIVRARIA, plus donations
 let LIVRARIA = null; // AppVerboShop: {costs: {isbn: avg cost}, sales: [{date, payment, total, items}]}
+let REPORT_TEST = false; // server test mode: the summary email goes only to the admin
 let REPORTE = {}; // figures of the selected month for the emailed PDF, filled by the render functions
 let FREQ = null; // AppFrequenciaMembresia: [{date, tipo, mem, vis, cri}]
 const VC_FILE_ID = '11sUHhTzKaV21uX_FpBOEnJxNpFjUn6EHEiU79Pe3jXU';
@@ -1656,6 +1657,7 @@ async function loadUser() {
     $('userRole').textContent = u.admin ? 'Administrador' : 'Diretória';
     $('adminOpen').classList.toggle('hidden', !u.admin);
     $('sendMail').classList.toggle('hidden', !u.admin);
+    REPORT_TEST = !!u.report_test;
     if (MUST_PW) { $('firstPw').showModal(); $('fpNew').focus(); }
     const nome = u.name || u.email || '';
     const ini = nome.split(/\s+/).filter(Boolean).map(w => w[0]).filter((_, i, a) => i === 0 || i === a.length - 1).join('').toUpperCase() || '?';
@@ -1771,7 +1773,7 @@ $('sendMail').addEventListener('click', async () => {
   if (!custos || !resultados.livraria || !resultados.cafe) { alert('Faltam dados deste mês (custos fixos, livraria ou Verbo Café). Atualize e tente de novo.'); return; }
   const lista = await fetch('api/admin/users', { cache: 'no-store' }).catch(() => null);
   if (!lista || !lista.ok) { alert('Não foi possível carregar as contas.'); return; }
-  const ativas = (await lista.json()).users.filter(u => u.has_account && !u.must_change);
+  const ativas = REPORT_TEST ? [{ name: `${$('userName').textContent} (TESTE: só o administrador)` }] : (await lista.json()).users.filter(u => u.has_account && !u.must_change);
   if (!ativas.length) { alert('Não há contas ativas.'); return; }
   const label = `${MESES[+MONTH.slice(5) - 1]} ${MONTH.slice(0, 4)}`;
   if (!confirm(`Enviar o resumo de ${label} para ${ativas.length} pessoa(s)?\n\n${ativas.map(u => u.name).join('\n')}`)) return;
