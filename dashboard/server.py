@@ -38,7 +38,7 @@ from cafe import fetch_cafe
 from directory import Directory, DirectoryUnavailable
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
-from report_mail import active_emails, build_message, send_message
+from report_mail import build_message, send_message
 from report_pdf import build_pdf, validate_report
 from year_filter import filter_xlsx
 
@@ -338,7 +338,7 @@ class Handler(BaseHTTPRequestHandler):
         self._json(200, {"email": email, "password": password})
 
     def _report_email(self, body: dict) -> None:
-        """Email the month's PDF summary to every active account."""
+        """Email the month's PDF summary to every Diretória member listed in Gerir contas."""
         user = self._user()
         if not user or user["email"] not in ADMINS or STORE.must_change(user["email"]):
             self._json(403, {"error": "Sem permissão."})
@@ -348,10 +348,9 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             self._json(400, {"error": "Dados do resumo inválidos."})
             return
-        members, accounts = DIRECTORY.members(), STORE.accounts()
-        recipients = [user["email"]] if REPORT_TEST else active_emails(members, accounts)
+        recipients = [user["email"]] if REPORT_TEST else sorted(DIRECTORY.members())
         if not recipients:
-            self._json(400, {"error": "Não há contas ativas."})
+            self._json(400, {"error": "Não há destinatários."})
             return
         if not _mail_lock.acquire(blocking=False):
             self._json(429, {"error": "Já está a ser enviado um email."})

@@ -84,8 +84,8 @@ Ten failed logins per IP or email block further attempts for 15 minutes.
 
 Admins also see "Enviar Email" in the header. With a month selected, it asks
 for confirmation and emails a PDF summary (month totals, fixed costs, cost
-centres, bookshop and Verbo Café) to the accounts shown as "Ativa" in Gerir
-contas. It sends from `GMAIL_ACCOUNT_EMAIL` with the Extrato process token
+centres, bookshop and Verbo Café) to every Diretória member listed in Gerir
+contas, whatever their account state. It sends from `GMAIL_ACCOUNT_EMAIL` with the Extrato process token
 (`GMAIL_CREDENTIALS_PATH`); `DASHBOARD_PUBLIC_URL` adds the link to the email. With
 `DASHBOARD_REPORT_TEST=true` the email goes only to the admin who sends it.
 

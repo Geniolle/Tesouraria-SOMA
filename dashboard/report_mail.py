@@ -13,11 +13,6 @@ from googleapiclient.discovery import build
 from report_pdf import eur, signed
 
 
-def active_emails(members: dict[str, dict], accounts: dict[str, dict]) -> list[str]:
-    """Diretória members whose account is "Ativa" in Gerir contas (initial password replaced)."""
-    return sorted(e for e in members if e in accounts and not accounts[e]["must_change"])
-
-
 def build_message(
     report: dict, pdf: bytes, sender: str, recipients: list[str], url: str
 ) -> EmailMessage:

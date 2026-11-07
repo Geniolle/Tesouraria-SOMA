@@ -125,7 +125,7 @@ select[aria-label="Medida"]{margin-left:auto}
     <select id="year" aria-label="Ano"></select>
     <select id="month" aria-label="Mês"></select>
     <button id="refresh" type="button">Atualizar</button>
-    <button id="sendMail" class="hidden" type="button">Enviar Email</button>
+    <button id="sendMail" class="hidden" type="button" style="background:#2563eb;border-color:#2563eb;color:#fff">Enviar Email</button>
     <div class="user">
       <button id="userBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="userMenu" title="Utilizador">?</button>
       <div id="userMenu" class="hidden" role="menu">
@@ -1766,17 +1766,17 @@ $('adminList').addEventListener('click', async e => {
   loadAdmin();
 });
 
-// Admin: email the selected month's PDF summary to the accounts shown as "Ativa" in Gerir contas.
+// Admin: email the selected month's PDF summary to everyone listed in Gerir contas.
 $('sendMail').addEventListener('click', async () => {
   if (MONTH === 'all') { alert('Escolha um mês para enviar o resumo.'); return; }
   const { resumo, custos, centros, resultados } = REPORTE;
   if (!custos || !resultados.livraria || !resultados.cafe) { alert('Faltam dados deste mês (custos fixos, livraria ou Verbo Café). Atualize e tente de novo.'); return; }
   const lista = await fetch('api/admin/users', { cache: 'no-store' }).catch(() => null);
   if (!lista || !lista.ok) { alert('Não foi possível carregar as contas.'); return; }
-  const ativas = REPORT_TEST ? [{ name: `${$('userName').textContent} (TESTE: só o administrador)` }] : (await lista.json()).users.filter(u => u.has_account && !u.must_change);
-  if (!ativas.length) { alert('Não há contas ativas.'); return; }
+  const pessoas = REPORT_TEST ? [{ name: `${$('userName').textContent} (TESTE: só o administrador)` }] : (await lista.json()).users;
+  if (!pessoas.length) { alert('Não há destinatários.'); return; }
   const label = `${MESES[+MONTH.slice(5) - 1]} ${MONTH.slice(0, 4)}`;
-  if (!confirm(`Enviar o resumo de ${label} para ${ativas.length} pessoa(s)?\n\n${ativas.map(u => u.name).join('\n')}`)) return;
+  if (!confirm(`Enviar o resumo de ${label} para ${pessoas.length} pessoa(s)?\n\n${pessoas.map(u => u.name).join('\n')}`)) return;
   const b = $('sendMail');
   b.disabled = true; b.textContent = 'A enviar…';
   const r = await fetch('api/admin/report-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ month: MONTH, label, resumo, custos, centros: centros || [], resultados: [resultados.livraria, resultados.cafe] }) }).catch(() => null);

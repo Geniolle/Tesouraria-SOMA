@@ -5,7 +5,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "dashboard"))
 
-from report_mail import active_emails, build_message  # noqa: E402
+from report_mail import build_message  # noqa: E402
 from report_pdf import build_pdf, eur, signed, validate_report  # noqa: E402
 
 
@@ -72,16 +72,6 @@ def test_pdf_handles_many_centres_and_empty_month() -> None:
         centros=[],
     )
     assert build_pdf(validate_report(empty)).startswith(b"%PDF")
-
-
-def test_only_active_accounts_receive_the_email() -> None:
-    members = {"a@x.pt": {}, "b@x.pt": {}, "c@x.pt": {}}
-    accounts = {
-        "a@x.pt": {"must_change": 0},
-        "b@x.pt": {"must_change": 1},
-        "gone@x.pt": {"must_change": 0},
-    }
-    assert active_emails(members, accounts) == ["a@x.pt"]
 
 
 def test_message_has_recipients_totals_and_pdf() -> None:
