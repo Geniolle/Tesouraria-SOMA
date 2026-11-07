@@ -125,6 +125,7 @@ select[aria-label="Medida"]{margin-left:auto}
     <select id="year" aria-label="Ano"></select>
     <select id="month" aria-label="Mês"></select>
     <button id="refresh" type="button">Atualizar</button>
+    <button id="sendMail" class="hidden" type="button">Enviar Email</button>
     <div class="user">
       <button id="userBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="userMenu" title="Utilizador">?</button>
       <div id="userMenu" class="hidden" role="menu">
@@ -503,6 +504,7 @@ function render() {
     monthsOfYear.map(m => `<option value="${m}">${MESES[+m.slice(5)-1]} ${m.slice(0,4)}</option>`).join('');
   sel.value = MONTH;
   const f = filtered();
+  REPORTE = { resultados: {} };
   $('sub').textContent = `${RECS.length} lançamentos · ${months.length} meses · ${f.length} no filtro atual`;
   kpis(f);
   ajudaKpis();
@@ -527,9 +529,11 @@ function kpis(f) {
   const sai = f.filter(r => !r._in).reduce((s, r) => s + r._v, 0);
   const val = f.filter(r => r.STATUS === 'VALIDADO').length;
   const pct = f.length ? val / f.length * 100 : 0;
+  const lancamentos = f.filter(r => r._in || /^sa.da/i.test((r.TIPO || '').trim())).length;
+  REPORTE.resumo = { lancamentos, entradas: ent, saidas: sai, saldo: ent - sai, validado: pct };
   const card = (l, v, color='') => `<div class="card kpi"><div class="l">${l}</div><div class="v" style="${color}">${v}</div></div>`;
   $('kpis').innerHTML =
-    card('Lançamentos', f.filter(r => r._in || /^sa.da/i.test((r.TIPO || '').trim())).length) +
+    card('Lançamentos', lancamentos) +
     card('Entradas', eur(ent), 'color:var(--in)') +
     card('Saídas', eur(sai), 'color:var(--out)') +
     card('Saldo', eur(ent - sai)) +
@@ -929,6 +933,7 @@ function renderCC() {
   });
   const tot = c => months.reduce((s, m) => s + (cc[c][m] || 0), 0);
   const centros = Object.keys(cc).sort((a, b) => a.localeCompare(b, 'pt'));
+  REPORTE.centros = centros.filter(c => cc[c][MONTH] !== undefined).map(c => ({ nome: c, valor: cc[c][MONTH] }));
   const hl = m => m === MONTH ? 'background:#eff6ff;' : '';
   const cor = v => v >= 0 ? 'var(--in)' : 'var(--out)';
   const cel = (v, m, c) => v === undefined
@@ -1011,6 +1016,7 @@ function renderTable() {
 let WB2 = null;
 let CAFE = null; // AppVerboCafé: same shape as LIVRARIA, plus donations
 let LIVRARIA = null; // AppVerboShop: {costs: {isbn: avg cost}, sales: [{date, payment, total, items}]}
+let REPORTE = {}; // figures of the selected month for the emailed PDF, filled by the render functions
 let FREQ = null; // AppFrequenciaMembresia: [{date, tipo, mem, vis, cri}]
 const VC_FILE_ID = '11sUHhTzKaV21uX_FpBOEnJxNpFjUn6EHEiU79Pe3jXU';
 
@@ -1356,6 +1362,8 @@ function renderCustosFixos() {
   const pagos = contas.filter(c => agg[c].qtd > 0).length;
   resumo.innerHTML = `<span class="pill ${pagos === contas.length ? 'ok' : 'bad'}">${pagos}/${contas.length} pagos</span>`;
   const tot = k => contas.reduce((s, c) => s + agg[c][k], 0);
+  const emFalta = contas.filter(c => !agg[c].qtd);
+  REPORTE.custos = { pagas: pagos, contas: contas.length, pago: tot('pago'), estimado: emFalta.reduce((s, c) => s + agg[c].prev, 0), em_falta: emFalta };
   el.innerHTML = `<table><thead><tr><th>Estado</th><th>Plano de conta</th><th class="num">Mês atual</th><th class="num">Mês anterior</th></tr></thead><tbody>${contas.map(c => {
     const a = agg[c];
     return `<tr class="cf-row" data-c="${esc(c)}" style="cursor:pointer"><td><span class="pill ${a.qtd ? 'ok' : 'bad'}">${a.qtd ? '✅ Pago' : '❌ Em falta'}</span></td><td>${esc(c)}</td><td class="num">${a.qtd ? eur(a.pago) : '—'}</td><td class="num">${a.prev ? eur(a.prev) : '—'}</td></tr>${CF_SEL === c ? cfDet(c) : ''}`;
@@ -1502,10 +1510,10 @@ $('toggleMV').addEventListener('click', () => {
 // TPA machine and its fees from CONTAORDEM. tpa = terminal code in FECHO/COMISS descriptions,
 // maquina = rental contract in "COMISSOES TPA <maquina>", plano = PLANO DE CONTA of the receipts.
 const RESULTADOS = {
-  livraria: { el: 'livraria', resumo: 'livResumo', dados: () => LIVRARIA, fonte: 'AppVerboShop', tpa: '01433272', maquina: '0005346910001', plano: 'RECEITAS DE LIVRARIA',
+  livraria: { nome: 'Livraria', el: 'livraria', resumo: 'livResumo', dados: () => LIVRARIA, fonte: 'AppVerboShop', tpa: '01433272', maquina: '0005346910001', plano: 'RECEITAS DE LIVRARIA',
     bruto: 'Vendas a preço de capa', custo: 'Custo dos livros vendidos', semCusto: 'livro(s) vendido(s) sem compra registada em DB_COMPRAS', top: 'Livros mais vendidos', item: 'Título', resultado: 'Resultado da livraria', vazio: 'Sem vendas da livraria neste período.' },
   // Café: no product cost line; result = amount received minus TPA fees and rental.
-  cafe: { el: 'cafe', resumo: 'cafeResumo', dados: () => CAFE, fonte: 'AppVerboCafé', tpa: '01443426', maquina: '0005346910002', plano: 'RECEITAS DE LANCHONETE',
+  cafe: { nome: 'Verbo Café', el: 'cafe', resumo: 'cafeResumo', dados: () => CAFE, fonte: 'AppVerboCafé', tpa: '01443426', maquina: '0005346910002', plano: 'RECEITAS DE LANCHONETE',
     bruto: 'Vendas a preço de tabela', custo: null, custoNoLugarDoDesconto: 'Custo de compra dos produtos vendidos', semCusto: 'produto(s) vendido(s) sem compra registada em VC_COMPRAS', top: 'Produtos mais vendidos', item: 'Produto', resultado: 'Resultado do Verbo Café', vazio: 'Sem vendas do Verbo Café neste período.' }
 };
 function renderResultado(cfg) {
@@ -1556,6 +1564,7 @@ function renderResultado(cfg) {
   const linha = (rot, v, forte = false, sinal = '') => `<tr${forte ? ' style="font-weight:700;background:#f5f7fa"' : ''}><td>${rot}</td><td class="num" style="${forte ? `color:${v < 0 ? 'var(--out)' : 'var(--in)'}` : ''}">${sinal}${eur(Math.abs(v))}</td></tr>`;
   const top = Object.entries(artigos).sort((a, b) => b[1].receita - a[1].receita).slice(0, 8);
   const dif = fechos - tpaApp;
+  REPORTE.resultados[cfg.el] = { nome: cfg.nome, vendas: recebido, custo, tpa: comissoes + aluguer, resultado };
   if (!vendas.length && !fechos && !aluguer && !receitas.length) { el.innerHTML = `<span class="muted">${cfg.vazio}</span>`; return; }
   el.innerHTML = `
     <div class="grid2">
@@ -1646,6 +1655,7 @@ async function loadUser() {
     MIN_YEAR = u.min_year || null;
     $('userRole').textContent = u.admin ? 'Administrador' : 'Diretória';
     $('adminOpen').classList.toggle('hidden', !u.admin);
+    $('sendMail').classList.toggle('hidden', !u.admin);
     if (MUST_PW) { $('firstPw').showModal(); $('fpNew').focus(); }
     const nome = u.name || u.email || '';
     const ini = nome.split(/\s+/).filter(Boolean).map(w => w[0]).filter((_, i, a) => i === 0 || i === a.length - 1).join('').toUpperCase() || '?';
@@ -1718,6 +1728,7 @@ const ACOES = {
   dados: 'Carregou os dados', periodo: 'Mudou o período para', gerir_contas: 'Abriu Gerir contas',
   card: 'Card', opcao: 'Escolheu a opção', clique: 'Clicou em',
   senha_alterada: 'Alterou a senha', senha_inicial_trocada: 'Definiu a senha no primeiro acesso',
+  email_resumo: 'Enviou o resumo por email', email_resumo_falhou: 'Falhou o envio do resumo',
   admin_nova_senha: 'Gerou senha inicial para', senha_reposta: 'Senha reposta pelo administrador'
 };
 // Click on a name: that user's history (newest first) in a row below.
@@ -1751,6 +1762,25 @@ $('adminList').addEventListener('click', async e => {
     ? `Senha inicial de <b>${esc(d.email)}</b>: <code>${esc(d.password)}</code><br><span class="muted" style="font-size:12px">Copie agora: não volta a ser mostrada.</span>`
     : `<span style="color:var(--out)">${esc(d.error || 'Sem ligação ao servidor.')}</span>`;
   loadAdmin();
+});
+
+// Admin: email the selected month's PDF summary to the accounts shown as "Ativa" in Gerir contas.
+$('sendMail').addEventListener('click', async () => {
+  if (MONTH === 'all') { alert('Escolha um mês para enviar o resumo.'); return; }
+  const { resumo, custos, centros, resultados } = REPORTE;
+  if (!custos || !resultados.livraria || !resultados.cafe) { alert('Faltam dados deste mês (custos fixos, livraria ou Verbo Café). Atualize e tente de novo.'); return; }
+  const lista = await fetch('api/admin/users', { cache: 'no-store' }).catch(() => null);
+  if (!lista || !lista.ok) { alert('Não foi possível carregar as contas.'); return; }
+  const ativas = (await lista.json()).users.filter(u => u.has_account && !u.must_change);
+  if (!ativas.length) { alert('Não há contas ativas.'); return; }
+  const label = `${MESES[+MONTH.slice(5) - 1]} ${MONTH.slice(0, 4)}`;
+  if (!confirm(`Enviar o resumo de ${label} para ${ativas.length} pessoa(s)?\n\n${ativas.map(u => u.name).join('\n')}`)) return;
+  const b = $('sendMail');
+  b.disabled = true; b.textContent = 'A enviar…';
+  const r = await fetch('api/admin/report-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ month: MONTH, label, resumo, custos, centros: centros || [], resultados: [resultados.livraria, resultados.cafe] }) }).catch(() => null);
+  const d = r ? await r.json().catch(() => ({})) : {};
+  b.disabled = false; b.textContent = 'Enviar Email';
+  alert(r && r.ok ? `Email enviado para ${d.sent} pessoa(s).` : d.error || 'Sem ligação ao servidor.');
 });
 
 // Card help: what each card is for, for people new to the report.

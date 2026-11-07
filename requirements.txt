@@ -6,6 +6,7 @@ python-dotenv>=1.0.0
 pydantic>=2.0.0
 pydantic-settings>=2.0.0
 openpyxl>=3.1.5  # dashboard: per-year filtering of XLSX exports
+reportlab>=4.2
 
 # Scheduling
 APScheduler>=3.10.0

@@ -15,7 +15,9 @@ BP_SERVICE_SPREADSHEET_ID, DASHBOARD_DB_PATH.
 Optional: DASHBOARD_PORT (default 8090), DASHBOARD_ADMIN_EMAILS (comma-separated
 Diretória emails that may manage accounts from the page), DASHBOARD_USER_MIN_YEAR
 (first year non-admins see, default 2026), LIVRARIA_SPREADSHEET_ID (AppVerboShop,
-for the bookshop P&L card).
+for the bookshop P&L card), DASHBOARD_PUBLIC_URL (link in the summary email).
+The admin's "Enviar Email" uses GMAIL_ACCOUNT_EMAIL and GMAIL_CREDENTIALS_PATH
+(same Gmail token as the Extrato process); both are required.
 """
 
 import json
@@ -35,6 +37,8 @@ from cafe import fetch_cafe
 from directory import Directory, DirectoryUnavailable
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+from report_mail import active_emails, build_message, send_message
+from report_pdf import build_pdf, validate_report
 from year_filter import filter_xlsx
 
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -43,6 +47,7 @@ PAGES = {"/": "index.html", "/index.html": "index.html", "/login": "login.html"}
 MIN_PASSWORD = 10
 CLIENT_EVENTS = {"periodo", "gerir_contas", "card", "opcao", "clique"}
 MAX_BODY = 4096
+MAX_REPORT_BODY = 64 * 1024
 MAX_FAILS, FAIL_WINDOW = 10, 15 * 60
 log = logging.getLogger("dashboard")
 
@@ -72,6 +77,12 @@ USER_MIN_YEAR = os.environ.get("DASHBOARD_USER_MIN_YEAR", "2026").strip().strip(
 ADMINS = {
     e.strip().lower() for e in os.environ.get("DASHBOARD_ADMIN_EMAILS", "").split(",") if e.strip()
 }
+
+GMAIL_ACCOUNT = _require("GMAIL_ACCOUNT_EMAIL")
+GMAIL_TOKEN_PATH = _require("GMAIL_CREDENTIALS_PATH")
+PUBLIC_URL = os.environ.get("DASHBOARD_PUBLIC_URL", "").strip().strip('"')
+# One summary email at a time, so a repeated request cannot send it twice in parallel.
+_mail_lock = threading.Lock()
 
 # Sheets the page reads from each export; non-admins get only these, without
 # rows dated before USER_MIN_YEAR.
@@ -145,9 +156,9 @@ class Handler(BaseHTTPRequestHandler):
         fwd = self.headers.get("X-Forwarded-For", "")
         return fwd.split(",")[-1].strip() or self.client_address[0]
 
-    def _body(self) -> dict:
+    def _body(self, limit: int = MAX_BODY) -> dict:
         length = int(self.headers.get("Content-Length") or 0)
-        if not 0 < length <= MAX_BODY or "json" not in self.headers.get("Content-Type", ""):
+        if not 0 < length <= limit or "json" not in self.headers.get("Content-Type", ""):
             return {}
         try:
             data = json.loads(self.rfile.read(length))
@@ -206,7 +217,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         path = self.path.split("?", 1)[0]
-        body = self._body()
+        body = self._body(MAX_REPORT_BODY if path == "/api/admin/report-email" else MAX_BODY)
         try:
             if path == "/api/login":
                 self._login(body)
@@ -221,6 +232,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._change_password(body)
             elif path == "/api/admin/reset":
                 self._admin_reset(body)
+            elif path == "/api/admin/report-email":
+                self._report_email(body)
             elif path == "/api/event":
                 self._client_event(body)
             else:
@@ -315,6 +328,41 @@ class Handler(BaseHTTPRequestHandler):
         self._audit(user["email"], "admin_nova_senha", email)
         self._audit(email, "senha_reposta", user["email"])
         self._json(200, {"email": email, "password": password})
+
+    def _report_email(self, body: dict) -> None:
+        """Email the month's PDF summary to every active account."""
+        user = self._user()
+        if not user or user["email"] not in ADMINS or STORE.must_change(user["email"]):
+            self._json(403, {"error": "Sem permissão."})
+            return
+        try:
+            report = validate_report(body)
+        except ValueError:
+            self._json(400, {"error": "Dados do resumo inválidos."})
+            return
+        recipients = active_emails(DIRECTORY.members(), STORE.accounts())
+        if not recipients:
+            self._json(400, {"error": "Não há contas ativas."})
+            return
+        if not _mail_lock.acquire(blocking=False):
+            self._json(429, {"error": "Já está a ser enviado um email."})
+            return
+        try:
+            pdf = build_pdf(report)
+            send_message(
+                build_message(report, pdf, GMAIL_ACCOUNT, recipients, PUBLIC_URL),
+                GMAIL_TOKEN_PATH,
+            )
+        except Exception:
+            log.exception("Summary email failed")
+            self._audit(user["email"], "email_resumo_falhou", report["month"])
+            self._json(502, {"error": "O email não foi enviado. Tente mais tarde."})
+            return
+        finally:
+            _mail_lock.release()
+        log.info("Summary email sent to %d recipients", len(recipients))
+        self._audit(user["email"], "email_resumo", f"{report['month']} · {len(recipients)} contas")
+        self._json(200, {"sent": len(recipients)})
 
     def _photo(self, email: str) -> None:
         try:
