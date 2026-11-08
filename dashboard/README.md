@@ -28,6 +28,16 @@ production server. Only Diretória members can log in.
   `/api/livraria` without customer data. The "Livraria · Resultado de vendas"
   card adds the TPA fees from CONTAORDEM: terminal 01433272 (`FECHOTPA…`,
   `COMISS.TPA…`) and rental machine 0005346910001.
+- `accountant.py`: file names in the accountant's Drive folders, served at
+  `/api/contabilista` (names only, filtered by `DASHBOARD_USER_MIN_YEAR` for
+  non-admins). The "Envio documental ao contabilista" card checks, for the
+  chosen month, that each DÍZIMOS/OFERTAS `RECIBO` and SAÍDAS
+  `IMAGEM DO RECIBO` has its copy `yyyyMMdd_<file>` (Apps Script
+  `SincronizarRecibosContabilista`, hourly), and lists the fixed-cost
+  invoices saved from email (`yyyy_MM_dd_<supplier>…`, FaturasEmail process).
+  Set `DASHBOARD_CONTABILISTA_DIZIMOS_FOLDER_ID`, `…_SAIDAS_FOLDER_ID` and
+  `…_FATURAS_FOLDER_ID`, and share those folders (Viewer) with the service
+  account; the card is hidden unless all three are set.
 - `cafe.py`: Verbo Café sales (VC_VENDAS, menus via VC_PACK) and average unit
   cost per product (VC_COMPRAS `VALOR DA UNIDADE`; donated purchases cost 0)
   from AppVerboCafé, served at `/api/cafe` in the same shape as the bookshop.

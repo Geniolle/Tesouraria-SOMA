@@ -200,6 +200,11 @@ select[aria-label="Medida"]{margin-left:auto}
       <div id="weekTable" style="margin-top:12px;overflow-x:auto"></div>
     </div>
 
+    <div id="contabCard" class="card hidden">
+      <h2>Envio documental ao contabilista</h2>
+      <div id="contabBody"></div>
+    </div>
+
     <div class="card" style="order:0.6">
       <h2>Entradas vs saídas por mês <span class="muted" style="font-weight:400">(clique numa coluna para filtrar)</span></h2>
       <div style="display:none;gap:12px;font-size:12px;color:var(--muted);margin-bottom:8px">
@@ -386,6 +391,7 @@ async function loadFromDrive() {
     try { const r = await fetch('api/livraria', { cache: 'no-store' }); LIVRARIA = r.ok ? await r.json() : null; } catch (e) { LIVRARIA = null; }
     try { const r = await fetch('api/cafe', { cache: 'no-store' }); CAFE = r.ok ? await r.json() : null; } catch (e) { CAFE = null; }
     try { const r = await fetch('api/frequencia', { cache: 'no-store' }); FREQ = r.ok ? (await r.json()).cultos : null; } catch (e) { FREQ = null; }
+    try { const r = await fetch('api/contabilista', { cache: 'no-store' }); CONTAB = r.ok ? await r.json() : null; } catch (e) { CONTAB = null; }
     const ws = wb.Sheets[SHEET_NAME];
     if (!ws) throw new Error('Separador ' + SHEET_NAME + ' não encontrado');
     const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
@@ -521,6 +527,7 @@ function render() {
   renderLivraria();
   renderCafe();
   breakdown(f);
+  renderContabilista();
   renderTable();
 }
 
@@ -853,6 +860,42 @@ function renderOriginsPrev() {
   }).join('');
 }
 
+// Accountant delivery for the chosen month: every DÍZIMOS/OFERTAS and SAÍDAS row with a receipt must have
+// its copy "yyyyMMdd_<file>" in the accountant's folder (Apps Script SincronizarRecibosContabilista, hourly);
+// fixed-cost invoices saved from email ("yyyy_MM_dd_<supplier>...") are listed.
+function renderContabilista() {
+  $('contabCard').classList.toggle('hidden', !CONTAB);
+  if (!CONTAB) return;
+  const box = $('contabBody');
+  if (MONTH === 'all') { box.innerHTML = '<div class="muted">Escolha um mês para ver o envio documental.</div>'; return; }
+  const stem = s => normS(s).replace(/\.[A-Z0-9]{2,4}$/, '');
+  const ymd = d => d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
+  const recibos = (label, sheet, col, nomes, desc) => {
+    const rows = readTable(sheet);
+    if (rows === null) return `<div class="qrow"><span>${esc(label)}</span><span class="muted">Separador ${esc(sheet)} não encontrado</span></div>`;
+    const enviados = new Set(nomes.map(stem));
+    const doMes = rows.map(r => ({ r, d: toDate(r.DATA) })).filter(x => x.d && x.r.TIPO && monthKey(x.d) === MONTH);
+    const comRecibo = doMes.filter(x => x.r[col]);
+    const falta = comRecibo.filter(x => !enviados.has(stem(ymd(x.d) + '_' + x.r[col].split('/').pop())));
+    const semRecibo = doMes.length - comRecibo.length;
+    return `<div class="qrow"><span>${esc(label)}</span><span><span class="num">${comRecibo.length - falta.length} de ${comRecibo.length}</span> <span class="pill ${falta.length ? 'bad' : 'ok'}">${falta.length ? 'Em falta ' + falta.length : 'OK'}</span></span></div>`
+      + (falta.length ? `<div class="muted" style="font-size:12px;margin:4px 0 8px">Em falta: ${falta.map(x => esc(x.r.DATA + ' · ' + desc(x.r))).join('; ')}</div>` : '')
+      + (semRecibo ? `<div class="muted" style="font-size:12px;margin:4px 0 8px">${semRecibo} registo(s) sem recibo anexado na folha ${esc(sheet)}.</div>` : '');
+  };
+  const prefixo = MONTH.replace('-', '_') + '_';
+  const faturas = {};
+  CONTAB.faturas.filter(n => n.startsWith(prefixo)).forEach(n => {
+    const forn = n.slice(prefixo.length + 3).replace(/^_+/, '').split('_')[0].replace(/\.pdf$/i, '').trim() || n;
+    faturas[forn] = (faturas[forn] || 0) + 1;
+  });
+  const nFaturas = Object.values(faturas).reduce((s, v) => s + v, 0);
+  box.innerHTML = `<div class="muted" style="font-size:12px;margin-bottom:6px">Pasta Contabilista no Drive · ${esc(MESES[+MONTH.slice(5) - 1] + ' ' + MONTH.slice(0, 4))}</div>`
+    + recibos('Recibos de dízimos e ofertas', 'DÍZIMOS/OFERTAS', 'RECIBO', CONTAB.dizimos, r => `${r.TIPO} ${eur(num(r.VALOR))}`)
+    + recibos('Recibos de saídas', 'SAÍDAS', 'IMAGEM DO RECIBO', CONTAB.saidas, r => `${r['DESCRICAO DA COMPRA'] || r.TIPO} ${eur(num(r['VALOR DA COMPRA']))}`)
+    + `<div class="qrow"><span>Faturas de custos fixos (email)</span><span class="num">${nFaturas}</span></div>`
+    + (nFaturas ? `<div class="muted" style="font-size:12px;margin-top:4px">${Object.entries(faturas).map(([f, n]) => esc(n > 1 ? `${f} (${n})` : f)).join(' · ')}</div>` : '');
+}
+
 function renderOriginsOld() {
   const box = $('origins');
   if (!WB || !RECS.length) { box.innerHTML = ''; return; }
@@ -1014,6 +1057,7 @@ function renderTable() {
 }
 
 let WB2 = null;
+let CONTAB = null; // /api/contabilista: file names in the accountant's folders {dizimos, saidas, faturas}
 let CAFE = null; // AppVerboCafé: same shape as LIVRARIA, plus donations
 let LIVRARIA = null; // AppVerboShop: {costs: {isbn: avg cost}, sales: [{date, payment, total, items}]}
 let REPORT_TEST = false; // server test mode: the summary email goes only to the admin
@@ -1796,6 +1840,7 @@ const AJUDA = {
   'Progressão Centro de Custo': 'Resultado de cada centro de custo por mês. Clique numa célula para ver os lançamentos; na linha do cartão aparecem também as compras do cartão.',
   'Origem das receitas e despesas por plano de contas': 'Entradas e saídas do período agrupadas por forma de pagamento, plano de contas e processo de origem.',
   'Lançamentos': 'Lista de todos os lançamentos do período escolhido, com pesquisa.',
+  'Envio documental ao contabilista': 'Confirma se os recibos de dízimos e ofertas e de saídas do mês já estão na pasta Contabilista do Drive (copiados de hora em hora) e lista as faturas de custos fixos guardadas a partir do email.',
   'Análise por semana do mês': 'Compara as semanas do mês para ver em que semana entra e sai mais dinheiro.',
   'Entradas vs saídas por mês': 'Gráfico de entradas e saídas por mês. Clique numa coluna para filtrar o dashboard por esse mês.',
   'Top 8 planos de conta (volume)': 'Os 8 planos de conta com mais dinheiro movimentado no período.',

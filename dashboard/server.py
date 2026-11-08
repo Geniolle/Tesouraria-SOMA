@@ -31,6 +31,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
+from accountant import from_year, list_names
 from attendance import fetch_attendance
 from auth_store import SESSION_TTL, AuthStore, generate_password
 from bookshop import fetch_bookshop
@@ -73,6 +74,11 @@ BP_SPREADSHEET_ID = _require("BP_SERVICE_SPREADSHEET_ID")
 DIRECTORY = Directory(CREDS, BP_SPREADSHEET_ID)
 # AppVerboShop (bookshop purchases/sales); the bookshop card is hidden when unset.
 LIVRARIA_SPREADSHEET_ID = os.environ.get("LIVRARIA_SPREADSHEET_ID", "").strip().strip('"')
+# Accountant Drive folders (Contabilista); the delivery card is hidden unless all three are set.
+ACCOUNTANT_FOLDERS = {
+    key: os.environ.get(f"DASHBOARD_CONTABILISTA_{key.upper()}_FOLDER_ID", "").strip().strip('"')
+    for key in ("dizimos", "saidas", "faturas")
+}
 # Non-admin members only see data from this year on (admins see every year).
 USER_MIN_YEAR = os.environ.get("DASHBOARD_USER_MIN_YEAR", "2026").strip().strip('"')
 ADMINS = {
@@ -216,6 +222,8 @@ class Handler(BaseHTTPRequestHandler):
             self._cafe(admin=user["email"] in ADMINS)
         elif path == "/api/frequencia":
             self._frequencia(admin=user["email"] in ADMINS)
+        elif path == "/api/contabilista":
+            self._contabilista(admin=user["email"] in ADMINS)
         elif path in FILES:
             if path == "/api/main.xlsx":  # one per page load / "Atualizar"
                 self._audit(user["email"], "dados")
@@ -416,6 +424,22 @@ class Handler(BaseHTTPRequestHandler):
             self._send(502, b"Attendance read failed", "text/plain")
             return
         self._json(200, {"cultos": data})
+
+    def _contabilista(self, admin: bool) -> None:
+        if not all(ACCOUNTANT_FOLDERS.values()):
+            self._send(404, b"Accountant folders not configured", "text/plain")
+            return
+        try:
+            min_year = None if admin else USER_MIN_YEAR
+            data = {
+                key: from_year(list_names(CREDS, folder), min_year)
+                for key, folder in ACCOUNTANT_FOLDERS.items()
+            }
+        except Exception:
+            log.exception("Accountant folders read failed")
+            self._send(502, b"Accountant folders read failed", "text/plain")
+            return
+        self._json(200, data)
 
     def _export(self, path: str, admin: bool) -> None:
         try:
