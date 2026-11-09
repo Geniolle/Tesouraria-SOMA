@@ -175,6 +175,7 @@ select[aria-label="Medida"]{margin-left:auto}
 <main>
   <div id="app" class="hidden" style="display:grid;gap:16px">
     <div class="kpis" id="kpis"></div>
+    <div id="dupBox" class="card hidden" style="overflow-x:auto"></div>
 
     <div id="origemPlano" class="card" style="order:0.5">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><button type="button" id="toggleOrigemPlano" title="Ocultar" aria-label="Ocultar" style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;color:var(--muted)"><svg id="toggleOrigemPlanoIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .2s ease"><polyline points="6 9 12 15 18 9"></polyline></svg></button><h2 style="margin:0">Origem das receitas e despesas por plano de contas</h2></div>
@@ -548,12 +549,55 @@ function kpis(f) {
   const lancamentos = f.filter(r => r._in || /^sa.da/i.test((r.TIPO || '').trim())).length;
   REPORTE.resumo = { lancamentos, entradas: ent, saidas: sai, saldo: ent - sai, validado: pct };
   const card = (l, v, color='') => `<div class="card kpi"><div class="l">${l}</div><div class="v" style="${color}">${v}</div></div>`;
+  DUP = duplicados(f);
+  const nDup = DUP.certos.length + DUP.possiveis.length + DUP.orfaos.length;
+  const corDup = DUP.certos.length || DUP.orfaos.length ? 'color:var(--out)' : DUP.possiveis.length ? 'color:#b45309' : '';
   $('kpis').innerHTML =
     card('Lançamentos', lancamentos) +
     card('Entradas', eur(ent), 'color:var(--in)') +
     card('Saídas', eur(sai), 'color:var(--out)') +
     card('Saldo', eur(ent - sai)) +
-    card('% validado', pct.toFixed(1) + '%');
+    card('% validado', pct.toFixed(1) + '%') +
+    `<div class="card kpi" id="dupKpi" style="cursor:pointer" title="Clique para ver as linhas"><div class="l">Duplicados / órfãos</div><div class="v" style="${corDup}">${nDup}</div><div class="muted" style="font-size:11px;margin-top:2px">Duplicados ${DUP.certos.length} · Possíveis ${DUP.possiveis.length} · Órfãos ${DUP.orfaos.length}</div></div>`;
+  $('dupKpi').addEventListener('click', () => { DUP_OPEN = !DUP_OPEN; renderDup(); });
+  renderDup();
+}
+
+// CONTAORDEM integrity for the period: the same ID_INTERNO on more than one row (whole sheet), the same
+// movement under different IDs (date, amount, caixa, plano, bank description), and rows whose ID is
+// blank or not found in any origin sheet (T_EXTRATO, DÍZIMOS/OFERTAS, SAÍDAS, CARTÃO, VC_VENDAS, Financeiro, DB_VENDAS da livraria).
+let DUP = { certos: [], possiveis: [], orfaos: [] };
+let DUP_OPEN = false;
+function duplicados(f) {
+  const porId = {};
+  RECS.forEach(r => { if (r.ID_INTERNO) (porId[r.ID_INTERNO] = porId[r.ID_INTERNO] || []).push(r); });
+  const certos = [...new Set(f.map(r => r.ID_INTERNO).filter(id => id && porId[id].length > 1))].flatMap(id => porId[id]);
+  const grupos = {};
+  f.forEach(r => {
+    const k = [r['DATA MOV.'], r['IMPORTÂNCIA'], r.CAIXA, r['PLANO DE CONTA'], r['DESCRIÇÃO']].map(normS).join('|');
+    (grupos[k] = grupos[k] || []).push(r);
+  });
+  const possiveis = Object.values(grupos).filter(g => new Set(g.map(r => r.ID_INTERNO)).size > 1).flat();
+  const fontes = [
+    ...ORIGENS.map(o => readSheetIds(o.sheet, o.idHeader) || []),
+    ...(WB2 ? ['VC_VENDAS', 'Financeiro'].map(n => (readTableIn(WB2, n) || []).map(x => x[normS('ID_INTERNO')])) : []),
+    ...(LIVRARIA ? [[...LIVRARIA.sales, ...(LIVRARIA.open || [])].map(v => v.ref)] : []),
+  ];
+  const conhecidos = new Set(fontes.flat().filter(Boolean));
+  // Without the Verbo Café file or the bookshop data their IDs cannot be checked, so they are not called orphans.
+  const semFonte = id => (id.startsWith('VC') && !WB2) || (id.startsWith('VBS') && !LIVRARIA);
+  const orfaos = f.filter(r => !r.ID_INTERNO || (!conhecidos.has(r.ID_INTERNO) && !semFonte(r.ID_INTERNO)));
+  return { certos, possiveis, orfaos };
+}
+
+function renderDup() {
+  const box = $('dupBox');
+  const linhas = [['Duplicado', DUP.certos], ['Possível duplicado', DUP.possiveis], ['Órfão', DUP.orfaos]]
+    .flatMap(([tipo, rs]) => rs.map(r => `<tr><td>${tipo}</td><td>${esc(r['DATA MOV.'])}</td><td class="num">${esc(r['IMPORTÂNCIA'])}</td><td>${esc(r['DESCRIÇÃO'])}</td><td>${esc(r['PLANO DE CONTA'])}</td><td>${esc(r.PROCESSO)}</td><td>${esc(r.ID_INTERNO || '(vazio)')}</td></tr>`));
+  box.classList.toggle('hidden', !DUP_OPEN);
+  box.innerHTML = `<h2>Duplicados / órfãos na CONTAORDEM</h2>` + (linhas.length
+    ? `<table><thead><tr><th>Problema</th><th>Data mov.</th><th class="num">Importância</th><th>Descrição</th><th>Plano de conta</th><th>Processo</th><th>ID_INTERNO</th></tr></thead><tbody>${linhas.join('')}</tbody></table>`
+    : '<div class="muted">Sem duplicados nem órfãos no período.</div>');
 }
 
 function monthly(months) {
@@ -1866,6 +1910,7 @@ const AJUDA = {
   'Entradas (kpi)': 'Total de dinheiro que entrou no período escolhido.',
   'Saídas (kpi)': 'Total de dinheiro que saiu no período escolhido.',
   'Saldo (kpi)': 'Entradas menos saídas do período escolhido.',
+  'Duplicados / órfãos (kpi)': 'Linhas da CONTAORDEM no período com o mesmo ID_INTERNO repetido (duplicado), o mesmo movimento com IDs diferentes (possível duplicado: data, valor, caixa, plano e descrição iguais) ou sem origem (órfão: ID vazio ou inexistente nas folhas de origem). Clique para ver as linhas.',
   '% validado (kpi)': 'Percentagem de lançamentos do período com STATUS = VALIDADO.'
 };
 function ajuda(el, texto) {

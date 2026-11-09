@@ -67,6 +67,7 @@ def fetch_bookshop(credentials: Any, spreadsheet_id: str, min_year: int | None) 
             open_sales.append(
                 {
                     "id": r.get("Nº DOCNUN", "").strip(),
+                    "ref": r.get("ID_INTERNO", "").strip(),
                     "date": day.isoformat(),
                     "total": _num(r.get("TOTAL A PAGAR", "")),
                 }
@@ -87,6 +88,7 @@ def fetch_bookshop(credentials: Any, spreadsheet_id: str, min_year: int | None) 
         sales.append(
             {
                 "id": r.get("Nº DOCNUN", "").strip(),
+                "ref": r.get("ID_INTERNO", "").strip(),
                 "date": day.isoformat(),
                 "payment": payment,
                 "total": _num(r.get("TOTAL A PAGAR", "")),
