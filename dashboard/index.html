@@ -579,7 +579,8 @@ function duplicados(f) {
   });
   const possiveis = Object.values(grupos).filter(g => new Set(g.map(r => r.ID_INTERNO)).size > 1).flat();
   const fontes = [
-    ...ORIGENS.map(o => readSheetIds(o.sheet, o.idHeader) || []),
+    // readTable finds the sheet by normalised name: the XLSX export drops the "/" of DÍZIMOS/OFERTAS.
+    ...ORIGENS.map(o => (readTable(o.sheet) || []).map(r => r[normS(o.idHeader)])),
     ...(WB2 ? ['VC_VENDAS', 'Financeiro'].map(n => (readTableIn(WB2, n) || []).map(x => x[normS('ID_INTERNO')])) : []),
     ...(LIVRARIA ? [[...LIVRARIA.sales, ...(LIVRARIA.open || [])].map(v => v.ref)] : []),
   ];
