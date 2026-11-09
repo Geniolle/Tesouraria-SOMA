@@ -201,7 +201,7 @@ select[aria-label="Medida"]{margin-left:auto}
     </div>
 
     <div id="contabCard" class="card hidden">
-      <h2>Envio documental ao contabilista</h2>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><button type="button" id="toggleContab" title="Ocultar" aria-label="Ocultar" style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;color:var(--muted)"><svg id="toggleContabIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .2s ease"><polyline points="6 9 12 15 18 9"></polyline></svg></button><h2 style="margin:0">Envio documental ao contabilista</h2></div>
       <div id="contabBody"></div>
     </div>
 
@@ -451,6 +451,15 @@ $('toggleOrig').addEventListener('click', () => {
   $('toggleOrigIcon').style.transform = ORIG_OPEN ? 'rotate(0deg)' : 'rotate(-90deg)';
   $('toggleOrig').title = ORIG_OPEN ? 'Ocultar' : 'Mostrar';
   $('toggleOrig').setAttribute('aria-label', $('toggleOrig').title);
+});
+
+let CONTAB_OPEN = true;
+$('toggleContab').addEventListener('click', () => {
+  CONTAB_OPEN = !CONTAB_OPEN;
+  $('contabBody').style.display = CONTAB_OPEN ? 'block' : 'none';
+  $('toggleContabIcon').style.transform = CONTAB_OPEN ? 'rotate(0deg)' : 'rotate(-90deg)';
+  $('toggleContab').title = CONTAB_OPEN ? 'Ocultar' : 'Mostrar';
+  $('toggleContab').setAttribute('aria-label', $('toggleContab').title);
 });
 
 let WEEK_OPEN = true;
