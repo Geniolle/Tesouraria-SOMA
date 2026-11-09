@@ -530,6 +530,7 @@ function render() {
   renderOrigins();
   renderVerbo();
   renderVerboShop();
+  if (WB) { $('kpiLanc').textContent = ORIG_N; REPORTE.resumo.lancamentos = ORIG_N; }
   renderOrigemPlano();
   renderCC();
   renderCustosFixos();
@@ -553,7 +554,7 @@ function kpis(f) {
   const nDup = DUP.certos.length + DUP.possiveis.length + DUP.orfaos.length;
   const corDup = DUP.certos.length || DUP.orfaos.length ? 'color:var(--out)' : DUP.possiveis.length ? 'color:#b45309' : '';
   $('kpis').innerHTML =
-    card('Lançamentos', lancamentos) +
+    card('Lançamentos', `<span id="kpiLanc">${lancamentos}</span>`) +
     card('Entradas', eur(ent), 'color:var(--in)') +
     card('Saídas', eur(sai), 'color:var(--out)') +
     card('Saldo', eur(ent - sai)) +
@@ -813,7 +814,10 @@ const dkey = d => d ? `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}` : '';
 // Validation badge: missing records → Verificar (red); only pending ones → Pendente (yellow); else OK.
 const estadoOrigem = (ok, pend) => !ok ? '<span class="pill bad">Verificar</span>' : pend ? '<span class="pill wa">Pendente</span>' : '<span class="pill ok">OK</span>';
 
+// Records in the origin sheets for the period (sum of "na origem" in every validation card); feeds the Lançamentos KPI.
+let ORIG_N = 0;
 function renderOrigins() {
+  ORIG_N = 0;
   const box = $('origins');
   if (!WB || !RECS.length) { box.innerHTML = ''; return; }
   const inPeriod = d => !d
@@ -856,6 +860,7 @@ function renderOrigins() {
       const presentes = pares.filter(p => contaIds.has(p.sid)).length;
       const faltam = pares.filter(p => !contaIds.has(p.sid) && elegivel(p.x)).map(p => p.sid);
       const ok = naoEnc.length === 0 && faltam.length === 0;
+      ORIG_N += src.length;
       return `<div class="card">${head(o.label, o.sheet, ok)}${row('Registos na origem', src.length)}${row('Presentes em CONTAORDEM', presentes)}${row('Em falta em CONTAORDEM', pill(faltam.length, 'bad'))}${row('Não encontrados em SAÍDAS', pill(naoEnc.length, 'bad'))}${list('Não encontrados em SAÍDAS -', naoEnc)}${list('ID em falta -', faltam)}</div>`;
     }
     const all = readSheetRecords(o.sheet, [o.idHeader, 'ID_INTERNO'], ['DATA MOV.', 'DATA MOV', 'DATA']);
@@ -871,6 +876,7 @@ function renderOrigins() {
     const prefix = all.length ? all[0].id.replace(/\d+$/, '') : '';
     const extra = prefix ? contaPeriod.filter(r => r.ID_INTERNO && r.ID_INTERNO.startsWith(prefix) && !srcAll.has(r.ID_INTERNO)) : [];
     const ok = faltam.length === 0 && extra.length === 0;
+    ORIG_N += src.length;
     return `<div class="card">${head(o.label, o.sheet, ok, pendentes.length)}${row('Registos na origem', src.length)}${row('Presentes em CONTAORDEM', presentes)}${row('Em falta em CONTAORDEM', pill(faltam.length, 'bad'))}${row('Pendentes (data futura)', `<span class="pill">${pendentes.length}</span>`)}${row('Extra em CONTAORDEM (sem origem)', pill(extra.length, 'wa'))}${list(ehDizimos ? 'Data em falta -' : 'ID em falta -', faltamLabels)}${ehDizimos ? '' : list('Pendentes (data futura) -', pendentes.map(x => x.id + ' ' + x.d.toLocaleDateString('pt-PT')))}</div>`;
   }).join('');
 }
@@ -1172,6 +1178,7 @@ function renderVerbo() {
   const vendasIds = new Set(vendas.map(v => v[normS('ID_INTERNO')]));
   const extra = contaPeriod.filter(r => r.ID_INTERNO && r.ID_INTERNO.startsWith('VCE') && !vendasIds.has(r.ID_INTERNO)).length;
   const ok = faltam.length === 0;
+  ORIG_N += pagos.length + finPeriodo;
   const pill = (n, bad) => `<span class="pill ${n === 0 ? 'ok' : bad}">${n}</span>`;
   const row = (label, value) => `<div class="qrow"><span>${label}</span><span class="num">${value}</span></div>`;
   box.insertAdjacentHTML('beforeend', `<div class="card">
@@ -1213,6 +1220,7 @@ function renderVerboShop() {
   const marcadas = vendas.map(v => ({ ...v, ok: presente(v) }));
   const faltam = marcadas.filter(v => !v.ok && v.date <= hoje), pend = marcadas.filter(v => !v.ok && v.date > hoje);
   const ok = faltam.length === 0;
+  ORIG_N += vendas.length;
   // Sales not finalised or without payment form: pending until someone completes them in the app.
   const abertas = (LIVRARIA.open || []).filter(v => noPeriodo(v.date));
   const pill = (n, cls) => `<span class="pill ${n === 0 ? 'ok' : cls}">${n}</span>`;
@@ -1950,7 +1958,7 @@ const AJUDA = {
   'Forma de pagamento': 'Dinheiro movimentado por forma de pagamento (transferência, dinheiro, ...).',
   'Caixa': 'Dinheiro movimentado por conta ou caixa.',
   // KPI tiles at the top
-  'Lançamentos (kpi)': 'Número de entradas e saídas registadas na CONTAORDEM no período escolhido.',
+  'Lançamentos (kpi)': 'Soma dos registos na origem de todas as origens no período escolhido (Extratos, Dízimos, Saídas, Cartão, Verbo Café vendas + Financeiro, Verbo Shop), tal como aparecem em Validação das origens.',
   'Entradas (kpi)': 'Total de dinheiro que entrou no período escolhido.',
   'Saídas (kpi)': 'Total de dinheiro que saiu no período escolhido.',
   'Saldo (kpi)': 'Entradas menos saídas do período escolhido.',
