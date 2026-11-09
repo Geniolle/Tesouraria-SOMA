@@ -1425,7 +1425,9 @@ function renderOrigemPlano() {
   let corpo = totalRow('ENTRADAS', 'var(--in)', '#e6f4ea', recTot);
   FORMA_ORDEM.forEach(cat => { if (grupos.rec[cat]) corpo += subRow(cat, grupos.rec[cat]) + planoRows(grupos.rec[cat].planos); });
   corpo += totalRow('SAÍDAS', 'var(--out)', '#fce8e6', desp) + planoRows(desp.planos);
-  body.innerHTML = `<table><thead><tr><th>Plano de conta</th><th>Origem (PROCESSO)</th><th class="num">Valor</th><th class="num">Lançamentos</th></tr></thead><tbody>${corpo}</tbody></table>`;
+  const cx = caixaCafe();
+  body.innerHTML = `<table><thead><tr><th>Plano de conta</th><th>Origem (PROCESSO)</th><th class="num">Valor</th><th class="num">Lançamentos</th></tr></thead><tbody>${corpo}</tbody></table>`
+    + (cx ? `<div class="muted" style="font-size:12px;margin-top:8px">Caixa físico do Verbo Café (Integração Vendas): <b style="color:var(--ink)">${eur(cx.final)}</b> no fecho de ${cx.data}${cx.n ? ` · ${eur(cx.dinheiro)} em vendas a dinheiro e ${eur(cx.compras)} em compras no período` : ''}.</div>` : '');
 }
 
 $('origemPlanoBody').addEventListener('click', e => {
@@ -1614,6 +1616,30 @@ $('toggleMV').addEventListener('click', () => {
 // Sales P&L cards (bookshop and café): app sales + purchase costs, plus what came in on the
 // TPA machine and its fees from CONTAORDEM. tpa = terminal code in FECHO/COMISS descriptions,
 // maquina = rental contract in "COMISSOES TPA <maquina>", plano = PLANO DE CONTA of the receipts.
+// Verbo Café cash box for the period, from "Integração Vendas" (AppVerboCafé): one row per closing with
+// SALDO INICIAL, DINHEIRO, COMPRAS and CAIXA FINAL. Without a closing in the period, the last earlier
+// closing is the cash still in the box. Null when the sheet is not available.
+function caixaCafe() {
+  const rows = WB2 ? readTableIn(WB2, 'Integração Vendas') : null;
+  if (!rows) return null;
+  const fim = MONTH !== 'all' ? MONTH : YEAR !== 'all' ? YEAR + '-12' : '9999-12';
+  const noPeriodo = k => MONTH !== 'all' ? k === MONTH : YEAR === 'all' || k.slice(0, 4) === YEAR;
+  const fechos = rows.map(r => ({ r, d: toDate(r.DATA) })).filter(x => x.d && normS(x.r.TIPO) === 'CAIXA')
+    .sort((a, b) => a.d - b.d);
+  const doPeriodo = fechos.filter(x => noPeriodo(monthKey(x.d)));
+  const ultimo = (doPeriodo.length ? doPeriodo : fechos.filter(x => monthKey(x.d) <= fim)).slice(-1)[0];
+  if (!ultimo) return null;
+  const soma = k => doPeriodo.reduce((t, x) => t + num(x.r[k]), 0);
+  return {
+    n: doPeriodo.length,
+    data: ultimo.d.toLocaleDateString('pt-PT'),
+    final: num(ultimo.r['CAIXA FINAL']),
+    inicial: doPeriodo.length ? num(doPeriodo[0].r['SALDO INICIAL']) : num(ultimo.r['CAIXA FINAL']),
+    dinheiro: soma('DINHEIRO'),
+    compras: soma('COMPRAS'),
+  };
+}
+
 const RESULTADOS = {
   livraria: { nome: 'Livraria', el: 'livraria', resumo: 'livResumo', dados: () => LIVRARIA, fonte: 'AppVerboShop', tpa: '01433272', maquina: '0005346910001', plano: 'RECEITAS DE LIVRARIA',
     bruto: 'Vendas a preço de capa', custo: 'Custo dos livros vendidos', semCusto: 'livro(s) vendido(s) sem compra registada em DB_COMPRAS', top: 'Livros mais vendidos', item: 'Título', resultado: 'Resultado da livraria', vazio: 'Sem vendas da livraria neste período.' },
@@ -1621,6 +1647,22 @@ const RESULTADOS = {
   cafe: { nome: 'Verbo Café', el: 'cafe', resumo: 'cafeResumo', dados: () => CAFE, fonte: 'AppVerboCafé', tpa: '01443426', maquina: '0005346910002', plano: 'RECEITAS DE LANCHONETE',
     bruto: 'Vendas a preço de tabela', custo: null, custoNoLugarDoDesconto: 'Custo de compra dos produtos vendidos', semCusto: 'produto(s) vendido(s) sem compra registada em VC_COMPRAS', top: 'Produtos mais vendidos', item: 'Produto', resultado: 'Resultado do Verbo Café', vazio: 'Sem vendas do Verbo Café neste período.' }
 };
+// Cash-box block for the café card; the difference line shows money taken out or put in between closings.
+function caixaHtml(cx) {
+  if (!cx) return '';
+  const linha = (rot, v, forte = false) => `<tr${forte ? ' style="font-weight:700;background:#f5f7fa"' : ''}><td>${rot}</td><td class="num">${eur(v)}</td></tr>`;
+  if (!cx.n) return `<div class="muted" style="font-size:12px;margin:10px 0 4px">Caixa físico (Integração Vendas)</div><table style="font-size:12px"><tbody>${linha(`Caixa final (último fecho ${cx.data})`, cx.final, true)}</tbody></table>`;
+  const outros = cx.final - (cx.inicial + cx.dinheiro - cx.compras);
+  return `<div class="muted" style="font-size:12px;margin:10px 0 4px">Caixa físico (Integração Vendas) · ${cx.n} fecho(s)</div>
+    <table style="font-size:12px"><tbody>
+      ${linha('Saldo inicial', cx.inicial)}
+      ${linha('+ Vendas em dinheiro', cx.dinheiro)}
+      ${linha('− Compras pagas pelo caixa', cx.compras)}
+      ${Math.abs(outros) >= 0.005 ? linha('Acertos entre fechos (retiradas, repasses, correções)', outros) : ''}
+      ${linha(`Caixa final (fecho ${cx.data})`, cx.final, true)}
+    </tbody></table>`;
+}
+
 function renderResultado(cfg) {
   const el = $(cfg.el), resumo = $(cfg.resumo), D = cfg.dados();
   if (!D) { el.innerHTML = `<span class="muted">Dados indisponíveis (${cfg.fonte}).</span>`; resumo.textContent = ''; return; }
@@ -1693,6 +1735,7 @@ function renderResultado(cfg) {
         <table style="font-size:12px"><thead><tr><th>Forma</th><th class="num">Vendas</th><th class="num">A pagar</th>${temRecebido ? '<th class="num">Recebido</th>' : ''}</tr></thead><tbody>${Object.entries(formas).sort((a, b) => b[1].pagar - a[1].pagar).map(([k, f]) =>
           `<tr><td>${esc(k)}</td><td class="num">${f.n}</td><td class="num">${eur(f.pagar)}</td>${temRecebido ? `<td class="num" style="${f.recebido < f.pagar - 0.005 ? 'color:var(--out)' : ''}">${eur(f.recebido)}</td>` : ''}</tr>`).join('')}</tbody></table>` : ''}
         ${doacoes ? `<div class="muted" style="font-size:12px;margin-top:6px">Doações registadas na app no período: ${eur(doacoes)} (fora do resultado de vendas).</div>` : ''}
+        ${cfg.el === 'cafe' ? caixaHtml(caixaCafe()) : ''}
         ${(comCusto || cfg.custoNoLugarDoDesconto) && semCusto ? `<div class="muted" style="font-size:12px;margin-top:6px">${semCusto} ${cfg.semCusto}: custo contado como 0.</div>` : ''}
 
       </div>

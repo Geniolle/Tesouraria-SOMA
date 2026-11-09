@@ -105,7 +105,7 @@ USED_SHEETS = {
         "CARTÃO",
         "CONSTANTES",
     },
-    "/api/vc.xlsx": {"Financeiro", "VC_VENDAS"},
+    "/api/vc.xlsx": {"Financeiro", "VC_VENDAS", "Integração Vendas"},
 }
 # Filtering takes seconds, so keep the result until the file changes in Drive.
 _filtered: dict[str, tuple[str, bytes]] = {}
