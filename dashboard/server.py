@@ -31,7 +31,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-from accountant import from_year, list_names
+from accountant import from_year, list_names, parse_expected
 from attendance import fetch_attendance
 from auth_store import SESSION_TTL, AuthStore, generate_password
 from bookshop import fetch_bookshop
@@ -79,6 +79,8 @@ ACCOUNTANT_FOLDERS = {
     key: os.environ.get(f"DASHBOARD_CONTABILISTA_{key.upper()}_FOLDER_ID", "").strip().strip('"')
     for key in ("dizimos", "saidas", "faturas")
 }
+# Fixed-cost invoices expected each month in the "faturas" folder (JSON, see accountant.parse_expected).
+ACCOUNTANT_EXPECTED = parse_expected(os.environ.get("DASHBOARD_CONTABILISTA_FATURAS_ESPERADAS", ""))
 # Non-admin members only see data from this year on (admins see every year).
 USER_MIN_YEAR = os.environ.get("DASHBOARD_USER_MIN_YEAR", "2026").strip().strip('"')
 ADMINS = {
@@ -439,7 +441,7 @@ class Handler(BaseHTTPRequestHandler):
             log.exception("Accountant folders read failed")
             self._send(502, b"Accountant folders read failed", "text/plain")
             return
-        self._json(200, data)
+        self._json(200, {**data, "esperadas": ACCOUNTANT_EXPECTED})
 
     def _export(self, path: str, admin: bool) -> None:
         try:

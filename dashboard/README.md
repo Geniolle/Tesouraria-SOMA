@@ -38,6 +38,12 @@ production server. Only Diretória members can log in.
   Set `DASHBOARD_CONTABILISTA_DIZIMOS_FOLDER_ID`, `…_SAIDAS_FOLDER_ID` and
   `…_FATURAS_FOLDER_ID`, and share those folders (Viewer) with the service
   account; the card is hidden unless all three are set.
+  `DASHBOARD_CONTABILISTA_FATURAS_ESPERADAS` (optional, JSON list of
+  `{"nome", "padrao", "qtd", "desde"}`) sets the invoices expected each
+  month: `padrao` is a case-insensitive regex on the file name after its date,
+  `qtd` how many per month, `desde` the first month (yyyy-MM). The card then
+  shows saved vs expected per supplier. Wrap the JSON in single quotes in the
+  env file.
 - `cafe.py`: Verbo Café sales (VC_VENDAS, menus via VC_PACK) and average unit
   cost per product (VC_COMPRAS `VALOR DA UNIDADE`; donated purchases cost 0)
   from AppVerboCafé, served at `/api/cafe` in the same shape as the bookshop.

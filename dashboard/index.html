@@ -882,18 +882,24 @@ function renderContabilista() {
       + (falta.length ? `<div class="muted" style="font-size:12px;margin:4px 0 8px">Em falta: ${falta.map(x => esc(x.r.DATA + ' · ' + desc(x.r))).join('; ')}</div>` : '')
       + (semRecibo ? `<div class="muted" style="font-size:12px;margin:4px 0 8px">${semRecibo} registo(s) sem recibo anexado na folha ${esc(sheet)}.</div>` : '');
   };
+  // Invoices of the month by file name ("yyyy_MM_dd_<supplier>..."); Agere's extra "Anexo.pdf" is not an invoice.
   const prefixo = MONTH.replace('-', '_') + '_';
-  const faturas = {};
-  CONTAB.faturas.filter(n => n.startsWith(prefixo)).forEach(n => {
-    const forn = n.slice(prefixo.length + 3).replace(/^_+/, '').split('_')[0].replace(/\.pdf$/i, '').trim() || n;
-    faturas[forn] = (faturas[forn] || 0) + 1;
-  });
-  const nFaturas = Object.values(faturas).reduce((s, v) => s + v, 0);
+  const doMes = CONTAB.faturas.filter(n => n.startsWith(prefixo) && !/_anexo\.pdf$/i.test(n))
+    .map(n => n.slice(prefixo.length + 3).replace(/^_+/, ''));
+  const esperadas = (CONTAB.esperadas || []).filter(e => !e.desde || e.desde <= MONTH)
+    .map(e => { const re = new RegExp(e.padrao, 'i'); const n = doMes.filter(x => re.test(x)).length; return { ...e, re, feito: Math.min(n, e.qtd) }; });
+  const outras = doMes.filter(x => !esperadas.some(e => e.re.test(x))).map(x => x.split('_')[0].replace(/\.pdf$/i, '').trim());
+  const espTot = esperadas.reduce((s, e) => s + e.qtd, 0), feitoTot = esperadas.reduce((s, e) => s + e.feito, 0);
+  const faltaF = esperadas.filter(e => e.feito < e.qtd);
+  const faturasHtml = esperadas.length
+    ? `<div class="qrow"><span>Faturas de custos fixos (email)</span><span><span class="num">${feitoTot} de ${espTot}</span> <span class="pill ${faltaF.length ? 'bad' : 'ok'}">${faltaF.length ? 'Em falta ' + (espTot - feitoTot) : 'OK'}</span></span></div>`
+      + `<div class="muted" style="font-size:12px;margin:4px 0 8px">${esperadas.map(e => `${esc(e.nome)} ${e.feito}/${e.qtd}${e.feito < e.qtd ? ' ❌' : ' ✅'}`).join(' · ')}${outras.length ? ` · Outras: ${outras.map(esc).join(', ')}` : ''}</div>`
+    : `<div class="qrow"><span>Faturas de custos fixos (email)</span><span class="num">${doMes.length}</span></div>`
+      + (doMes.length ? `<div class="muted" style="font-size:12px;margin-top:4px">${outras.map(esc).join(' · ')}</div>` : '');
   box.innerHTML = `<div class="muted" style="font-size:12px;margin-bottom:6px">Pasta Contabilista no Drive · ${esc(MESES[+MONTH.slice(5) - 1] + ' ' + MONTH.slice(0, 4))}</div>`
     + recibos('Recibos de dízimos e ofertas', 'DÍZIMOS/OFERTAS', 'RECIBO', CONTAB.dizimos, r => `${r.TIPO} ${eur(num(r.VALOR))}`)
     + recibos('Recibos de saídas', 'SAÍDAS', 'IMAGEM DO RECIBO', CONTAB.saidas, r => `${r['DESCRICAO DA COMPRA'] || r.TIPO} ${eur(num(r['VALOR DA COMPRA']))}`)
-    + `<div class="qrow"><span>Faturas de custos fixos (email)</span><span class="num">${nFaturas}</span></div>`
-    + (nFaturas ? `<div class="muted" style="font-size:12px;margin-top:4px">${Object.entries(faturas).map(([f, n]) => esc(n > 1 ? `${f} (${n})` : f)).join(' · ')}</div>` : '');
+    + faturasHtml;
 }
 
 function renderOriginsOld() {
@@ -1840,7 +1846,7 @@ const AJUDA = {
   'Progressão Centro de Custo': 'Resultado de cada centro de custo por mês. Clique numa célula para ver os lançamentos; na linha do cartão aparecem também as compras do cartão.',
   'Origem das receitas e despesas por plano de contas': 'Entradas e saídas do período agrupadas por forma de pagamento, plano de contas e processo de origem.',
   'Lançamentos': 'Lista de todos os lançamentos do período escolhido, com pesquisa.',
-  'Envio documental ao contabilista': 'Confirma se os recibos de dízimos e ofertas e de saídas do mês já estão na pasta Contabilista do Drive (copiados de hora em hora) e lista as faturas de custos fixos guardadas a partir do email.',
+  'Envio documental ao contabilista': 'Confirma se os recibos de dízimos e ofertas e de saídas do mês já estão na pasta Contabilista do Drive (copiados de hora em hora) e compara as faturas de custos fixos guardadas a partir do email com as esperadas no mês (por fornecedor).',
   'Análise por semana do mês': 'Compara as semanas do mês para ver em que semana entra e sai mais dinheiro.',
   'Entradas vs saídas por mês': 'Gráfico de entradas e saídas por mês. Clique numa coluna para filtrar o dashboard por esse mês.',
   'Top 8 planos de conta (volume)': 'Os 8 planos de conta com mais dinheiro movimentado no período.',
