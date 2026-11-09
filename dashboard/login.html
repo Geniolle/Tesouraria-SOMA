@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#ffffff">
+<title>Entrar · Tesouraria Verbo Braga</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#1d2433;--muted:#6b7280;--line:#e5e7eb;--out:#dc2626;--acc:#2563eb}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px;font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+form{width:100%;max-width:360px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:24px}
+h1{font-size:18px;margin:0 0 4px}
+p{margin:0 0 20px}
+label{display:block;font-weight:600;margin:12px 0 4px}
+input{width:100%;font:inherit;font-size:16px;padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px}
+button{width:100%;margin-top:20px;font:inherit;font-weight:600;padding:10px;border:0;border-radius:6px;background:var(--acc);color:#fff;cursor:pointer}
+button:disabled{opacity:.6;cursor:default}
+#err{color:var(--out);min-height:20px;margin-top:12px}
+.muted{color:var(--muted)}
+</style>
+</head>
+<body>
+<form id="f" novalidate>
+  <h1>Tesouraria Verbo Braga</h1>
+  <p class="muted">Acesso reservado à Diretória.</p>
+  <label for="email">Email</label>
+  <input id="email" name="email" type="email" autocomplete="username" required autofocus>
+  <label for="password">Senha</label>
+  <input id="password" name="password" type="password" autocomplete="current-password" required>
+  <button id="go" type="submit">Entrar</button>
+  <div id="err" role="alert"></div>
+</form>
+<script>
+document.getElementById('f').addEventListener('submit', async e => {
+  e.preventDefault();
+  const go = document.getElementById('go'), err = document.getElementById('err');
+  const email = document.getElementById('email').value.trim(), password = document.getElementById('password').value;
+  if (!email || !password) { err.textContent = 'Preencha o email e a senha.'; return; }
+  go.disabled = true; err.textContent = '';
+  try {
+    const r = await fetch('api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) });
+    if (r.ok) { location.href = './'; return; }
+    err.textContent = (await r.json().catch(() => ({}))).error || 'Não foi possível entrar.';
+  } catch (x) {
+    err.textContent = 'Sem ligação ao servidor.';
+  }
+  go.disabled = false;
+});
+</script>
+</body>
+</html>

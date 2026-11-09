@@ -1,0 +1,12 @@
+# Installed at /etc/caddy/Caddyfile. DASHBOARD_DOMAIN comes from
+# /etc/caddy/dashboard.env. Caddy only terminates HTTPS: login (Diretória in
+# BP SERVICE + password) is enforced by dashboard/server.py.
+{$DASHBOARD_DOMAIN} {
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+	}
+	reverse_proxy 127.0.0.1:8090
+}
